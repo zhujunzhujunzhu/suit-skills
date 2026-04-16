@@ -1,0 +1,4292 @@
+{
+  "version": "1.0.0",
+  "project": {
+    "name": "skills-cli",
+    "languages": [
+      "javascript",
+      "json",
+      "markdown",
+      "typescript",
+      "unknown"
+    ],
+    "frameworks": [
+      "Commander.js",
+      "Inquirer",
+      "TypeScript",
+      "Vitest"
+    ],
+    "description": "A CLI tool for skills management",
+    "analyzedAt": "2026-04-15T03:23:22.493Z",
+    "gitCommitHash": "not-a-git-repo"
+  },
+  "nodes": [
+    {
+      "id": "file:src/index.ts",
+      "type": "file",
+      "name": "index.ts",
+      "filePath": "src/index.ts",
+      "summary": "Application entry point that bootstraps the CLI process and handles top-level errors with a non-zero exit on failure.",
+      "tags": [
+        "entry-point",
+        "cli",
+        "bootstrap"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:src/cli/context.ts",
+      "type": "file",
+      "name": "context.ts",
+      "filePath": "src/cli/context.ts",
+      "summary": "Defines the CliContext interface and factory functions that encapsulate config loading, saving, and cache refresh operations for CLI commands.",
+      "tags": [
+        "cli",
+        "context",
+        "dependency-injection",
+        "config"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:src/cli/helpers.ts",
+      "type": "file",
+      "name": "helpers.ts",
+      "filePath": "src/cli/helpers.ts",
+      "summary": "Provides shared CLI helper functions for finding sources by name, collecting skill metadata across sources with cache refresh, and tag-based filtering.",
+      "tags": [
+        "utility",
+        "cli",
+        "source-management",
+        "filtering"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:src/cli/paths.ts",
+      "type": "file",
+      "name": "paths.ts",
+      "filePath": "src/cli/paths.ts",
+      "summary": "Path utility that converts display paths (~/ or ./ prefixes) to absolute install root directories for skill installation.",
+      "tags": [
+        "utility",
+        "path-resolution",
+        "installation"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:src/cli/program.ts",
+      "type": "file",
+      "name": "program.ts",
+      "filePath": "src/cli/program.ts",
+      "summary": "Builds the Commander.js program with all skill management subcommands (list, search, info, install, installed, update, remove, source, config, env).",
+      "tags": [
+        "entry-point",
+        "cli",
+        "command-registration",
+        "commander"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:src/cli/run.ts",
+      "type": "file",
+      "name": "run.ts",
+      "filePath": "src/cli/run.ts",
+      "summary": "Orchestrates CLI execution by creating the default context, building the program, and parsing arguments. Also exports test helpers.",
+      "tags": [
+        "cli",
+        "runner",
+        "testing"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:src/cli/version.ts",
+      "type": "file",
+      "name": "version.ts",
+      "filePath": "src/cli/version.ts",
+      "summary": "Reads the package version by walking up from the current file to find and parse the nearest package.json.",
+      "tags": [
+        "utility",
+        "version",
+        "cli"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:src/commands/config-cmd.ts",
+      "type": "file",
+      "name": "config-cmd.ts",
+      "filePath": "src/commands/config-cmd.ts",
+      "summary": "Registers the config CLI subcommands (list, get, set) for viewing and editing the JSON configuration via dotted path access.",
+      "tags": [
+        "api-handler",
+        "config",
+        "cli-command"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:src/commands/env.ts",
+      "type": "file",
+      "name": "env.ts",
+      "filePath": "src/commands/env.ts",
+      "summary": "Registers the env CLI subcommands (list, set, auto) for managing multi-environment install targets with auto-detection of project agent directories.",
+      "tags": [
+        "api-handler",
+        "environment",
+        "install-targets",
+        "cli-command"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:src/commands/info.ts",
+      "type": "file",
+      "name": "info.ts",
+      "filePath": "src/commands/info.ts",
+      "summary": "Registers the info CLI command that displays detailed metadata for a specific skill by searching across configured sources.",
+      "tags": [
+        "api-handler",
+        "skill-query",
+        "cli-command"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:src/commands/install.ts",
+      "type": "file",
+      "name": "install.ts",
+      "filePath": "src/commands/install.ts",
+      "summary": "Registers the install CLI command that installs a skill from a source to one or more agent target directories with conflict resolution strategies.",
+      "tags": [
+        "api-handler",
+        "installation",
+        "cli-command",
+        "skill-management"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:src/commands/installed.ts",
+      "type": "file",
+      "name": "installed.ts",
+      "filePath": "src/commands/installed.ts",
+      "summary": "Registers the installed CLI command that lists all skills currently installed across configured agent target directories.",
+      "tags": [
+        "api-handler",
+        "listing",
+        "cli-command",
+        "skill-management"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:src/commands/list.ts",
+      "type": "file",
+      "name": "list.ts",
+      "filePath": "src/commands/list.ts",
+      "summary": "Registers the list CLI command that enumerates available skills from configured sources with optional tag filtering.",
+      "tags": [
+        "api-handler",
+        "listing",
+        "cli-command",
+        "filtering"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:src/commands/remove.ts",
+      "type": "file",
+      "name": "remove.ts",
+      "filePath": "src/commands/remove.ts",
+      "summary": "Registers the remove CLI command that deletes an installed skill from all matching agent target directories.",
+      "tags": [
+        "api-handler",
+        "removal",
+        "cli-command",
+        "skill-management"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:src/commands/search.ts",
+      "type": "file",
+      "name": "search.ts",
+      "filePath": "src/commands/search.ts",
+      "summary": "Registers the search CLI command that performs keyword-based skill search across sources matching name, description, and tags.",
+      "tags": [
+        "api-handler",
+        "search",
+        "cli-command",
+        "filtering"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:src/commands/source.ts",
+      "type": "file",
+      "name": "source.ts",
+      "filePath": "src/commands/source.ts",
+      "summary": "Registers the source CLI subcommands (add, remove, list, enable, disable, default) for managing remote Git-based skill sources.",
+      "tags": [
+        "api-handler",
+        "source-management",
+        "cli-command",
+        "crud"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:src/commands/update.ts",
+      "type": "file",
+      "name": "update.ts",
+      "filePath": "src/commands/update.ts",
+      "summary": "Registers the update CLI command that refreshes installed skills from the source cache by comparing versions and copying updated skill directories.",
+      "tags": [
+        "api-handler",
+        "update",
+        "cli-command",
+        "skill-management"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:src/lib/agents.ts",
+      "type": "file",
+      "name": "agents.ts",
+      "filePath": "src/lib/agents.ts",
+      "summary": "Provides agent directory resolution (global vs project) and a utility to scan installed skill names from a target directory.",
+      "tags": [
+        "service",
+        "agent-resolution",
+        "directory-scanning"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:src/lib/cache.ts",
+      "type": "file",
+      "name": "cache.ts",
+      "filePath": "src/lib/cache.ts",
+      "summary": "Manages the local Git cache for skill sources, providing cache directory resolution and clone-or-pull refresh logic with fallback to stale cache.",
+      "tags": [
+        "service",
+        "caching",
+        "git",
+        "cache-refresh"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:src/lib/config.ts",
+      "type": "file",
+      "name": "config.ts",
+      "filePath": "src/lib/config.ts",
+      "summary": "Core configuration module handling loading, saving, and manipulating the JSON config file with defaults, legacy migration, and agent mapping management.",
+      "tags": [
+        "service",
+        "config",
+        "persistence",
+        "defaults"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:src/lib/git.ts",
+      "type": "file",
+      "name": "git.ts",
+      "filePath": "src/lib/git.ts",
+      "summary": "Low-level Git operations module providing clone, pull, and clone-or-pull with URL validation, error formatting, and test injection support.",
+      "tags": [
+        "service",
+        "git",
+        "clone",
+        "pull",
+        "validation"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:src/lib/install-targets.ts",
+      "type": "file",
+      "name": "install-targets.ts",
+      "filePath": "src/lib/install-targets.ts",
+      "summary": "Resolves effective install targets by merging CLI flags (--agent, --env), config values, and auto-detected project environment hints with CSV parsing.",
+      "tags": [
+        "service",
+        "install-targets",
+        "auto-detection",
+        "resolution"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:src/lib/install.ts",
+      "type": "file",
+      "name": "install.ts",
+      "filePath": "src/lib/install.ts",
+      "summary": "Handles skill installation from cache to target directories with conflict checking and three resolution strategies: overwrite, skip, and rename.",
+      "tags": [
+        "service",
+        "installation",
+        "conflict-resolution",
+        "file-copy"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:src/lib/prompt-install-targets.ts",
+      "type": "file",
+      "name": "prompt-install-targets.ts",
+      "filePath": "src/lib/prompt-install-targets.ts",
+      "summary": "Provides interactive install target selection using Inquirer checkboxes with a custom theme when no targets are auto-detected, plus test injection support.",
+      "tags": [
+        "service",
+        "interactive-prompt",
+        "install-targets",
+        "testing"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:src/lib/skills.ts",
+      "type": "file",
+      "name": "skills.ts",
+      "filePath": "src/lib/skills.ts",
+      "summary": "Core skill metadata module handling meta.json parsing, cache scanning (flat and monorepo layouts), version-lookup, and keyword search across name/description/tags.",
+      "tags": [
+        "service",
+        "skill-metadata",
+        "parsing",
+        "search"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:src/types/index.ts",
+      "type": "file",
+      "name": "index.ts",
+      "filePath": "src/types/index.ts",
+      "summary": "Shared TypeScript type definitions for the project including SkillMeta, Source, AgentMapping, Config, and InstallTarget interfaces.",
+      "tags": [
+        "type-definition",
+        "data-model",
+        "shared-types"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/cli/program.ts:buildProgram",
+      "type": "function",
+      "name": "buildProgram",
+      "filePath": "src/cli/program.ts",
+      "lineRange": [
+        15,
+        34
+      ],
+      "summary": "Creates and configures the Commander program with version info and registers all skill management subcommands.",
+      "tags": [
+        "cli",
+        "commander",
+        "command-registration"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/cli/context.ts:createDefaultCliContext",
+      "type": "function",
+      "name": "createDefaultCliContext",
+      "filePath": "src/cli/context.ts",
+      "lineRange": [
+        34,
+        47
+      ],
+      "summary": "Factory function creating a CliContext with the current working directory and home directory from the OS.",
+      "tags": [
+        "factory",
+        "context",
+        "cli"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/cli/context.ts:createCliContext",
+      "type": "function",
+      "name": "createCliContext",
+      "filePath": "src/cli/context.ts",
+      "lineRange": [
+        50,
+        75
+      ],
+      "summary": "Factory function for tests allowing override of cwd, homedir, config options, and custom refresh/cache behavior.",
+      "tags": [
+        "factory",
+        "context",
+        "testing",
+        "dependency-injection"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/cli/helpers.ts:collectMetasFromSources",
+      "type": "function",
+      "name": "collectMetasFromSources",
+      "filePath": "src/cli/helpers.ts",
+      "lineRange": [
+        20,
+        47
+      ],
+      "summary": "Fetches and collects skill metadata from one or more configured sources, refreshing the cache and deduplicating by name.",
+      "tags": [
+        "utility",
+        "source-scanning",
+        "metadata-collection"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src/cli/helpers.ts:findSourceByName",
+      "type": "function",
+      "name": "findSourceByName",
+      "filePath": "src/cli/helpers.ts",
+      "lineRange": [
+        5,
+        7
+      ],
+      "summary": "Looks up a source by name in the config, returning null if not found.",
+      "tags": [
+        "utility",
+        "source-lookup"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/cli/helpers.ts:assertSourceExists",
+      "type": "function",
+      "name": "assertSourceExists",
+      "filePath": "src/cli/helpers.ts",
+      "lineRange": [
+        9,
+        15
+      ],
+      "summary": "Finds a source by name and throws if it does not exist.",
+      "tags": [
+        "utility",
+        "validation",
+        "source-lookup"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/cli/helpers.ts:tagMatches",
+      "type": "function",
+      "name": "tagMatches",
+      "filePath": "src/cli/helpers.ts",
+      "lineRange": [
+        49,
+        55
+      ],
+      "summary": "Checks if a skill metadata matches a tag filter substring (case-insensitive).",
+      "tags": [
+        "utility",
+        "filtering",
+        "tag-matching"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/cli/paths.ts:toAbsoluteInstallRoot",
+      "type": "function",
+      "name": "toAbsoluteInstallRoot",
+      "filePath": "src/cli/paths.ts",
+      "lineRange": [
+        6,
+        19
+      ],
+      "summary": "Converts display paths with ~/ or ./ prefixes into absolute paths relative to home or cwd.",
+      "tags": [
+        "utility",
+        "path-resolution"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/cli/version.ts:readPkgVersion",
+      "type": "function",
+      "name": "readPkgVersion",
+      "filePath": "src/cli/version.ts",
+      "lineRange": [
+        5,
+        18
+      ],
+      "summary": "Walks up from the current file to find and parse the package.json version, defaulting to 0.0.0.",
+      "tags": [
+        "utility",
+        "version",
+        "package-resolution"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/cli/run.ts:runCliProcess",
+      "type": "function",
+      "name": "runCliProcess",
+      "filePath": "src/cli/run.ts",
+      "lineRange": [
+        5,
+        9
+      ],
+      "summary": "Main CLI runner that creates a default context, builds the program, and parses CLI arguments.",
+      "tags": [
+        "cli",
+        "runner",
+        "entry-point"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/cli/run.ts:runCliUserArgs",
+      "type": "function",
+      "name": "runCliUserArgs",
+      "filePath": "src/cli/run.ts",
+      "lineRange": [
+        12,
+        16
+      ],
+      "summary": "Test helper that parses arguments from a user perspective using an existing program instance.",
+      "tags": [
+        "testing",
+        "cli",
+        "runner"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/cli/run.ts:createProgramForTest",
+      "type": "function",
+      "name": "createProgramForTest",
+      "filePath": "src/cli/run.ts",
+      "lineRange": [
+        19,
+        25
+      ],
+      "summary": "Creates a program with exitOverride for test environments to prevent process.exit calls.",
+      "tags": [
+        "testing",
+        "cli",
+        "factory"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/commands/config-cmd.ts:registerConfig",
+      "type": "function",
+      "name": "registerConfig",
+      "filePath": "src/commands/config-cmd.ts",
+      "lineRange": [
+        5,
+        42
+      ],
+      "summary": "Registers config subcommands (list, get, set) for viewing and editing configuration via dotted paths.",
+      "tags": [
+        "api-handler",
+        "command-registration",
+        "config"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src/commands/env.ts:registerEnv",
+      "type": "function",
+      "name": "registerEnv",
+      "filePath": "src/commands/env.ts",
+      "lineRange": [
+        12,
+        62
+      ],
+      "summary": "Registers env subcommands (list, set, auto) for managing multi-environment install targets.",
+      "tags": [
+        "api-handler",
+        "command-registration",
+        "environment"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src/commands/info.ts:findSkillAcrossSources",
+      "type": "function",
+      "name": "findSkillAcrossSources",
+      "filePath": "src/commands/info.ts",
+      "lineRange": [
+        7,
+        27
+      ],
+      "summary": "Searches for a skill across one or more sources by refreshing cache and looking up in each.",
+      "tags": [
+        "utility",
+        "skill-lookup",
+        "multi-source"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src/commands/info.ts:registerInfo",
+      "type": "function",
+      "name": "registerInfo",
+      "filePath": "src/commands/info.ts",
+      "lineRange": [
+        29,
+        55
+      ],
+      "summary": "Registers the info command that displays detailed skill metadata.",
+      "tags": [
+        "api-handler",
+        "command-registration",
+        "skill-query"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src/commands/install.ts:registerInstall",
+      "type": "function",
+      "name": "registerInstall",
+      "filePath": "src/commands/install.ts",
+      "lineRange": [
+        14,
+        107
+      ],
+      "summary": "Registers the install command with options for global, agent, env, source, and conflict strategy.",
+      "tags": [
+        "api-handler",
+        "command-registration",
+        "installation"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src/commands/installed.ts:registerInstalled",
+      "type": "function",
+      "name": "registerInstalled",
+      "filePath": "src/commands/installed.ts",
+      "lineRange": [
+        12,
+        49
+      ],
+      "summary": "Registers the installed command that lists skills across all configured install targets.",
+      "tags": [
+        "api-handler",
+        "command-registration",
+        "listing"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src/commands/list.ts:registerList",
+      "type": "function",
+      "name": "registerList",
+      "filePath": "src/commands/list.ts",
+      "lineRange": [
+        8,
+        29
+      ],
+      "summary": "Registers the list command that enumerates available skills with optional tag and source filtering.",
+      "tags": [
+        "api-handler",
+        "command-registration",
+        "listing"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/commands/remove.ts:registerRemove",
+      "type": "function",
+      "name": "registerRemove",
+      "filePath": "src/commands/remove.ts",
+      "lineRange": [
+        13,
+        54
+      ],
+      "summary": "Registers the remove command that deletes a skill from all matching target directories.",
+      "tags": [
+        "api-handler",
+        "command-registration",
+        "removal"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src/commands/search.ts:registerSearch",
+      "type": "function",
+      "name": "registerSearch",
+      "filePath": "src/commands/search.ts",
+      "lineRange": [
+        7,
+        27
+      ],
+      "summary": "Registers the search command that performs keyword search across skill metadata.",
+      "tags": [
+        "api-handler",
+        "command-registration",
+        "search"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/commands/source.ts:registerSource",
+      "type": "function",
+      "name": "registerSource",
+      "filePath": "src/commands/source.ts",
+      "lineRange": [
+        12,
+        109
+      ],
+      "summary": "Registers source subcommands (add, remove, list, enable, disable, default) for managing remote Git sources.",
+      "tags": [
+        "api-handler",
+        "command-registration",
+        "source-management"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src/commands/source.ts:urlExists",
+      "type": "function",
+      "name": "urlExists",
+      "filePath": "src/commands/source.ts",
+      "lineRange": [
+        7,
+        10
+      ],
+      "summary": "Checks if a URL is already registered in the config sources list.",
+      "tags": [
+        "utility",
+        "validation",
+        "deduplication"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/commands/update.ts:registerUpdate",
+      "type": "function",
+      "name": "registerUpdate",
+      "filePath": "src/commands/update.ts",
+      "lineRange": [
+        54,
+        126
+      ],
+      "summary": "Registers the update command that refreshes installed skills by comparing versions with the source cache.",
+      "tags": [
+        "api-handler",
+        "command-registration",
+        "update"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src/commands/update.ts:readLocalVersion",
+      "type": "function",
+      "name": "readLocalVersion",
+      "filePath": "src/commands/update.ts",
+      "lineRange": [
+        17,
+        21
+      ],
+      "summary": "Reads the version from a locally installed skill directory meta.json.",
+      "tags": [
+        "utility",
+        "version-reading"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/commands/update.ts:updateSkillDir",
+      "type": "function",
+      "name": "updateSkillDir",
+      "filePath": "src/commands/update.ts",
+      "lineRange": [
+        23,
+        52
+      ],
+      "summary": "Compares local and remote versions of a skill and copies the updated version if newer.",
+      "tags": [
+        "utility",
+        "update",
+        "version-comparison"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src/lib/agents.ts:resolveTargetPath",
+      "type": "function",
+      "name": "resolveTargetPath",
+      "filePath": "src/lib/agents.ts",
+      "lineRange": [
+        17,
+        38
+      ],
+      "summary": "Resolves the install directory path based on agent key and global/project mode from config.",
+      "tags": [
+        "service",
+        "path-resolution",
+        "agent-mapping"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src/lib/agents.ts:getInstalledSkills",
+      "type": "function",
+      "name": "getInstalledSkills",
+      "filePath": "src/lib/agents.ts",
+      "lineRange": [
+        43,
+        51
+      ],
+      "summary": "Scans a directory for immediate subdirectories, returning sorted skill folder names.",
+      "tags": [
+        "service",
+        "directory-scanning",
+        "listing"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/lib/cache.ts:refreshCache",
+      "type": "function",
+      "name": "refreshCache",
+      "filePath": "src/lib/cache.ts",
+      "lineRange": [
+        42,
+        64
+      ],
+      "summary": "Refreshes the Git cache for a source URL by cloning or pulling, returning the cache path with status.",
+      "tags": [
+        "service",
+        "cache-refresh",
+        "git"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src/lib/config.ts:loadConfig",
+      "type": "function",
+      "name": "loadConfig",
+      "filePath": "src/lib/config.ts",
+      "lineRange": [
+        106,
+        130
+      ],
+      "summary": "Loads config from disk with migration support for legacy formats and auto-merging of missing agent definitions.",
+      "tags": [
+        "service",
+        "config-loading",
+        "migration"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src/lib/config.ts:saveConfig",
+      "type": "function",
+      "name": "saveConfig",
+      "filePath": "src/lib/config.ts",
+      "lineRange": [
+        132,
+        136
+      ],
+      "summary": "Persists the config object as formatted JSON to the config directory.",
+      "tags": [
+        "service",
+        "config-persistence"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/lib/config.ts:getConfigValue",
+      "type": "function",
+      "name": "getConfigValue",
+      "filePath": "src/lib/config.ts",
+      "lineRange": [
+        138,
+        148
+      ],
+      "summary": "Retrieves a nested config value by dotted path string.",
+      "tags": [
+        "service",
+        "config-access",
+        "path-query"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/lib/config.ts:setConfigValue",
+      "type": "function",
+      "name": "setConfigValue",
+      "filePath": "src/lib/config.ts",
+      "lineRange": [
+        178,
+        214
+      ],
+      "summary": "Sets a config value by dotted path, auto-creating agent mappings with defaults, and persists the change.",
+      "tags": [
+        "service",
+        "config-mutation",
+        "persistence"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src/lib/git.ts:cloneOrPullRepo",
+      "type": "function",
+      "name": "cloneOrPullRepo",
+      "filePath": "src/lib/git.ts",
+      "lineRange": [
+        163,
+        180
+      ],
+      "summary": "Core Git cache operation: clones if no repo exists, otherwise pulls, with fallback to local cache on pull failure.",
+      "tags": [
+        "service",
+        "git",
+        "clone",
+        "pull"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src/lib/git.ts:cloneRepo",
+      "type": "function",
+      "name": "cloneRepo",
+      "filePath": "src/lib/git.ts",
+      "lineRange": [
+        119,
+        134
+      ],
+      "summary": "Clones a Git repository to a target directory with URL validation and pre-checks.",
+      "tags": [
+        "service",
+        "git",
+        "clone",
+        "validation"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src/lib/git.ts:pullRepo",
+      "type": "function",
+      "name": "pullRepo",
+      "filePath": "src/lib/git.ts",
+      "lineRange": [
+        137,
+        156
+      ],
+      "summary": "Performs a git pull on an existing repository directory, returning success or error status.",
+      "tags": [
+        "service",
+        "git",
+        "pull"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src/lib/git.ts:isGitAvailable",
+      "type": "function",
+      "name": "isGitAvailable",
+      "filePath": "src/lib/git.ts",
+      "lineRange": [
+        102,
+        105
+      ],
+      "summary": "Checks if git is available on the system by running git --version.",
+      "tags": [
+        "service",
+        "git",
+        "availability-check"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/lib/install-targets.ts:getEffectiveInstallTargets",
+      "type": "function",
+      "name": "getEffectiveInstallTargets",
+      "filePath": "src/lib/install-targets.ts",
+      "lineRange": [
+        120,
+        137
+      ],
+      "summary": "Resolves the effective install target list from CLI flags, config, and auto-detected project environment hints.",
+      "tags": [
+        "service",
+        "target-resolution",
+        "auto-detection"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src/lib/install-targets.ts:detectProjectEnvironmentHints",
+      "type": "function",
+      "name": "detectProjectEnvironmentHints",
+      "filePath": "src/lib/install-targets.ts",
+      "lineRange": [
+        12,
+        27
+      ],
+      "summary": "Detects which agent directories exist in the current project to suggest relevant install targets.",
+      "tags": [
+        "service",
+        "auto-detection",
+        "environment"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src/lib/install-targets.ts:detectGlobalEnvironmentHints",
+      "type": "function",
+      "name": "detectGlobalEnvironmentHints",
+      "filePath": "src/lib/install-targets.ts",
+      "lineRange": [
+        42,
+        57
+      ],
+      "summary": "Detects which agent directories exist in the user home directory for global environment hints.",
+      "tags": [
+        "service",
+        "auto-detection",
+        "environment"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/lib/install-targets.ts:normalizeInstallTargets",
+      "type": "function",
+      "name": "normalizeInstallTargets",
+      "filePath": "src/lib/install-targets.ts",
+      "lineRange": [
+        60,
+        85
+      ],
+      "summary": "Validates and deduplicates the install targets list from config, skipping invalid entries.",
+      "tags": [
+        "service",
+        "validation",
+        "normalization"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/lib/install-targets.ts:parseInstallTargetsCsv",
+      "type": "function",
+      "name": "parseInstallTargetsCsv",
+      "filePath": "src/lib/install-targets.ts",
+      "lineRange": [
+        87,
+        114
+      ],
+      "summary": "Parses a comma-separated install targets string, validating each target against config agents.",
+      "tags": [
+        "service",
+        "parsing",
+        "validation"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/lib/install-targets.ts:resolveDisplayPathForToken",
+      "type": "function",
+      "name": "resolveDisplayPathForToken",
+      "filePath": "src/lib/install-targets.ts",
+      "lineRange": [
+        139,
+        148
+      ],
+      "summary": "Resolves a display path for an install target token using the agent mapping configuration.",
+      "tags": [
+        "service",
+        "path-resolution",
+        "agent-mapping"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/lib/install.ts:checkConflict",
+      "type": "function",
+      "name": "checkConflict",
+      "filePath": "src/lib/install.ts",
+      "lineRange": [
+        27,
+        36
+      ],
+      "summary": "Checks if a skill directory already exists at the target location.",
+      "tags": [
+        "service",
+        "conflict-detection"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/lib/install.ts:installSkill",
+      "type": "function",
+      "name": "installSkill",
+      "filePath": "src/lib/install.ts",
+      "lineRange": [
+        42,
+        66
+      ],
+      "summary": "Copies a skill from cache to the target directory, throwing if the target already exists.",
+      "tags": [
+        "service",
+        "installation",
+        "file-copy"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src/lib/install.ts:installSkillWithConflict",
+      "type": "function",
+      "name": "installSkillWithConflict",
+      "filePath": "src/lib/install.ts",
+      "lineRange": [
+        87,
+        137
+      ],
+      "summary": "Installs a skill with conflict handling via overwrite, skip, or rename strategies.",
+      "tags": [
+        "service",
+        "installation",
+        "conflict-resolution"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src/lib/prompt-install-targets.ts:resolveInstallTargetsOrPrompt",
+      "type": "function",
+      "name": "resolveInstallTargetsOrPrompt",
+      "filePath": "src/lib/prompt-install-targets.ts",
+      "lineRange": [
+        81,
+        117
+      ],
+      "summary": "When no targets are auto-detected, prompts the user interactively or uses injected test logic for target selection.",
+      "tags": [
+        "service",
+        "interactive-prompt",
+        "target-selection"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src/lib/prompt-install-targets.ts:buildInstallTargetChoices",
+      "type": "function",
+      "name": "buildInstallTargetChoices",
+      "filePath": "src/lib/prompt-install-targets.ts",
+      "lineRange": [
+        58,
+        73
+      ],
+      "summary": "Builds the Inquirer checkbox choices list from configured agents with display names and paths.",
+      "tags": [
+        "service",
+        "ui",
+        "choice-building"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/lib/skills.ts:parseMetaJson",
+      "type": "function",
+      "name": "parseMetaJson",
+      "filePath": "src/lib/skills.ts",
+      "lineRange": [
+        15,
+        44
+      ],
+      "summary": "Parses and validates a meta.json file ensuring name and version fields exist and name matches the folder.",
+      "tags": [
+        "service",
+        "parsing",
+        "validation"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src/lib/skills.ts:scanSkillsFromCache",
+      "type": "function",
+      "name": "scanSkillsFromCache",
+      "filePath": "src/lib/skills.ts",
+      "lineRange": [
+        73,
+        82
+      ],
+      "summary": "Scans a cache root for skill metadata, supporting both flat and monorepo (skills/ subdirectory) layouts.",
+      "tags": [
+        "service",
+        "scanning",
+        "metadata-collection"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/lib/skills.ts:findSkillInCache",
+      "type": "function",
+      "name": "findSkillInCache",
+      "filePath": "src/lib/skills.ts",
+      "lineRange": [
+        105,
+        123
+      ],
+      "summary": "Looks up a skill by name or name@version in the cache using exact version matching.",
+      "tags": [
+        "service",
+        "lookup",
+        "version-matching"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src/lib/skills.ts:getSkillSourceDir",
+      "type": "function",
+      "name": "getSkillSourceDir",
+      "filePath": "src/lib/skills.ts",
+      "lineRange": [
+        87,
+        100
+      ],
+      "summary": "Resolves the actual directory of a skill in cache (root or skills/ subdirectory).",
+      "tags": [
+        "service",
+        "path-resolution"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/lib/skills.ts:searchSkills",
+      "type": "function",
+      "name": "searchSkills",
+      "filePath": "src/lib/skills.ts",
+      "lineRange": [
+        156,
+        173
+      ],
+      "summary": "Searches skill metadata by keyword across name, description, and tags with case-insensitive matching.",
+      "tags": [
+        "service",
+        "search",
+        "filtering"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:src/utils/fs.ts",
+      "type": "file",
+      "name": "fs.ts",
+      "filePath": "src/utils/fs.ts",
+      "summary": "文件系统工具函数，提供递归目录拷贝、语义化版本号解析与比较功能。copyDir 用于安装 skill 时拷贝目录，SemVer 相关函数用于版本匹配和升级判断。",
+      "tags": [
+        "utility",
+        "filesystem",
+        "semver",
+        "formatting"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/utils/fs.ts:copyDir",
+      "type": "function",
+      "name": "copyDir",
+      "filePath": "src/utils/fs.ts",
+      "lineRange": [
+        5,
+        10
+      ],
+      "summary": "递归拷贝源目录到目标路径，若源目录不存在则抛出异常。",
+      "tags": [
+        "utility",
+        "filesystem"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/utils/fs.ts:parseVersion",
+      "type": "function",
+      "name": "parseVersion",
+      "filePath": "src/utils/fs.ts",
+      "lineRange": [
+        22,
+        30
+      ],
+      "summary": "将版本字符串解析为 SemVer 对象（major/minor/patch），忽略预发布标签。",
+      "tags": [
+        "utility",
+        "semver",
+        "parsing"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:src/utils/output.ts",
+      "type": "file",
+      "name": "output.ts",
+      "filePath": "src/utils/output.ts",
+      "summary": "终端输出工具，提供带颜色标记的 success/warn/error 消息函数。支持 NO_COLOR 和 FORCE_COLOR 环境变量控制颜色输出，TTY 检测自动决定是否着色。",
+      "tags": [
+        "utility",
+        "cli",
+        "formatting",
+        "terminal"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/utils/output.ts:success",
+      "type": "function",
+      "name": "success",
+      "filePath": "src/utils/output.ts",
+      "lineRange": [
+        17,
+        24
+      ],
+      "summary": "输出绿色成功消息（带 checkmark 前缀），支持 TTY 颜色检测。",
+      "tags": [
+        "utility",
+        "cli",
+        "terminal"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/utils/output.ts:warn",
+      "type": "function",
+      "name": "warn",
+      "filePath": "src/utils/output.ts",
+      "lineRange": [
+        27,
+        34
+      ],
+      "summary": "输出黄色警告消息（带 warning sign 前缀），支持 TTY 颜色检测。",
+      "tags": [
+        "utility",
+        "cli",
+        "terminal"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/utils/output.ts:error",
+      "type": "function",
+      "name": "error",
+      "filePath": "src/utils/output.ts",
+      "lineRange": [
+        37,
+        44
+      ],
+      "summary": "输出红色错误消息到 stderr（带 cross mark 前缀），支持 TTY 颜色检测。",
+      "tags": [
+        "utility",
+        "cli",
+        "terminal"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:src/utils/path.ts",
+      "type": "file",
+      "name": "path.ts",
+      "filePath": "src/utils/path.ts",
+      "summary": "路径处理工具函数，将 Git 仓库 URL 转换为缓存目录名，以及确保目录存在。urlToCacheDirName 是缓存系统的基础，将远程仓库地址规范化为本地目录名。",
+      "tags": [
+        "utility",
+        "path",
+        "cache",
+        "git"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/utils/path.ts:urlToCacheDirName",
+      "type": "function",
+      "name": "urlToCacheDirName",
+      "filePath": "src/utils/path.ts",
+      "lineRange": [
+        10,
+        28
+      ],
+      "summary": "将 Git 仓库 URL（支持 https 和 git@ 协议）转换为安全的缓存目录名，去掉协议、.git 后缀，将特殊字符替换为短横线。",
+      "tags": [
+        "utility",
+        "path",
+        "git",
+        "cache"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:src/utils/validate.ts",
+      "type": "file",
+      "name": "validate.ts",
+      "filePath": "src/utils/validate.ts",
+      "summary": "Skill 名称校验与标识符解析工具。validateSkillName 确保名称仅含小写字母、数字和短横线；parseSkillIdentifier 支持解析 name@version 格式。",
+      "tags": [
+        "utility",
+        "validation",
+        "parsing"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:tests/commands/cli.test.ts",
+      "type": "file",
+      "name": "cli.test.ts",
+      "filePath": "tests/commands/cli.test.ts",
+      "summary": "CLI 命令端到端集成测试套件（810 行），覆盖 install/list/uninstall/update 等命令在真实文件系统下的行为。使用临时目录模拟项目环境和缓存目录，验证 CLI 的完整用户流程。",
+      "tags": [
+        "test",
+        "integration",
+        "cli",
+        "command"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:tests/commands/cli.test.ts:writeSkill",
+      "type": "function",
+      "name": "writeSkill",
+      "filePath": "tests/commands/cli.test.ts",
+      "lineRange": [
+        21,
+        35
+      ],
+      "summary": "测试辅助函数，在缓存目录中创建指定名称和版本的 skill 模拟数据（meta.json 和 SKILL.md）。",
+      "tags": [
+        "test",
+        "utility",
+        "fixture"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:tests/lib/agents.test.ts",
+      "type": "file",
+      "name": "agents.test.ts",
+      "filePath": "tests/lib/agents.test.ts",
+      "summary": "Agent 模块单元测试，验证 resolveTargetPath 的项目级和全局级路径解析逻辑，以及 getInstalledSkills 的 skill 列表读取功能。",
+      "tags": [
+        "test",
+        "unit",
+        "agents"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:tests/lib/cache.test.ts",
+      "type": "file",
+      "name": "cache.test.ts",
+      "filePath": "tests/lib/cache.test.ts",
+      "summary": "缓存管理模块单元测试，覆盖getSourceCacheDir 的路径解析、缓存目录创建以及 source 缓存刷新逻辑。使用临时目录隔离测试环境。",
+      "tags": [
+        "test",
+        "unit",
+        "cache"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:tests/lib/config.test.ts",
+      "type": "file",
+      "name": "config.test.ts",
+      "filePath": "tests/lib/config.test.ts",
+      "summary": "配置管理模块单元测试，覆盖 getDefaultConfig 的默认值生成、loadConfig 的文件读取与合并、环境变量覆盖以及配置校验逻辑。",
+      "tags": [
+        "test",
+        "unit",
+        "config"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:tests/lib/git.test.ts",
+      "type": "file",
+      "name": "git.test.ts",
+      "filePath": "tests/lib/git.test.ts",
+      "summary": "Git 操作模块单元测试，使用本地 bare 仓库模拟远程操作。覆盖 clone/pull/fetch 等命令的执行、错误处理和版本解析逻辑。",
+      "tags": [
+        "test",
+        "unit",
+        "git"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:tests/lib/git.test.ts:createLocalBareRemote",
+      "type": "function",
+      "name": "createLocalBareRemote",
+      "filePath": "tests/lib/git.test.ts",
+      "lineRange": [
+        34,
+        55
+      ],
+      "summary": "测试辅助函数，创建本地 bare Git 仓库模拟远程仓库，用于隔离的 Git 操作测试。",
+      "tags": [
+        "test",
+        "utility",
+        "git",
+        "fixture"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:tests/lib/install-targets.test.ts",
+      "type": "file",
+      "name": "install-targets.test.ts",
+      "filePath": "tests/lib/install-targets.test.ts",
+      "summary": "安装目标路径解析单元测试，验证不同配置下（项目级、全局级、自定义路径）skill 安装目标的正确解析。",
+      "tags": [
+        "test",
+        "unit",
+        "install"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:tests/lib/install.test.ts",
+      "type": "file",
+      "name": "install.test.ts",
+      "filePath": "tests/lib/install.test.ts",
+      "summary": "Skill 安装模块单元测试，覆盖 checkConflict 冲突检测、installSkill 正常安装流程以及 installSkillWithConflict 冲突处理策略（覆盖/跳过/取消）。",
+      "tags": [
+        "test",
+        "unit",
+        "install"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:tests/lib/install.test.ts:seedCache",
+      "type": "function",
+      "name": "seedCache",
+      "filePath": "tests/lib/install.test.ts",
+      "lineRange": [
+        103,
+        114
+      ],
+      "summary": "测试辅助函数，在临时缓存目录中预置指定版本的 skill 数据，用于安装测试的场景准备。",
+      "tags": [
+        "test",
+        "utility",
+        "fixture"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:tests/lib/skills.test.ts",
+      "type": "file",
+      "name": "skills.test.ts",
+      "filePath": "tests/lib/skills.test.ts",
+      "summary": "Skill 元数据管理模块单元测试，覆盖 skill 搜索、版本查询、元数据解析和列表过滤等功能。",
+      "tags": [
+        "test",
+        "unit",
+        "skills"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:tests/smoke.test.ts",
+      "type": "file",
+      "name": "smoke.test.ts",
+      "filePath": "tests/smoke.test.ts",
+      "summary": "冒烟测试，验证 Vitest 测试框架基础运行能力和断言功能正常工作。",
+      "tags": [
+        "test",
+        "smoke",
+        "validation"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:tests/types.test.ts",
+      "type": "file",
+      "name": "types.test.ts",
+      "filePath": "tests/types.test.ts",
+      "summary": "类型定义编译时验证测试，通过 TypeScript 类型约束确保 SkillMeta 等核心接口的正确使用，防止类型回归。",
+      "tags": [
+        "test",
+        "type-definition",
+        "validation"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:tests/utils/fs.test.ts",
+      "type": "file",
+      "name": "fs.test.ts",
+      "filePath": "tests/utils/fs.test.ts",
+      "summary": "文件系统工具函数单元测试，覆盖 copyDir 目录拷贝、parseVersion 版本解析以及 gt/eq 版本比较函数的各种边界情况。",
+      "tags": [
+        "test",
+        "unit",
+        "utility"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:tests/utils/output.test.ts",
+      "type": "file",
+      "name": "output.test.ts",
+      "filePath": "tests/utils/output.test.ts",
+      "summary": "终端输出工具函数单元测试，验证 success/warn/error 在有颜色和无颜色模式下的输出格式。",
+      "tags": [
+        "test",
+        "unit",
+        "utility"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:tests/utils/path.test.ts",
+      "type": "file",
+      "name": "path.test.ts",
+      "filePath": "tests/utils/path.test.ts",
+      "summary": "路径工具函数单元测试，验证 urlToCacheDirName 对各种 Git URL 格式的转换（https、git@、带.git后缀等）以及 ensureDir 的目录创建。",
+      "tags": [
+        "test",
+        "unit",
+        "utility"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:tests/utils/validate.test.ts",
+      "type": "file",
+      "name": "validate.test.ts",
+      "filePath": "tests/utils/validate.test.ts",
+      "summary": "校验工具函数单元测试，覆盖 validateSkillName 的合法/非法名称判断和 parseSkillIdentifier 的 name@version 解析。",
+      "tags": [
+        "test",
+        "unit",
+        "utility"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "config:package.json",
+      "type": "config",
+      "name": "package.json",
+      "filePath": "package.json",
+      "summary": "项目包配置，定义 skills-cli 为 ESM 模块，提供 suit-skills 和 skills-cli 两个 CLI 入口。依赖 Commander.js 和 Inquirer 构建 CLI 交互，使用 Vitest 进行测试。",
+      "tags": [
+        "configuration",
+        "build-system",
+        "cli",
+        "npm"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "config:tsconfig.json",
+      "type": "config",
+      "name": "tsconfig.json",
+      "filePath": "tsconfig.json",
+      "summary": "TypeScript 编译配置，启用严格模式，以 NodeNext 模块解析方式输出 ES2022 目标代码。生成声明文件和 source map，支持增量编译。",
+      "tags": [
+        "configuration",
+        "typescript",
+        "build-system"
+      ],
+      "complexity": "simple",
+      "languageNotes": "使用 NodeNext 模块解析策略，与 package.json 的 type:module 配合支持原生 ESM。"
+    },
+    {
+      "id": "file:vitest.config.ts",
+      "type": "file",
+      "name": "vitest.config.ts",
+      "filePath": "vitest.config.ts",
+      "summary": "Vitest 测试框架配置，启用全局测试 API（describe/it/expect 无需显式导入）。",
+      "tags": [
+        "configuration",
+        "test",
+        "vitest"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "config:.npmrc",
+      "type": "config",
+      "name": ".npmrc",
+      "filePath": ".npmrc",
+      "summary": "NPM 注册表镜像配置，将包下载源指向 npmmirror 国内镜像加速。",
+      "tags": [
+        "configuration",
+        "npm",
+        "registry"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:tsconfig.tsbuildinfo",
+      "type": "file",
+      "name": "tsconfig.tsbuildinfo",
+      "filePath": "tsconfig.tsbuildinfo",
+      "summary": "TypeScript 增量编译缓存文件，存储编译状态以加速后续构建。",
+      "tags": [
+        "build-system",
+        "cache",
+        "typescript"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "document:.claude/skills/code-review/SKILL.md",
+      "type": "document",
+      "name": "code-review SKILL.md",
+      "filePath": ".claude/skills/code-review/SKILL.md",
+      "summary": "Skill definition for automated code review, providing a review checklist covering correctness, security, performance, readability, error handling, and testing with severity-graded output format.",
+      "tags": [
+        "documentation",
+        "skill-definition",
+        "code-review",
+        "best-practices"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "config:.claude/skills/code-review/meta.json",
+      "type": "config",
+      "name": "code-review meta.json",
+      "filePath": ".claude/skills/code-review/meta.json",
+      "summary": "Metadata for the code-review skill, declaring name, version, description, author, and tags for skill discovery and registration.",
+      "tags": [
+        "configuration",
+        "skill-definition",
+        "metadata"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "document:.claude/skills/react-helper/SKILL.md",
+      "type": "document",
+      "name": "react-helper SKILL.md",
+      "filePath": ".claude/skills/react-helper/SKILL.md",
+      "summary": "Skill definition for React development assistance, covering component design principles, best practices for hooks and TypeScript, and recommended file structure conventions.",
+      "tags": [
+        "documentation",
+        "skill-definition",
+        "react",
+        "best-practices"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "config:.claude/skills/react-helper/meta.json",
+      "type": "config",
+      "name": "react-helper meta.json",
+      "filePath": ".claude/skills/react-helper/meta.json",
+      "summary": "Metadata for the react-helper skill, declaring name, version, description, author, and tags for skill discovery and registration.",
+      "tags": [
+        "configuration",
+        "skill-definition",
+        "metadata"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:.npmrc",
+      "type": "file",
+      "name": ".npmrc",
+      "filePath": ".npmrc",
+      "summary": "NPM configuration file that sets the package registry to the npmmirror.com mirror for faster dependency resolution in China.",
+      "tags": [
+        "configuration",
+        "npm",
+        "registry"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "document:.spec-workflow/templates/design-template.md",
+      "type": "document",
+      "name": "design-template.md",
+      "filePath": ".spec-workflow/templates/design-template.md",
+      "summary": "Template for design documents with sections for overview, steering alignment, code reuse analysis, architecture, components/interfaces, data models, error handling, and testing strategy.",
+      "tags": [
+        "documentation",
+        "template",
+        "design",
+        "spec-workflow"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:.spec-workflow/templates/product-template.md",
+      "type": "document",
+      "name": "product-template.md",
+      "filePath": ".spec-workflow/templates/product-template.md",
+      "summary": "Template for product overview documents covering purpose, target users, key features, business objectives, success metrics, product principles, and future vision.",
+      "tags": [
+        "documentation",
+        "template",
+        "product",
+        "spec-workflow"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:.spec-workflow/templates/requirements-template.md",
+      "type": "document",
+      "name": "requirements-template.md",
+      "filePath": ".spec-workflow/templates/requirements-template.md",
+      "summary": "Template for requirements documents with sections for introduction, product vision alignment, functional requirements with acceptance criteria, and non-functional requirements covering architecture, performance, security, and reliability.",
+      "tags": [
+        "documentation",
+        "template",
+        "requirements",
+        "spec-workflow"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:.spec-workflow/templates/structure-template.md",
+      "type": "document",
+      "name": "structure-template.md",
+      "filePath": ".spec-workflow/templates/structure-template.md",
+      "summary": "Comprehensive template defining project structure conventions including directory organization, naming conventions, import patterns, code structure patterns, module boundaries, and documentation standards.",
+      "tags": [
+        "documentation",
+        "template",
+        "structure",
+        "spec-workflow"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:.spec-workflow/templates/tasks-template.md",
+      "type": "document",
+      "name": "tasks-template.md",
+      "filePath": ".spec-workflow/templates/tasks-template.md",
+      "summary": "Template for task breakdown documents used in the spec workflow to track implementation progress from design specifications.",
+      "tags": [
+        "documentation",
+        "template",
+        "tasks",
+        "spec-workflow"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:.spec-workflow/templates/tech-template.md",
+      "type": "document",
+      "name": "tech-template.md",
+      "filePath": ".spec-workflow/templates/tech-template.md",
+      "summary": "Template for technology stack documentation covering core technologies, development environment, build tools, code quality tools, deployment/distribution, and technical requirements and constraints.",
+      "tags": [
+        "documentation",
+        "template",
+        "technology",
+        "spec-workflow"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:.spec-workflow/user-templates/README.md",
+      "type": "document",
+      "name": "user-templates README.md",
+      "filePath": ".spec-workflow/user-templates/README.md",
+      "summary": "Guide for creating custom spec-workflow templates that override defaults, with instructions on template loading priority, template variables, and best practices.",
+      "tags": [
+        "documentation",
+        "template",
+        "spec-workflow",
+        "customization"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:.understand-anything/.understandignore",
+      "type": "file",
+      "name": ".understandignore",
+      "filePath": ".understand-anything/.understandignore",
+      "summary": "Ignore configuration file for the understand-anything analysis tool, using gitignore-style patterns to exclude files and directories from code analysis.",
+      "tags": [
+        "configuration",
+        "ignore-rules",
+        "analysis"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:.understand-anything/tmp/debug-imports.js",
+      "type": "file",
+      "name": "debug-imports.js",
+      "filePath": ".understand-anything/tmp/debug-imports.js",
+      "summary": "Debug script for testing TypeScript import resolution logic, resolving relative imports from source files against the project directory structure.",
+      "tags": [
+        "utility",
+        "debugging",
+        "import-resolution"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:.understand-anything/tmp/ua-project-scan.js",
+      "type": "file",
+      "name": "ua-project-scan.js",
+      "filePath": ".understand-anything/tmp/ua-project-scan.js",
+      "summary": "Main project scanner script that discovers files, detects languages and categories, identifies frameworks, resolves imports across TypeScript/JavaScript/Python/Go/Rust/Ruby, and produces a structured JSON scan result.",
+      "tags": [
+        "utility",
+        "project-scanning",
+        "import-resolution",
+        "analysis"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:.understand-anything/tmp/ua-project-scan.js:isExcluded",
+      "type": "function",
+      "name": "isExcluded",
+      "filePath": ".understand-anything/tmp/ua-project-scan.js",
+      "lineRange": [
+        59,
+        94
+      ],
+      "summary": "Determines if a file should be excluded from analysis based on dependency directories, build outputs, lock files, binary extensions, IDE files, and generated files.",
+      "tags": [
+        "utility",
+        "filtering",
+        "file-exclusion"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:.understand-anything/tmp/ua-project-scan.js:detectCategory",
+      "type": "function",
+      "name": "detectCategory",
+      "filePath": ".understand-anything/tmp/ua-project-scan.js",
+      "lineRange": [
+        148,
+        184
+      ],
+      "summary": "Classifies a file path into a category (infra, docs, config, data, script, markup, or code) based on filename, extension, and path patterns.",
+      "tags": [
+        "utility",
+        "classification",
+        "file-category"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:.understand-anything/tmp/ua-project-scan.js:tryResolveImport",
+      "type": "function",
+      "name": "tryResolveImport",
+      "filePath": ".understand-anything/tmp/ua-project-scan.js",
+      "lineRange": [
+        292,
+        343
+      ],
+      "summary": "Resolves a relative import path to an actual project file by trying TypeScript ESM extension rewriting, common extensions, and index file patterns.",
+      "tags": [
+        "utility",
+        "import-resolution",
+        "path-resolution"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "config:.understand-anything/tmp/ua-scan-results.json",
+      "type": "config",
+      "name": "ua-scan-results.json",
+      "filePath": ".understand-anything/tmp/ua-scan-results.json",
+      "summary": "Cached output from the project scanner containing the complete file list, detected languages and frameworks, and the resolved import map for all project code files.",
+      "tags": [
+        "configuration",
+        "analysis",
+        "cache",
+        "project-scan"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:docs/other.md",
+      "type": "document",
+      "name": "other.md",
+      "filePath": "docs/other.md",
+      "summary": "Placeholder documentation note indicating a future local web service capability via suit-skills web command.",
+      "tags": [
+        "documentation",
+        "placeholder"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "document:docs/requirements.md",
+      "type": "document",
+      "name": "requirements.md",
+      "filePath": "docs/requirements.md",
+      "summary": "Project requirements documentation outlining skills-cli purpose and features",
+      "tags": [
+        "docs",
+        "requirements"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "document:docs/tasks.md",
+      "type": "document",
+      "name": "tasks.md",
+      "filePath": "docs/tasks.md",
+      "summary": "Task tracking documentation for feature development",
+      "tags": [
+        "docs",
+        "tasks"
+      ],
+      "complexity": "simple"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:src/index.ts",
+      "target": "file:src/cli/run.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/cli/context.ts",
+      "target": "file:src/types/index.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/cli/context.ts",
+      "target": "file:src/lib/config.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/cli/context.ts",
+      "target": "file:src/lib/cache.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/cli/helpers.ts",
+      "target": "file:src/types/index.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/cli/helpers.ts",
+      "target": "file:src/cli/context.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/cli/helpers.ts",
+      "target": "file:src/lib/skills.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/cli/program.ts",
+      "target": "file:src/cli/context.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/cli/program.ts",
+      "target": "file:src/cli/version.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/cli/program.ts",
+      "target": "file:src/commands/list.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/cli/program.ts",
+      "target": "file:src/commands/search.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/cli/program.ts",
+      "target": "file:src/commands/info.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/cli/program.ts",
+      "target": "file:src/commands/install.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/cli/program.ts",
+      "target": "file:src/commands/installed.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/cli/program.ts",
+      "target": "file:src/commands/update.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/cli/program.ts",
+      "target": "file:src/commands/remove.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/cli/program.ts",
+      "target": "file:src/commands/source.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/cli/program.ts",
+      "target": "file:src/commands/config-cmd.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/cli/program.ts",
+      "target": "file:src/commands/env.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/cli/run.ts",
+      "target": "file:src/cli/program.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/cli/run.ts",
+      "target": "file:src/cli/context.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/commands/config-cmd.ts",
+      "target": "file:src/cli/context.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/commands/config-cmd.ts",
+      "target": "file:src/lib/config.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/commands/env.ts",
+      "target": "file:src/cli/context.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/commands/env.ts",
+      "target": "file:src/lib/install-targets.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/commands/env.ts",
+      "target": "file:src/lib/config.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/commands/info.ts",
+      "target": "file:src/types/index.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/commands/info.ts",
+      "target": "file:src/cli/context.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/commands/info.ts",
+      "target": "file:src/cli/helpers.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/commands/info.ts",
+      "target": "file:src/lib/skills.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/commands/install.ts",
+      "target": "file:src/cli/context.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/commands/install.ts",
+      "target": "file:src/cli/paths.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/commands/install.ts",
+      "target": "file:src/cli/helpers.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/commands/install.ts",
+      "target": "file:src/lib/install-targets.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/commands/install.ts",
+      "target": "file:src/lib/install.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/commands/install.ts",
+      "target": "file:src/lib/prompt-install-targets.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/commands/installed.ts",
+      "target": "file:src/cli/context.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/commands/installed.ts",
+      "target": "file:src/cli/paths.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/commands/installed.ts",
+      "target": "file:src/lib/install-targets.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/commands/installed.ts",
+      "target": "file:src/lib/agents.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/commands/list.ts",
+      "target": "file:src/cli/context.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/commands/list.ts",
+      "target": "file:src/cli/helpers.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/commands/remove.ts",
+      "target": "file:src/cli/context.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/commands/remove.ts",
+      "target": "file:src/cli/paths.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/commands/remove.ts",
+      "target": "file:src/lib/install-targets.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/commands/search.ts",
+      "target": "file:src/cli/context.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/commands/search.ts",
+      "target": "file:src/cli/helpers.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/commands/search.ts",
+      "target": "file:src/lib/skills.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/commands/source.ts",
+      "target": "file:src/types/index.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/commands/source.ts",
+      "target": "file:src/cli/context.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/commands/source.ts",
+      "target": "file:src/cli/helpers.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/commands/update.ts",
+      "target": "file:src/cli/context.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/commands/update.ts",
+      "target": "file:src/cli/paths.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/commands/update.ts",
+      "target": "file:src/cli/helpers.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/commands/update.ts",
+      "target": "file:src/lib/install-targets.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/commands/update.ts",
+      "target": "file:src/lib/agents.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/commands/update.ts",
+      "target": "file:src/lib/skills.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/lib/agents.ts",
+      "target": "file:src/types/index.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/lib/cache.ts",
+      "target": "file:src/types/index.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/lib/cache.ts",
+      "target": "file:src/lib/config.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/lib/cache.ts",
+      "target": "file:src/lib/git.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/lib/config.ts",
+      "target": "file:src/types/index.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/lib/install-targets.ts",
+      "target": "file:src/types/index.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/lib/install-targets.ts",
+      "target": "file:src/lib/agents.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/lib/install.ts",
+      "target": "file:src/lib/skills.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/lib/prompt-install-targets.ts",
+      "target": "file:src/types/index.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/lib/prompt-install-targets.ts",
+      "target": "file:src/cli/context.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/lib/prompt-install-targets.ts",
+      "target": "file:src/lib/install-targets.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/lib/skills.ts",
+      "target": "file:src/types/index.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/cli/program.ts",
+      "target": "function:src/cli/program.ts:buildProgram",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/cli/context.ts",
+      "target": "function:src/cli/context.ts:createDefaultCliContext",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/cli/context.ts",
+      "target": "function:src/cli/context.ts:createCliContext",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/cli/helpers.ts",
+      "target": "function:src/cli/helpers.ts:collectMetasFromSources",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/cli/helpers.ts",
+      "target": "function:src/cli/helpers.ts:findSourceByName",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/cli/helpers.ts",
+      "target": "function:src/cli/helpers.ts:assertSourceExists",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/cli/helpers.ts",
+      "target": "function:src/cli/helpers.ts:tagMatches",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/cli/paths.ts",
+      "target": "function:src/cli/paths.ts:toAbsoluteInstallRoot",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/cli/version.ts",
+      "target": "function:src/cli/version.ts:readPkgVersion",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/cli/run.ts",
+      "target": "function:src/cli/run.ts:runCliProcess",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/cli/run.ts",
+      "target": "function:src/cli/run.ts:runCliUserArgs",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/cli/run.ts",
+      "target": "function:src/cli/run.ts:createProgramForTest",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/commands/config-cmd.ts",
+      "target": "function:src/commands/config-cmd.ts:registerConfig",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/commands/env.ts",
+      "target": "function:src/commands/env.ts:registerEnv",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/commands/info.ts",
+      "target": "function:src/commands/info.ts:findSkillAcrossSources",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/commands/info.ts",
+      "target": "function:src/commands/info.ts:registerInfo",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/commands/install.ts",
+      "target": "function:src/commands/install.ts:registerInstall",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/commands/installed.ts",
+      "target": "function:src/commands/installed.ts:registerInstalled",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/commands/list.ts",
+      "target": "function:src/commands/list.ts:registerList",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/commands/remove.ts",
+      "target": "function:src/commands/remove.ts:registerRemove",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/commands/search.ts",
+      "target": "function:src/commands/search.ts:registerSearch",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/commands/source.ts",
+      "target": "function:src/commands/source.ts:registerSource",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/commands/source.ts",
+      "target": "function:src/commands/source.ts:urlExists",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/commands/update.ts",
+      "target": "function:src/commands/update.ts:registerUpdate",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/commands/update.ts",
+      "target": "function:src/commands/update.ts:readLocalVersion",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/commands/update.ts",
+      "target": "function:src/commands/update.ts:updateSkillDir",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/lib/agents.ts",
+      "target": "function:src/lib/agents.ts:resolveTargetPath",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/lib/agents.ts",
+      "target": "function:src/lib/agents.ts:getInstalledSkills",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/lib/cache.ts",
+      "target": "function:src/lib/cache.ts:refreshCache",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/lib/config.ts",
+      "target": "function:src/lib/config.ts:loadConfig",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/lib/config.ts",
+      "target": "function:src/lib/config.ts:saveConfig",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/lib/config.ts",
+      "target": "function:src/lib/config.ts:getConfigValue",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/lib/config.ts",
+      "target": "function:src/lib/config.ts:setConfigValue",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/lib/git.ts",
+      "target": "function:src/lib/git.ts:cloneOrPullRepo",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/lib/git.ts",
+      "target": "function:src/lib/git.ts:cloneRepo",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/lib/git.ts",
+      "target": "function:src/lib/git.ts:pullRepo",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/lib/git.ts",
+      "target": "function:src/lib/git.ts:isGitAvailable",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/lib/install-targets.ts",
+      "target": "function:src/lib/install-targets.ts:getEffectiveInstallTargets",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/lib/install-targets.ts",
+      "target": "function:src/lib/install-targets.ts:detectProjectEnvironmentHints",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/lib/install-targets.ts",
+      "target": "function:src/lib/install-targets.ts:detectGlobalEnvironmentHints",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/lib/install-targets.ts",
+      "target": "function:src/lib/install-targets.ts:normalizeInstallTargets",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/lib/install-targets.ts",
+      "target": "function:src/lib/install-targets.ts:parseInstallTargetsCsv",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/lib/install-targets.ts",
+      "target": "function:src/lib/install-targets.ts:resolveDisplayPathForToken",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/lib/install.ts",
+      "target": "function:src/lib/install.ts:checkConflict",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/lib/install.ts",
+      "target": "function:src/lib/install.ts:installSkill",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/lib/install.ts",
+      "target": "function:src/lib/install.ts:installSkillWithConflict",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/lib/prompt-install-targets.ts",
+      "target": "function:src/lib/prompt-install-targets.ts:resolveInstallTargetsOrPrompt",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/lib/prompt-install-targets.ts",
+      "target": "function:src/lib/prompt-install-targets.ts:buildInstallTargetChoices",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/lib/skills.ts",
+      "target": "function:src/lib/skills.ts:parseMetaJson",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/lib/skills.ts",
+      "target": "function:src/lib/skills.ts:scanSkillsFromCache",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/lib/skills.ts",
+      "target": "function:src/lib/skills.ts:findSkillInCache",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/lib/skills.ts",
+      "target": "function:src/lib/skills.ts:getSkillSourceDir",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/lib/skills.ts",
+      "target": "function:src/lib/skills.ts:searchSkills",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/cli/program.ts",
+      "target": "function:src/cli/program.ts:buildProgram",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/cli/context.ts",
+      "target": "function:src/cli/context.ts:createDefaultCliContext",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/cli/context.ts",
+      "target": "function:src/cli/context.ts:createCliContext",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/cli/helpers.ts",
+      "target": "function:src/cli/helpers.ts:collectMetasFromSources",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/cli/helpers.ts",
+      "target": "function:src/cli/helpers.ts:findSourceByName",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/cli/helpers.ts",
+      "target": "function:src/cli/helpers.ts:assertSourceExists",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/cli/helpers.ts",
+      "target": "function:src/cli/helpers.ts:tagMatches",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/cli/paths.ts",
+      "target": "function:src/cli/paths.ts:toAbsoluteInstallRoot",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/cli/version.ts",
+      "target": "function:src/cli/version.ts:readPkgVersion",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/cli/run.ts",
+      "target": "function:src/cli/run.ts:runCliProcess",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/cli/run.ts",
+      "target": "function:src/cli/run.ts:runCliUserArgs",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/cli/run.ts",
+      "target": "function:src/cli/run.ts:createProgramForTest",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/commands/config-cmd.ts",
+      "target": "function:src/commands/config-cmd.ts:registerConfig",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/commands/env.ts",
+      "target": "function:src/commands/env.ts:registerEnv",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/commands/info.ts",
+      "target": "function:src/commands/info.ts:registerInfo",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/commands/install.ts",
+      "target": "function:src/commands/install.ts:registerInstall",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/commands/installed.ts",
+      "target": "function:src/commands/installed.ts:registerInstalled",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/commands/list.ts",
+      "target": "function:src/commands/list.ts:registerList",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/commands/remove.ts",
+      "target": "function:src/commands/remove.ts:registerRemove",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/commands/search.ts",
+      "target": "function:src/commands/search.ts:registerSearch",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/commands/source.ts",
+      "target": "function:src/commands/source.ts:registerSource",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/commands/update.ts",
+      "target": "function:src/commands/update.ts:registerUpdate",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/lib/agents.ts",
+      "target": "function:src/lib/agents.ts:resolveTargetPath",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/lib/agents.ts",
+      "target": "function:src/lib/agents.ts:getInstalledSkills",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/lib/cache.ts",
+      "target": "function:src/lib/cache.ts:refreshCache",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/lib/config.ts",
+      "target": "function:src/lib/config.ts:loadConfig",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/lib/config.ts",
+      "target": "function:src/lib/config.ts:saveConfig",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/lib/config.ts",
+      "target": "function:src/lib/config.ts:getConfigValue",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/lib/config.ts",
+      "target": "function:src/lib/config.ts:setConfigValue",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/lib/git.ts",
+      "target": "function:src/lib/git.ts:cloneOrPullRepo",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/lib/git.ts",
+      "target": "function:src/lib/git.ts:cloneRepo",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/lib/git.ts",
+      "target": "function:src/lib/git.ts:pullRepo",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/lib/git.ts",
+      "target": "function:src/lib/git.ts:isGitAvailable",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/lib/install-targets.ts",
+      "target": "function:src/lib/install-targets.ts:getEffectiveInstallTargets",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/lib/install-targets.ts",
+      "target": "function:src/lib/install-targets.ts:detectProjectEnvironmentHints",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/lib/install-targets.ts",
+      "target": "function:src/lib/install-targets.ts:detectGlobalEnvironmentHints",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/lib/install-targets.ts",
+      "target": "function:src/lib/install-targets.ts:normalizeInstallTargets",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/lib/install-targets.ts",
+      "target": "function:src/lib/install-targets.ts:parseInstallTargetsCsv",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/lib/install-targets.ts",
+      "target": "function:src/lib/install-targets.ts:resolveDisplayPathForToken",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/lib/install.ts",
+      "target": "function:src/lib/install.ts:checkConflict",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/lib/install.ts",
+      "target": "function:src/lib/install.ts:installSkill",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/lib/install.ts",
+      "target": "function:src/lib/install.ts:installSkillWithConflict",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/lib/prompt-install-targets.ts",
+      "target": "function:src/lib/prompt-install-targets.ts:resolveInstallTargetsOrPrompt",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/lib/prompt-install-targets.ts",
+      "target": "function:src/lib/prompt-install-targets.ts:buildInstallTargetChoices",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/lib/skills.ts",
+      "target": "function:src/lib/skills.ts:parseMetaJson",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/lib/skills.ts",
+      "target": "function:src/lib/skills.ts:scanSkillsFromCache",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/lib/skills.ts",
+      "target": "function:src/lib/skills.ts:findSkillInCache",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/lib/skills.ts",
+      "target": "function:src/lib/skills.ts:getSkillSourceDir",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/lib/skills.ts",
+      "target": "function:src/lib/skills.ts:searchSkills",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src/cli/run.ts:runCliProcess",
+      "target": "function:src/cli/context.ts:createDefaultCliContext",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src/cli/run.ts:runCliProcess",
+      "target": "function:src/cli/program.ts:buildProgram",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src/cli/program.ts:buildProgram",
+      "target": "function:src/cli/version.ts:readPkgVersion",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src/cli/helpers.ts:collectMetasFromSources",
+      "target": "function:src/cli/helpers.ts:findSourceByName",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src/cli/helpers.ts:collectMetasFromSources",
+      "target": "function:src/lib/skills.ts:scanSkillsFromCache",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src/commands/install.ts:registerInstall",
+      "target": "function:src/lib/install.ts:installSkillWithConflict",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src/commands/install.ts:registerInstall",
+      "target": "function:src/lib/install-targets.ts:getEffectiveInstallTargets",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src/commands/install.ts:registerInstall",
+      "target": "function:src/lib/prompt-install-targets.ts:resolveInstallTargetsOrPrompt",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src/commands/update.ts:registerUpdate",
+      "target": "function:src/lib/install-targets.ts:getEffectiveInstallTargets",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src/commands/update.ts:registerUpdate",
+      "target": "function:src/lib/agents.ts:getInstalledSkills",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src/commands/update.ts:updateSkillDir",
+      "target": "function:src/lib/skills.ts:findSkillInCache",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src/commands/update.ts:updateSkillDir",
+      "target": "function:src/lib/skills.ts:getSkillSourceDir",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src/lib/install.ts:installSkillWithConflict",
+      "target": "function:src/lib/install.ts:checkConflict",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src/lib/install.ts:installSkillWithConflict",
+      "target": "function:src/lib/install.ts:installSkill",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src/lib/install.ts:installSkill",
+      "target": "function:src/lib/skills.ts:findSkillInCache",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src/lib/install.ts:installSkill",
+      "target": "function:src/lib/skills.ts:getSkillSourceDir",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src/lib/cache.ts:refreshCache",
+      "target": "function:src/lib/git.ts:cloneOrPullRepo",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src/lib/git.ts:cloneOrPullRepo",
+      "target": "function:src/lib/git.ts:cloneRepo",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src/lib/git.ts:cloneOrPullRepo",
+      "target": "function:src/lib/git.ts:pullRepo",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src/lib/git.ts:cloneRepo",
+      "target": "function:src/lib/git.ts:isGitAvailable",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src/lib/config.ts:loadConfig",
+      "target": "function:src/lib/config.ts:saveConfig",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src/lib/config.ts:setConfigValue",
+      "target": "function:src/lib/config.ts:loadConfig",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src/lib/config.ts:setConfigValue",
+      "target": "function:src/lib/config.ts:saveConfig",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src/lib/install-targets.ts:getEffectiveInstallTargets",
+      "target": "function:src/lib/install-targets.ts:detectProjectEnvironmentHints",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src/lib/install-targets.ts:getEffectiveInstallTargets",
+      "target": "function:src/lib/install-targets.ts:normalizeInstallTargets",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src/lib/prompt-install-targets.ts:resolveInstallTargetsOrPrompt",
+      "target": "function:src/lib/prompt-install-targets.ts:buildInstallTargetChoices",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src/lib/install-targets.ts:resolveDisplayPathForToken",
+      "target": "function:src/lib/agents.ts:resolveTargetPath",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src/commands/info.ts:findSkillAcrossSources",
+      "target": "function:src/cli/helpers.ts:assertSourceExists",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src/commands/info.ts:findSkillAcrossSources",
+      "target": "function:src/lib/skills.ts:findSkillInCache",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src/commands/search.ts:registerSearch",
+      "target": "function:src/cli/helpers.ts:collectMetasFromSources",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src/commands/search.ts:registerSearch",
+      "target": "function:src/lib/skills.ts:searchSkills",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src/commands/list.ts:registerList",
+      "target": "function:src/cli/helpers.ts:collectMetasFromSources",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src/commands/list.ts:registerList",
+      "target": "function:src/cli/helpers.ts:tagMatches",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src/commands/installed.ts:registerInstalled",
+      "target": "function:src/lib/install-targets.ts:getEffectiveInstallTargets",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src/commands/installed.ts:registerInstalled",
+      "target": "function:src/lib/install-targets.ts:resolveDisplayPathForToken",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src/commands/installed.ts:registerInstalled",
+      "target": "function:src/lib/agents.ts:getInstalledSkills",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src/commands/remove.ts:registerRemove",
+      "target": "function:src/lib/install-targets.ts:getEffectiveInstallTargets",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src/commands/remove.ts:registerRemove",
+      "target": "function:src/lib/install-targets.ts:resolveDisplayPathForToken",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src/commands/config-cmd.ts:registerConfig",
+      "target": "function:src/lib/config.ts:loadConfig",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src/commands/config-cmd.ts:registerConfig",
+      "target": "function:src/lib/config.ts:getConfigValue",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src/commands/config-cmd.ts:registerConfig",
+      "target": "function:src/lib/config.ts:setConfigValue",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src/commands/env.ts:registerEnv",
+      "target": "function:src/lib/install-targets.ts:normalizeInstallTargets",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src/commands/env.ts:registerEnv",
+      "target": "function:src/lib/install-targets.ts:detectGlobalEnvironmentHints",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src/commands/env.ts:registerEnv",
+      "target": "function:src/lib/install-targets.ts:detectProjectEnvironmentHints",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src/commands/env.ts:registerEnv",
+      "target": "function:src/lib/install-targets.ts:parseInstallTargetsCsv",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src/commands/source.ts:registerSource",
+      "target": "function:src/cli/helpers.ts:findSourceByName",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/utils/fs.ts",
+      "target": "function:src/utils/fs.ts:copyDir",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/utils/fs.ts",
+      "target": "function:src/utils/fs.ts:parseVersion",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/utils/fs.ts",
+      "target": "function:src/utils/fs.ts:copyDir",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/utils/fs.ts",
+      "target": "function:src/utils/fs.ts:parseVersion",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/utils/output.ts",
+      "target": "function:src/utils/output.ts:success",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/utils/output.ts",
+      "target": "function:src/utils/output.ts:warn",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/utils/output.ts",
+      "target": "function:src/utils/output.ts:error",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/utils/output.ts",
+      "target": "function:src/utils/output.ts:success",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/utils/output.ts",
+      "target": "function:src/utils/output.ts:warn",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/utils/output.ts",
+      "target": "function:src/utils/output.ts:error",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/utils/path.ts",
+      "target": "function:src/utils/path.ts:urlToCacheDirName",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/utils/path.ts",
+      "target": "function:src/utils/path.ts:urlToCacheDirName",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:tests/commands/cli.test.ts",
+      "target": "file:src/lib/config.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:tests/commands/cli.test.ts",
+      "target": "file:src/lib/cache.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:tests/commands/cli.test.ts",
+      "target": "file:src/cli/context.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:tests/commands/cli.test.ts",
+      "target": "file:src/cli/run.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:tests/commands/cli.test.ts",
+      "target": "file:src/types/index.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:tests/commands/cli.test.ts",
+      "target": "function:tests/commands/cli.test.ts:writeSkill",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:tests/commands/cli.test.ts",
+      "target": "file:src/cli/run.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:tests/lib/agents.test.ts",
+      "target": "file:src/lib/config.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:tests/lib/agents.test.ts",
+      "target": "file:src/lib/agents.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:tests/lib/agents.test.ts",
+      "target": "file:src/lib/agents.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:tests/lib/cache.test.ts",
+      "target": "file:src/lib/config.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:tests/lib/cache.test.ts",
+      "target": "file:src/lib/git.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:tests/lib/cache.test.ts",
+      "target": "file:src/lib/cache.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:tests/lib/cache.test.ts",
+      "target": "file:src/types/index.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:tests/lib/cache.test.ts",
+      "target": "file:src/lib/cache.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:tests/lib/config.test.ts",
+      "target": "file:src/types/index.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:tests/lib/config.test.ts",
+      "target": "file:src/lib/config.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:tests/lib/config.test.ts",
+      "target": "file:src/lib/config.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:tests/lib/git.test.ts",
+      "target": "file:src/lib/git.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:tests/lib/git.test.ts",
+      "target": "function:tests/lib/git.test.ts:createLocalBareRemote",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:tests/lib/git.test.ts",
+      "target": "file:src/lib/git.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:tests/lib/install-targets.test.ts",
+      "target": "file:src/lib/config.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:tests/lib/install-targets.test.ts",
+      "target": "file:src/lib/install-targets.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:tests/lib/install-targets.test.ts",
+      "target": "file:src/lib/install-targets.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:tests/lib/install.test.ts",
+      "target": "file:src/lib/install.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:tests/lib/install.test.ts",
+      "target": "file:src/utils/fs.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:tests/lib/install.test.ts",
+      "target": "function:tests/lib/install.test.ts:seedCache",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:tests/lib/install.test.ts",
+      "target": "file:src/lib/install.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:tests/lib/skills.test.ts",
+      "target": "file:src/lib/skills.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:tests/lib/skills.test.ts",
+      "target": "file:src/types/index.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:tests/lib/skills.test.ts",
+      "target": "file:src/lib/skills.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:tests/types.test.ts",
+      "target": "file:src/types/index.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:tests/types.test.ts",
+      "target": "file:src/types/index.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:tests/utils/fs.test.ts",
+      "target": "file:src/utils/fs.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:tests/utils/fs.test.ts",
+      "target": "file:src/utils/fs.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:tests/utils/output.test.ts",
+      "target": "file:src/utils/output.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:tests/utils/output.test.ts",
+      "target": "file:src/utils/output.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:tests/utils/path.test.ts",
+      "target": "file:src/utils/path.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:tests/utils/path.test.ts",
+      "target": "file:src/utils/path.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:tests/utils/validate.test.ts",
+      "target": "file:src/utils/validate.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:tests/utils/validate.test.ts",
+      "target": "file:src/utils/validate.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "config:package.json",
+      "target": "file:vitest.config.ts",
+      "type": "configures",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "config:tsconfig.json",
+      "target": "file:src/utils/fs.ts",
+      "type": "configures",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "config:tsconfig.json",
+      "target": "file:src/utils/output.ts",
+      "type": "configures",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "config:tsconfig.json",
+      "target": "file:src/utils/path.ts",
+      "type": "configures",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "config:tsconfig.json",
+      "target": "file:src/utils/validate.ts",
+      "type": "configures",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "config:tsconfig.json",
+      "target": "file:vitest.config.ts",
+      "type": "configures",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "config:.npmrc",
+      "target": "config:package.json",
+      "type": "configures",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:.understand-anything/tmp/ua-project-scan.js",
+      "target": "function:.understand-anything/tmp/ua-project-scan.js:isExcluded",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:.understand-anything/tmp/ua-project-scan.js",
+      "target": "function:.understand-anything/tmp/ua-project-scan.js:detectCategory",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:.understand-anything/tmp/ua-project-scan.js",
+      "target": "function:.understand-anything/tmp/ua-project-scan.js:tryResolveImport",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "config:.claude/skills/code-review/meta.json",
+      "target": "document:.claude/skills/code-review/SKILL.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "config:.claude/skills/react-helper/meta.json",
+      "target": "document:.claude/skills/react-helper/SKILL.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:.spec-workflow/user-templates/README.md",
+      "target": "document:.spec-workflow/templates/design-template.md",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:.spec-workflow/user-templates/README.md",
+      "target": "document:.spec-workflow/templates/requirements-template.md",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:.spec-workflow/user-templates/README.md",
+      "target": "document:.spec-workflow/templates/tasks-template.md",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:.spec-workflow/user-templates/README.md",
+      "target": "document:.spec-workflow/templates/product-template.md",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:.spec-workflow/user-templates/README.md",
+      "target": "document:.spec-workflow/templates/tech-template.md",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:.spec-workflow/user-templates/README.md",
+      "target": "document:.spec-workflow/templates/structure-template.md",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:.understand-anything/tmp/debug-imports.js",
+      "target": "file:.understand-anything/tmp/ua-project-scan.js",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "config:.understand-anything/tmp/ua-scan-results.json",
+      "target": "file:.understand-anything/tmp/ua-project-scan.js",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:.understand-anything/.understandignore",
+      "target": "file:.understand-anything/tmp/ua-project-scan.js",
+      "type": "configures",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:src/index.ts",
+      "target": "file:src/utils/output.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/lib/config.ts",
+      "target": "file:src/utils/path.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/lib/config.ts",
+      "target": "file:src/utils/output.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/lib/skills.ts",
+      "target": "file:src/utils/fs.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/lib/skills.ts",
+      "target": "file:src/utils/validate.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    }
+  ],
+  "layers": [
+    {
+      "id": "layer:entry",
+      "name": "Entry Layer",
+      "description": "Application entry point and CLI execution orchestrator that initializes the Commander.js program and coordinates command execution flow",
+      "nodeIds": [
+        "file:src/index.ts",
+        "file:src/cli/run.ts",
+        "file:src/cli/program.ts"
+      ]
+    },
+    {
+      "id": "layer:cli",
+      "name": "CLI Framework",
+      "description": "CLI infrastructure including context management for dependency injection, helper utilities, path resolution, and version handling used across all commands",
+      "nodeIds": [
+        "file:src/cli/context.ts",
+        "file:src/cli/helpers.ts",
+        "file:src/cli/paths.ts",
+        "file:src/cli/version.ts"
+      ]
+    },
+    {
+      "id": "layer:commands",
+      "name": "Commands Layer",
+      "description": "Individual CLI command implementations (list, search, info, install, remove, update, source, env, config) that handle user interactions and delegate to service layer",
+      "nodeIds": [
+        "file:src/commands/config-cmd.ts",
+        "file:src/commands/env.ts",
+        "file:src/commands/info.ts",
+        "file:src/commands/install.ts",
+        "file:src/commands/installed.ts",
+        "file:src/commands/list.ts",
+        "file:src/commands/remove.ts",
+        "file:src/commands/search.ts",
+        "file:src/commands/source.ts",
+        "file:src/commands/update.ts"
+      ]
+    },
+    {
+      "id": "layer:service",
+      "name": "Service Layer",
+      "description": "Core business logic for skills management including configuration loading, cache management with git integration, skill metadata validation, install operations, and agent definitions",
+      "nodeIds": [
+        "file:src/lib/agents.ts",
+        "file:src/lib/cache.ts",
+        "file:src/lib/config.ts",
+        "file:src/lib/git.ts",
+        "file:src/lib/install-targets.ts",
+        "file:src/lib/install.ts",
+        "file:src/lib/prompt-install-targets.ts",
+        "file:src/lib/skills.ts"
+      ]
+    },
+    {
+      "id": "layer:types",
+      "name": "Types Layer",
+      "description": "TypeScript type definitions and interfaces for skill metadata, configuration schemas, and CLI context structures shared across all layers",
+      "nodeIds": [
+        "file:src/types/index.ts"
+      ]
+    },
+    {
+      "id": "layer:utility",
+      "name": "Utility Layer",
+      "description": "Cross-cutting utility functions for file system operations, output formatting with colors and tables, path manipulation, and validation helpers used by all upper layers",
+      "nodeIds": [
+        "file:src/utils/fs.ts",
+        "file:src/utils/output.ts",
+        "file:src/utils/path.ts",
+        "file:src/utils/validate.ts"
+      ]
+    },
+    {
+      "id": "layer:test",
+      "name": "Test Layer",
+      "description": "Integration and unit tests for CLI commands, service layer functions, and utility modules using Vitest framework",
+      "nodeIds": [
+        "file:tests/commands/cli.test.ts",
+        "file:tests/lib/*.test.ts",
+        "file:tests/utils/*.test.ts"
+      ]
+    },
+    {
+      "id": "layer:config",
+      "name": "Configuration Layer",
+      "description": "Project configuration files including npm package manifest with dependencies and TypeScript compiler settings",
+      "nodeIds": [
+        "config:package.json",
+        "config:tsconfig.json"
+      ]
+    },
+    {
+      "id": "layer:documentation",
+      "name": "Documentation Layer",
+      "description": "Project documentation including requirements, task tracking, and spec workflow templates for feature development",
+      "nodeIds": [
+        "document:docs/requirements.md",
+        "document:docs/tasks.md",
+        "document:.spec-workflow/templates/*"
+      ]
+    }
+  ],
+  "tour": [
+    {
+      "order": 1,
+      "title": "Project Overview",
+      "description": "Start by understanding what skills-cli does and its architecture. The requirements document outlines the tool's purpose as a CLI for managing skills (install, search, update, remove), while package.json defines the project dependencies including Commander.js for CLI framework and Vitest for testing.",
+      "nodeIds": [
+        "document:docs/requirements.md",
+        "config:package.json"
+      ]
+    },
+    {
+      "order": 2,
+      "title": "Application Entry Point",
+      "description": "The entry point bootstrap the entire CLI application. index.ts is the main entry that imports and delegates to run.ts, the CLI execution orchestrator. Together, these files establish the startup sequence and error handling that initializes everything else in the codebase.",
+      "nodeIds": [
+        "file:src/index.ts",
+        "file:src/cli/run.ts"
+      ],
+      "languageLesson": "TypeScript CLI applications typically separate the entry point from the execution logic. index.ts handles the minimal bootstrap, while run.ts orchestrates the full initialization sequence, making the code more testable and maintainable."
+    },
+    {
+      "order": 3,
+      "title": "CLI Command Framework",
+      "description": "program.ts defines the Commander.js program structure with all subcommands. This file is the highest fan-out node (imports 3 modules), meaning it has the broadest scope across the codebase. It wires together the CLI infrastructure with the service layer commands.",
+      "nodeIds": [
+        "file:src/cli/program.ts"
+      ],
+      "languageLesson": "Commander.js uses a declarative API to define commands. Each command gets its own action handler, and the program object chains configuration like .version() and .parse(). This pattern keeps command definitions isolated and easy to extend."
+    },
+    {
+      "order": 4,
+      "title": "CLI Infrastructure",
+      "description": "The CLI context (context.ts) provides dependency injection for commands, wiring together config.ts and cache.ts services. helpers.ts contains shared CLI utility functions that commands use for common operations. Together, they form the foundation that all commands rely on.",
+      "nodeIds": [
+        "file:src/cli/context.ts",
+        "file:src/cli/helpers.ts"
+      ],
+      "languageLesson": "Dependency injection in CLI tools allows swapping implementations for testing. The context object holds service references, so commands receive dependencies rather than importing them directly, following the Inversion of Control principle."
+    },
+    {
+      "order": 5,
+      "title": "Service Layer - Core Logic",
+      "description": "The service layer implements the core business logic. install.ts handles skill installation, skills.ts manages metadata and validation, and cache.ts provides git-based caching. These modules have high fan-in (widely depended upon), indicating they are central to the application's functionality.",
+      "nodeIds": [
+        "file:src/lib/install.ts",
+        "file:src/lib/skills.ts",
+        "file:src/lib/cache.ts"
+      ],
+      "languageLesson": "Service layers encapsulate business logic separate from CLI concerns. Each service handles a specific domain: installation workflow, skill validation rules, and cache management. This separation allows services to be tested independently of the CLI framework."
+    },
+    {
+      "order": 6,
+      "title": "Types and Configuration",
+      "description": "types/index.ts defines all TypeScript interfaces that establish the domain vocabulary used throughout the codebase. config.ts handles configuration loading and saving, bridging the type definitions to actual persisted settings. Both have high fan-in as foundational modules.",
+      "nodeIds": [
+        "file:src/types/index.ts",
+        "file:src/lib/config.ts"
+      ],
+      "languageLesson": "TypeScript barrel files (index.ts in a types folder) export all type definitions from a single entry point. This creates a clean import path like 'from src/types' rather than importing individual files, keeping the public type API organized."
+    },
+    {
+      "order": 7,
+      "title": "Output Utilities and Testing",
+      "description": "output.ts provides formatting utilities for CLI output, used by helpers.ts. The Test Layer (using Vitest) validates the service layer and CLI modules. tsconfig.json defines the TypeScript compilation settings that enforce type safety across all these modules.",
+      "nodeIds": [
+        "file:src/utils/output.ts",
+        "config:tsconfig.json"
+      ],
+      "languageLesson": "Vitest is a modern test framework designed for Vite-based projects. It offers fast test execution with hot module reloading, making it ideal for TypeScript CLI tools. Tests typically live alongside source files or in a dedicated test directory mirroring the src structure."
+    }
+  ]
+}

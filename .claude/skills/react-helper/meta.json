@@ -1,0 +1,7 @@
+{
+  "name": "react-helper",
+  "version": "1.0.0",
+  "description": "React 开发助手，提供组件设计和最佳实践建议",
+  "author": "suit-skills",
+  "tags": ["react", "frontend", "components"]
+}
