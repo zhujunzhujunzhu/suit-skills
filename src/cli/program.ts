@@ -11,6 +11,7 @@ import { registerRemove } from '../commands/remove.js';
 import { registerSource } from '../commands/source.js';
 import { registerConfig } from '../commands/config-cmd.js';
 import { registerEnv } from '../commands/env.js';
+import { registerWeb } from '../commands/web.js';
 
 export function buildProgram(ctx: CliContext): Command {
   const program = new Command();
@@ -29,6 +30,7 @@ export function buildProgram(ctx: CliContext): Command {
   registerSource(program, ctx);
   registerConfig(program, ctx);
   registerEnv(program, ctx);
+  registerWeb(program, ctx);
 
   return program;
 }

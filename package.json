@@ -13,7 +13,11 @@
   },
   "scripts": {
     "build": "tsc",
+    "build:all": "npm run build && npm run build:web",
+    "build:web": "vite build --config web/vite.config.ts",
     "dev": "tsx src/index.ts",
+    "dev:web": "node scripts/dev-web.mjs",
+    "dev:web:vite": "vite --config web/vite.config.ts",
     "start": "node dist/index.js",
     "clean": "rm -rf dist",
     "typecheck": "tsc --noEmit",
@@ -30,10 +34,14 @@
   "author": "zhujun",
   "license": "ISC",
   "devDependencies": {
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.1.2",
     "@types/commander": "^2.12.0",
     "@types/node": "^25.6.0",
     "tsx": "^4.21.0",
     "typescript": "^6.0.2",
+    "vite": "^7.3.0",
     "vitest": "^4.1.4"
   },
   "engines": {
@@ -42,6 +50,8 @@
   "dependencies": {
     "@inquirer/core": "^11.1.8",
     "@inquirer/prompts": "^8.4.1",
-    "commander": "^14.0.3"
+    "commander": "^14.0.3",
+    "react": "^19.2.3",
+    "react-dom": "^19.2.3"
   }
 }

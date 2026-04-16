@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="zh-CN"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=Inter:wght@300;400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "surface-container-low": "#1a1c1f",
+                    "on-surface": "#e2e2e6",
+                    "error": "#ffb4ab",
+                    "on-primary-fixed": "#001f24",
+                    "surface-tint": "#45d8ed",
+                    "secondary-fixed-dim": "#b4cad6",
+                    "outline": "#869390",
+                    "inverse-surface": "#e2e2e6",
+                    "on-secondary-fixed": "#071e27",
+                    "on-error": "#690005",
+                    "on-tertiary-container": "#511500",
+                    "on-secondary": "#1e333c",
+                    "surface": "#111316",
+                    "error-container": "#93000a",
+                    "surface-container-highest": "#333538",
+                    "surface-container-high": "#282a2d",
+                    "primary-container": "#009fb1",
+                    "outline-variant": "#3d4947",
+                    "surface-container": "#1e2023",
+                    "on-tertiary-fixed": "#390c00",
+                    "on-secondary-container": "#a6bcc7",
+                    "secondary": "#b4cad6",
+                    "primary-fixed": "#98f0ff",
+                    "primary": "#45d8ed",
+                    "surface-container-lowest": "#0c0e11",
+                    "surface-bright": "#37393d",
+                    "tertiary": "#ffb59d",
+                    "on-secondary-fixed-variant": "#354a53",
+                    "on-tertiary": "#5b1b03",
+                    "on-error-container": "#ffdad6",
+                    "surface-variant": "#333538",
+                    "secondary-fixed": "#cfe6f2",
+                    "on-tertiary-fixed-variant": "#783117",
+                    "primary-fixed-dim": "#45d8ed",
+                    "inverse-primary": "#006874",
+                    "tertiary-fixed": "#ffdbd0",
+                    "secondary-container": "#374c56",
+                    "inverse-on-surface": "#2f3034",
+                    "on-primary-fixed-variant": "#004f58",
+                    "tertiary-container": "#d47858",
+                    "on-surface-variant": "#bcc9c6",
+                    "on-primary-container": "#002f35",
+                    "background": "#111316",
+                    "tertiary-fixed-dim": "#ffb59d",
+                    "on-background": "#e2e2e6",
+                    "on-primary": "#00363d",
+                    "surface-dim": "#111316"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.125rem",
+                    "lg": "0.25rem",
+                    "xl": "0.5rem",
+                    "full": "0.75rem"
+            },
+            "fontFamily": {
+                    "headline": ["Space Grotesk"],
+                    "body": ["Inter"],
+                    "label": ["Inter"],
+                    "mono": ["JetBrains Mono"]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        body { font-family: 'Inter', sans-serif; }
+        .font-mono { font-family: 'JetBrains Mono', monospace; }
+        .font-headline { font-family: 'Space Grotesk', sans-serif; }
+        .glass-panel {
+            background: rgba(51, 53, 56, 0.8);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(61, 73, 71, 0.2);
+        }
+    </style>
+</head>
+<body class="bg-surface text-on-surface selection:bg-primary-container selection:text-on-primary-container">
+<!-- TopNavBar -->
+<header class="w-full top-0 sticky z-50 bg-[#111316] flex justify-between items-center h-12 px-4 w-full bg-[#1a1c1f]">
+<div class="flex items-center gap-4">
+<h1 class="text-lg font-bold tracking-tighter text-[#e2e2e6] font-['Space_Grotesk']">Suit Skills</h1>
+</div>
+<div class="flex items-center gap-2">
+<button class="p-2 text-[#bcc9c6] hover:bg-[#282a2d] transition-colors active:scale-95 duration-100 rounded-lg">
+<span class="material-symbols-outlined text-[20px]">settings</span>
+</button>
+<button class="p-2 text-[#bcc9c6] hover:bg-[#282a2d] transition-colors active:scale-95 duration-100 rounded-lg">
+<span class="material-symbols-outlined text-[20px]">account_circle</span>
+</button>
+</div>
+</header>
+<div class="flex min-h-[calc(100vh-3rem)]">
+<!-- SideNavBar -->
+<nav class="h-screen w-16 md:w-48 left-0 sticky flex flex-col h-full py-4 bg-[#1a1c1f] border-r border-[#3d4947]/20 font-['JetBrains_Mono'] text-xs uppercase tracking-widest">
+<div class="px-4 mb-8 hidden md:block">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded bg-primary-container flex items-center justify-center">
+<span class="material-symbols-outlined text-on-primary-container text-sm">terminal</span>
+</div>
+<div>
+<div class="text-[10px] text-on-surface font-bold leading-none">Console</div>
+<div class="text-[8px] text-on-surface-variant tracking-normal">v1.0.4</div>
+</div>
+</div>
+</div>
+<div class="flex flex-col gap-1 px-2">
+<!-- Sources Tab (Active) -->
+<a class="flex items-center gap-3 px-3 py-2.5 bg-[#282a2d] text-[#45d8ed] border-r-2 border-[#45d8ed] transition-all duration-200 ease-in-out group" href="#">
+<span class="material-symbols-outlined text-[24px]">database</span>
+<span class="hidden md:inline">Sources</span>
+</a><a class="flex items-center gap-3 px-3 py-2.5 text-[#bcc9c6] hover:bg-[#282a2d] transition-all duration-200 ease-in-out group" href="#">
+<span class="material-symbols-outlined text-[24px]">check_circle</span>
+<span class="hidden md:inline">已安装</span>
+</a>
+<!-- Tags Tab -->
+<a class="flex items-center gap-3 px-3 py-2.5 text-[#bcc9c6] hover:bg-[#282a2d] transition-all duration-200 ease-in-out group" href="#">
+<span class="material-symbols-outlined text-[24px]">sell</span>
+<span class="hidden md:inline">Tags</span>
+</a>
+</div>
+<div class="mt-auto px-4 py-4 hidden md:block">
+<div class="bg-surface-container-high rounded-lg p-3 border border-outline-variant/10">
+<div class="text-[9px] text-on-surface-variant mb-1">系统状态</div>
+<div class="flex items-center gap-2">
+<div class="w-2 h-2 rounded-full bg-primary animate-pulse"></div>
+<span class="text-[10px] text-primary">已连接</span>
+</div>
+</div>
+</div>
+</nav>
+<!-- Main Content Area -->
+<main class="flex-1 p-6 md:p-8 bg-surface">
+<!-- Search & Toolbar -->
+<div class="max-w-7xl mx-auto mb-10">
+<div class="flex flex-col md:flex-row md:items-center justify-between gap-6">
+<div class="flex-1 max-w-2xl relative group">
+<span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant group-focus-within:text-primary transition-colors">search</span>
+<input class="w-full bg-surface-container-low border border-outline-variant/20 rounded-lg py-3 pl-12 pr-4 text-on-surface font-mono text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all" placeholder="搜索技能、源码或标签..." type="text"/>
+</div>
+<div class="flex items-center gap-3">
+<button class="flex items-center gap-2 bg-surface-container-high hover:bg-surface-bright px-4 py-2 rounded-lg border border-outline-variant/20 transition-colors text-sm font-medium">
+<span class="material-symbols-outlined text-sm">filter_list</span>
+<span>筛选</span>
+</button>
+<button class="flex items-center gap-2 bg-primary text-on-primary px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-all text-sm active:scale-95">
+<span class="material-symbols-outlined text-sm">add</span>
+<span>新建技能</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Skills Grid -->
+<div class="max-w-7xl mx-auto">
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+<!-- Skill Card 1 -->
+<div class="bg-surface-container-low rounded-lg p-4 border border-outline-variant/10 hover:border-primary/40 transition-all group cursor-pointer flex flex-col gap-4">
+<div class="flex justify-between items-start">
+<div class="w-10 h-10 rounded bg-surface-container-highest flex items-center justify-center text-primary-fixed-dim">
+<span class="material-symbols-outlined">data_object</span>
+</div>
+<span class="text-[10px] font-mono bg-surface-container-high text-on-surface-variant px-2 py-1 rounded">API_V2</span>
+</div>
+<div>
+<h3 class="text-on-surface font-bold text-sm mb-1 group-hover:text-primary transition-colors">JSON 解析引擎</h3>
+<p class="text-on-surface-variant text-xs line-clamp-2 leading-relaxed">高效解析复杂嵌套的 JSON 数据结构，支持自动类型推断与 Schema 校验。</p>
+</div>
+<div class="flex items-center gap-2 mt-auto pt-2">
+<span class="text-[9px] px-2 py-0.5 rounded bg-secondary-container/30 text-secondary border border-secondary/20">数据处理</span>
+<span class="text-[9px] px-2 py-0.5 rounded bg-surface-container-high text-on-surface-variant">V1.2.0</span>
+</div>
+</div>
+<!-- Skill Card 2 (Image Focused) -->
+<div class="col-span-1 md:col-span-2 bg-surface-container-low rounded-lg border border-outline-variant/10 hover:border-primary/40 transition-all group cursor-pointer overflow-hidden flex flex-col md:flex-row">
+<div class="md:w-1/2 h-32 md:h-auto overflow-hidden">
+<img class="w-full h-full object-cover grayscale opacity-60 group-hover:grayscale-0 group-hover:opacity-100 transition-all duration-500" data-alt="Cybersecurity digital terminal interface with scrolling green code and futuristic glowing circuit board patterns" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDKXWR-xLF2iNEJ5ANmXQqdhjLEQt7EDabNd_Rh1uzr0sj3fI_8Rk9WJmjpr1s1TyboexW_2gEa0pTVkKGg_7sGCUFttMky6gT8f7ZUUSr8S-XXKoGjeY_26tg38ZiqrJXxENUPwMSUUWUDwDHGr4tLHmxXycs9XfaKRbAdTBSVMqupKaQL-Xh8nqm3iEJwvQvBb928YURJRUVpeQJH_7LMdEBXVUF-0XVhZa11-1sEoV9wMrz3sp0fOlYkmrgWaPof2PbIJMUi2E0"/>
+</div>
+<div class="p-4 md:w-1/2 flex flex-col gap-3">
+<div class="flex justify-between items-start">
+<div class="w-8 h-8 rounded bg-surface-container-highest flex items-center justify-center text-primary">
+<span class="material-symbols-outlined">security</span>
+</div>
+<div class="flex items-center gap-1.5">
+<div class="w-1.5 h-1.5 rounded-full bg-primary"></div>
+<span class="text-[10px] text-primary">运行中</span>
+</div>
+</div>
+<div>
+<h3 class="text-on-surface font-bold text-sm mb-1 group-hover:text-primary transition-colors">安全审计核心</h3>
+<p class="text-on-surface-variant text-xs leading-relaxed">自动化漏洞扫描与实时流量监控，集成最新的威胁情报数据库。</p>
+</div>
+<div class="flex flex-wrap gap-2 mt-auto">
+<span class="text-[9px] px-2 py-0.5 rounded bg-surface-container-high text-on-surface-variant">SECURITY</span>
+<span class="text-[9px] px-2 py-0.5 rounded bg-surface-container-high text-on-surface-variant">MONITORING</span>
+</div>
+</div>
+</div>
+<!-- Skill Card 3 -->
+<div class="bg-surface-container-low rounded-lg p-4 border border-outline-variant/10 hover:border-primary/40 transition-all group cursor-pointer flex flex-col gap-4">
+<div class="flex justify-between items-start">
+<div class="w-10 h-10 rounded bg-surface-container-highest flex items-center justify-center text-tertiary">
+<span class="material-symbols-outlined">auto_fix_high</span>
+</div>
+</div>
+<div>
+<h3 class="text-on-surface font-bold text-sm mb-1 group-hover:text-primary transition-colors">样式重构工具</h3>
+<p class="text-on-surface-variant text-xs line-clamp-2 leading-relaxed">基于 Tailwind 架构的自动化 CSS 清理与优化工具。</p>
+</div>
+<div class="flex items-center gap-2 mt-auto pt-2">
+<span class="text-[9px] px-2 py-0.5 rounded bg-tertiary-container/20 text-tertiary border border-tertiary/20">前端</span>
+<span class="material-symbols-outlined text-xs text-on-surface-variant ml-auto">star</span>
+</div>
+</div>
+<!-- Skill Card 4 -->
+<div class="bg-surface-container-low rounded-lg p-4 border border-outline-variant/10 hover:border-primary/40 transition-all group cursor-pointer flex flex-col gap-4">
+<div class="flex justify-between items-start">
+<div class="w-10 h-10 rounded bg-surface-container-highest flex items-center justify-center text-primary-fixed-dim">
+<span class="material-symbols-outlined">terminal</span>
+</div>
+</div>
+<div>
+<h3 class="text-on-surface font-bold text-sm mb-1 group-hover:text-primary transition-colors">CLI 自动化脚本</h3>
+<p class="text-on-surface-variant text-xs line-clamp-2 leading-relaxed">集成式的命令行工具，用于快速部署与环境初始化。</p>
+</div>
+<div class="flex items-center gap-2 mt-auto pt-2">
+<span class="text-[9px] px-2 py-0.5 rounded bg-surface-container-high text-on-surface-variant">DEVOPS</span>
+</div>
+</div>
+<!-- Skill Card 5 -->
+<div class="bg-surface-container-low rounded-lg p-4 border border-outline-variant/10 hover:border-primary/40 transition-all group cursor-pointer flex flex-col gap-4">
+<div class="flex justify-between items-start">
+<div class="w-10 h-10 rounded bg-surface-container-highest flex items-center justify-center text-primary">
+<span class="material-symbols-outlined">schema</span>
+</div>
+</div>
+<div>
+<h3 class="text-on-surface font-bold text-sm mb-1 group-hover:text-primary transition-colors">数据库迁移助手</h3>
+<p class="text-on-surface-variant text-xs line-clamp-2 leading-relaxed">支持多环境下的零停机数据库架构迁移与回滚。</p>
+</div>
+<div class="flex items-center gap-2 mt-auto pt-2">
+<span class="text-[9px] px-2 py-0.5 rounded bg-secondary-container/30 text-secondary border border-secondary/20">数据库</span>
+</div>
+</div>
+<!-- Skill Card 6 -->
+<div class="bg-surface-container-low rounded-lg p-4 border border-outline-variant/10 hover:border-primary/40 transition-all group cursor-pointer flex flex-col gap-4">
+<div class="flex justify-between items-start">
+<div class="w-10 h-10 rounded bg-surface-container-highest flex items-center justify-center text-on-surface-variant">
+<span class="material-symbols-outlined">webhook</span>
+</div>
+<span class="text-[10px] text-error font-mono">离线</span>
+</div>
+<div>
+<h3 class="text-on-surface font-bold text-sm mb-1 group-hover:text-primary transition-colors">Webhook 转发器</h3>
+<p class="text-on-surface-variant text-xs line-clamp-2 leading-relaxed">用于监听和转发外部服务的通知回调，支持重试机制。</p>
+</div>
+<div class="flex items-center gap-2 mt-auto pt-2">
+<span class="text-[9px] px-2 py-0.5 rounded bg-surface-container-high text-on-surface-variant">NETWORKING</span>
+</div>
+</div>
+<!-- Skill Card 7 (Long/Bento) -->
+<div class="col-span-1 md:col-span-2 bg-surface-container-low rounded-lg p-5 border border-outline-variant/10 hover:border-primary/40 transition-all group cursor-pointer relative overflow-hidden">
+<div class="absolute right-[-20px] top-[-20px] opacity-10 group-hover:opacity-20 transition-opacity">
+<span class="material-symbols-outlined text-[160px]">psychology</span>
+</div>
+<div class="relative z-10 flex flex-col h-full">
+<div class="flex items-center gap-3 mb-4">
+<div class="w-10 h-10 rounded bg-primary-container flex items-center justify-center text-on-primary-container">
+<span class="material-symbols-outlined">bolt</span>
+</div>
+<div>
+<h3 class="text-on-surface font-bold text-base group-hover:text-primary transition-colors">人工智能加速接口</h3>
+<p class="text-on-surface-variant text-xs">LLM 推理优化与 Token 管理</p>
+</div>
+</div>
+<p class="text-on-surface-variant text-sm mb-6 max-w-md leading-relaxed">
+                                集成了多种主流大模型的 API 适配器，内置流式输出处理与自动故障转移机制，显着提升 AI 应用的响应速度。
+                            </p>
+<div class="flex items-center gap-4 mt-auto">
+<div class="flex -space-x-2">
+<div class="w-6 h-6 rounded-full border-2 border-surface bg-surface-container-highest flex items-center justify-center text-[8px] font-bold">GPT</div>
+<div class="w-6 h-6 rounded-full border-2 border-surface bg-surface-container-highest flex items-center justify-center text-[8px] font-bold">CLD</div>
+<div class="w-6 h-6 rounded-full border-2 border-surface bg-surface-container-highest flex items-center justify-center text-[8px] font-bold">GEM</div>
+</div>
+<div class="h-4 w-[1px] bg-outline-variant/30"></div>
+<span class="text-[10px] text-primary flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">query_stats</span>
+                                    2.4k 调用/日
+                                </span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+</div>
+<!-- Right Side Context Panel (Optional but adds to "Density") -->
+<aside class="fixed right-6 bottom-6 flex flex-col gap-3 pointer-events-none">
+<div class="glass-panel p-4 rounded-xl pointer-events-auto shadow-xl max-w-[240px]">
+<div class="flex items-center justify-between mb-3">
+<h4 class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">快速访问</h4>
+<button class="text-on-surface-variant hover:text-on-surface transition-colors">
+<span class="material-symbols-outlined text-sm">close</span>
+</button>
+</div>
+<ul class="space-y-2">
+<li class="flex items-center gap-3 p-2 hover:bg-surface-container-highest rounded cursor-pointer transition-colors group">
+<span class="material-symbols-outlined text-[18px] text-primary">history</span>
+<span class="text-xs text-on-surface group-hover:translate-x-1 transition-transform">最近编辑</span>
+</li>
+<li class="flex items-center gap-3 p-2 hover:bg-surface-container-highest rounded cursor-pointer transition-colors group">
+<span class="material-symbols-outlined text-[18px] text-tertiary">star</span>
+<span class="text-xs text-on-surface group-hover:translate-x-1 transition-transform">收藏夹</span>
+</li>
+</ul>
+</div>
+</aside>
+</body></html>
