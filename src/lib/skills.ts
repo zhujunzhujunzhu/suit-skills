@@ -1,6 +1,6 @@
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
-import type { SkillMeta } from '../types/index.js';
+import type { SkillMarkdownMetadata, SkillMeta } from '../types/index.js';
 import { eq } from '../utils/fs.js';
 import { parseSkillIdentifier } from '../utils/validate.js';
 
@@ -43,6 +43,188 @@ export function parseMetaJson(skillDir: string): SkillMeta {
   return obj as SkillMeta;
 }
 
+function hasSkillEntry(skillDir: string): boolean {
+  return (
+    existsSync(join(skillDir, 'SKILL.md')) ||
+    existsSync(join(skillDir, 'meta.json'))
+  );
+}
+
+function normalizeTags(value: unknown): string[] | undefined {
+  if (Array.isArray(value)) {
+    const tags = value
+      .filter((item): item is string => typeof item === 'string')
+      .map((item) => item.trim())
+      .filter(Boolean);
+    return tags.length > 0 ? tags : undefined;
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return undefined;
+    const inline = trimmed.match(/^\[(.*)\]$/);
+    if (inline) {
+      const tags = inline[1]!
+        .split(',')
+        .map((part) => part.trim().replace(/^['"]|['"]$/g, ''))
+        .filter(Boolean);
+      return tags.length > 0 ? tags : undefined;
+    }
+    return [trimmed];
+  }
+  return undefined;
+}
+
+function parseScalar(raw: string): unknown {
+  const value = raw.trim();
+  if (!value) return '';
+  const quoted = value.match(/^['"](.*)['"]$/);
+  if (quoted) return quoted[1]!;
+  const inlineArray = normalizeTags(value);
+  if (value.startsWith('[') && value.endsWith(']')) return inlineArray ?? [];
+  return value;
+}
+
+export function parseSkillFrontmatter(markdown: string): {
+  frontmatter: Record<string, unknown>;
+  body: string;
+} {
+  const normalized = markdown.replace(/^\uFEFF/, '');
+  if (!normalized.startsWith('---\n') && !normalized.startsWith('---\r\n')) {
+    return { frontmatter: {}, body: markdown };
+  }
+
+  const newline = normalized.startsWith('---\r\n') ? '\r\n' : '\n';
+  const marker = `${newline}---`;
+  const end = normalized.indexOf(marker, 3);
+  if (end === -1) {
+    return { frontmatter: {}, body: markdown };
+  }
+
+  const rawFrontmatter = normalized.slice(3 + newline.length, end);
+  let bodyStart = end + marker.length;
+  if (normalized.slice(bodyStart, bodyStart + 2) === '\r\n') {
+    bodyStart += 2;
+  } else if (normalized[bodyStart] === '\n') {
+    bodyStart += 1;
+  }
+
+  const frontmatter: Record<string, unknown> = {};
+  const lines = rawFrontmatter.split(/\r?\n/);
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i]!;
+    if (!line.trim() || line.trimStart().startsWith('#')) continue;
+    const match = line.match(/^([A-Za-z0-9_-]+):\s*(.*)$/);
+    if (!match) continue;
+    const key = match[1]!;
+    const rest = match[2]!;
+    if (rest.trim() !== '') {
+      frontmatter[key] = parseScalar(rest);
+      continue;
+    }
+
+    const values: string[] = [];
+    while (i + 1 < lines.length) {
+      const next = lines[i + 1]!;
+      const item = next.match(/^\s*-\s*(.*)$/);
+      if (!item) break;
+      values.push(item[1]!.trim().replace(/^['"]|['"]$/g, ''));
+      i += 1;
+    }
+    frontmatter[key] = values;
+  }
+
+  return { frontmatter, body: normalized.slice(bodyStart) };
+}
+
+function metaFromFrontmatter(
+  skillDir: string,
+  frontmatter: Record<string, unknown>,
+): SkillMeta | null {
+  if (Object.keys(frontmatter).length === 0) return null;
+  const folderName = basename(skillDir);
+  const name = isNonEmptyString(frontmatter.name)
+    ? frontmatter.name
+    : folderName;
+  const version = isNonEmptyString(frontmatter.version)
+    ? frontmatter.version
+    : 'unknown';
+  const meta: SkillMeta = { name, version };
+  if (isNonEmptyString(frontmatter.description)) {
+    meta.description = frontmatter.description;
+  }
+  if (isNonEmptyString(frontmatter.author)) {
+    meta.author = frontmatter.author;
+  }
+  const tags = normalizeTags(frontmatter.tags);
+  if (tags) {
+    meta.tags = tags;
+  }
+  for (const [key, value] of Object.entries(frontmatter)) {
+    if (!(key in meta)) {
+      meta[key] = value;
+    }
+  }
+  return meta;
+}
+
+export function readSkillMarkdownMetadata(skillDir: string): SkillMarkdownMetadata {
+  const markdownPath = join(skillDir, 'SKILL.md');
+  const markdown = existsSync(markdownPath)
+    ? readFileSync(markdownPath, 'utf8')
+    : '';
+  const { frontmatter, body } = parseSkillFrontmatter(markdown);
+  const fromFrontmatter = metaFromFrontmatter(skillDir, frontmatter);
+  if (fromFrontmatter) {
+    return {
+      meta: fromFrontmatter,
+      frontmatter,
+      markdown: body,
+      metadataSource: 'skill-md',
+    };
+  }
+
+  try {
+    return {
+      meta: parseMetaJson(skillDir),
+      frontmatter: {},
+      markdown,
+      metadataSource: 'meta-json-fallback',
+    };
+  } catch {
+    return {
+      meta: { name: basename(skillDir), version: 'unknown' },
+      frontmatter: {},
+      markdown,
+      metadataSource: 'unknown',
+    };
+  }
+}
+
+export function updateSkillMarkdownName(
+  skillDir: string,
+  folderName: string,
+): void {
+  const markdownPath = join(skillDir, 'SKILL.md');
+  if (!existsSync(markdownPath)) return;
+  const markdown = readFileSync(markdownPath, 'utf8');
+  const parsed = parseSkillFrontmatter(markdown);
+  if (Object.keys(parsed.frontmatter).length === 0) return;
+  const nextFrontmatter = { ...parsed.frontmatter, name: folderName };
+  const lines: string[] = ['---'];
+  for (const [key, value] of Object.entries(nextFrontmatter)) {
+    if (Array.isArray(value)) {
+      lines.push(`${key}:`);
+      for (const item of value) {
+        lines.push(`  - ${String(item)}`);
+      }
+    } else {
+      lines.push(`${key}: ${String(value)}`);
+    }
+  }
+  lines.push('---', '');
+  writeFileSync(markdownPath, `${lines.join('\n')}${parsed.body}`, 'utf8');
+}
+
 function collectSkillMetasFromParent(
   parent: string,
   result: SkillMeta[],
@@ -56,8 +238,17 @@ function collectSkillMetasFromParent(
     if (!ent.isDirectory()) continue;
     if (ent.name === '.git') continue;
     const skillDir = join(parent, ent.name);
+    if (!hasSkillEntry(skillDir)) continue;
     try {
-      const meta = parseMetaJson(skillDir);
+      const metadata = readSkillMarkdownMetadata(skillDir);
+      const meta = metadata.meta;
+      if (
+        meta.version === 'unknown' &&
+        metadata.metadataSource === 'unknown' &&
+        !existsSync(join(skillDir, 'SKILL.md'))
+      ) {
+        continue;
+      }
       if (seenNames.has(meta.name)) continue;
       seenNames.add(meta.name);
       result.push(meta);
@@ -89,11 +280,11 @@ export function getSkillSourceDir(
   skillName: string,
 ): string | null {
   const direct = join(cacheRoot, skillName);
-  if (existsSync(join(direct, 'meta.json'))) {
+  if (hasSkillEntry(direct)) {
     return direct;
   }
   const nested = join(cacheRoot, 'skills', skillName);
-  if (existsSync(join(nested, 'meta.json'))) {
+  if (hasSkillEntry(nested)) {
     return nested;
   }
   return null;

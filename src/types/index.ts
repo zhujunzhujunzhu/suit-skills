@@ -43,3 +43,36 @@ export interface InstallTarget {
   type: 'global' | 'project' | 'agent';
   path: string;
 }
+
+export type MetadataSource = 'skill-md' | 'meta-json-fallback' | 'unknown';
+
+export interface SkillMarkdownMetadata {
+  meta: SkillMeta;
+  frontmatter: Record<string, unknown>;
+  markdown: string;
+  metadataSource: MetadataSource;
+}
+
+export interface WebSkillSummary extends SkillMeta {
+  sourceName: string;
+  installed: boolean;
+  installedTargets: string[];
+  metadataSource: MetadataSource;
+}
+
+export interface WebSkillDetail extends SkillMeta {
+  sourceName: string;
+  skillDir: string;
+  markdown: string;
+  frontmatter: Record<string, unknown>;
+  installedTargets: string[];
+  metadataSource: MetadataSource;
+}
+
+export interface WebInstalledSkill extends SkillMeta {
+  target: string;
+  scope: 'project' | 'global';
+  path: string;
+  sourceName?: string;
+  metadataSource: MetadataSource;
+}

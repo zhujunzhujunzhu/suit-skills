@@ -1,3 +1,5 @@
+export type MetadataSource = 'skill-md' | 'meta-json-fallback' | 'unknown';
+
 export interface Source {
   name: string;
   url: string;
@@ -6,34 +8,32 @@ export interface Source {
 
 export interface SkillSummary {
   name: string;
-  version: string;
+  version?: string;
   description?: string;
   author?: string;
-  tags?: string[];
+  tags: string[];
   sourceName: string;
   installed: boolean;
   installedTargets: string[];
+  metadataSource: MetadataSource;
 }
 
-export interface SkillDetail {
-  meta: {
-    name: string;
-    version: string;
-    description?: string;
-    author?: string;
-    tags?: string[];
-    [key: string]: unknown;
-  };
-  sourceName: string;
+export interface SkillDetail extends SkillSummary {
   skillDir: string;
   markdown: string;
-  installedTargets: string[];
+  frontmatter: Record<string, unknown>;
 }
 
 export interface InstalledSkill {
-  target: string;
   name: string;
+  version?: string;
+  description?: string;
+  tags: string[];
+  target: string;
+  scope: 'project' | 'global';
   path: string;
+  sourceName?: string;
+  metadataSource: MetadataSource;
 }
 
 export interface SourcesResponse {
@@ -41,46 +41,58 @@ export interface SourcesResponse {
   sources: Source[];
 }
 
-async function request<T>(path: string): Promise<T> {
-  let response: Response;
-  try {
-    response = await fetch(path);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    throw new Error(`无法连接 Suit Skills Web API：${message}`);
-  }
+export interface InstallResult {
+  target: string;
+  scope: 'project' | 'global';
+  status: 'installed' | 'skipped';
+  path?: string;
+  message?: string;
+}
 
+async function parseJson<T>(response: Response): Promise<T> {
   const text = await response.text();
   if (!text.trim()) {
-    throw new Error(
-      response.ok
-        ? 'Suit Skills Web API 返回了空响应'
-        : `Suit Skills Web API 无响应：HTTP ${response.status}`,
-    );
+    if (response.ok) return undefined as T;
+    throw new Error(`HTTP ${response.status}`);
   }
 
   let payload: T | { error?: { message?: string } };
   try {
-    payload = JSON.parse(text) as T | {
-      error?: { message?: string };
-    };
+    payload = JSON.parse(text) as T | { error?: { message?: string } };
   } catch {
-    throw new Error(
-      `Suit Skills Web API 返回的不是 JSON：${text.slice(0, 120)}`,
-    );
+    throw new Error(`API returned non-JSON response: ${text.slice(0, 120)}`);
   }
 
-  const errorPayload = payload as {
-    error?: { message?: string };
-  };
   if (!response.ok) {
     const message =
-      errorPayload.error?.message
-        ? errorPayload.error.message
-        : `Request failed: ${response.status}`;
+      (payload as { error?: { message?: string } }).error?.message ??
+      `Request failed: ${response.status}`;
     throw new Error(message);
   }
   return payload as T;
+}
+
+async function request<T>(
+  path: string,
+  options: RequestInit = {},
+): Promise<T> {
+  let response: Response;
+  try {
+    response = await fetch(path, {
+      headers:
+        options.body instanceof FormData
+          ? options.headers
+          : {
+              'content-type': 'application/json',
+              ...options.headers,
+            },
+      ...options,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Cannot reach Suit Skills Web API: ${message}`);
+  }
+  return parseJson<T>(response);
 }
 
 function withParams(path: string, params: Record<string, string | undefined>) {
@@ -93,6 +105,38 @@ function withParams(path: string, params: Record<string, string | undefined>) {
 
 export function fetchSources(): Promise<SourcesResponse> {
   return request<SourcesResponse>('/api/sources');
+}
+
+export function addSource(requestBody: {
+  name: string;
+  url: string;
+}): Promise<SourcesResponse & { source: Source }> {
+  return request<SourcesResponse & { source: Source }>('/api/sources', {
+    method: 'POST',
+    body: JSON.stringify(requestBody),
+  });
+}
+
+export function updateSource(
+  name: string,
+  requestBody: { enabled: boolean },
+): Promise<SourcesResponse & { source: Source }> {
+  return request<SourcesResponse & { source: Source }>(
+    `/api/sources/${encodeURIComponent(name)}`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify(requestBody),
+    },
+  );
+}
+
+export function removeSource(
+  name: string,
+): Promise<SourcesResponse & { removed: string }> {
+  return request<SourcesResponse & { removed: string }>(
+    `/api/sources/${encodeURIComponent(name)}`,
+    { method: 'DELETE' },
+  );
 }
 
 export function fetchSkills(params: {
@@ -114,9 +158,67 @@ export function fetchSkillDetail(
 
 export function fetchInstalled(params: {
   scope?: string;
-  agent?: string;
+  target?: string;
+  q?: string;
 }): Promise<{ items: InstalledSkill[] }> {
   return request<{ items: InstalledSkill[] }>(
     withParams('/api/installed', params),
   );
+}
+
+export function installSkill(requestBody: {
+  identifier: string;
+  source?: string;
+  targets: string[];
+  global?: boolean;
+  strategy?: 'overwrite' | 'skip' | 'rename';
+}): Promise<{ results: InstallResult[] }> {
+  return request<{ results: InstallResult[] }>('/api/install', {
+    method: 'POST',
+    body: JSON.stringify(requestBody),
+  });
+}
+
+export function removeInstalledSkill(
+  name: string,
+  requestBody: { target: string; scope: 'project' | 'global' },
+): Promise<{
+  status: 'removed';
+  name: string;
+  target: string;
+  scope: 'project' | 'global';
+  path: string;
+}> {
+  return request(`/api/installed/${encodeURIComponent(name)}`, {
+    method: 'DELETE',
+    body: JSON.stringify(requestBody),
+  });
+}
+
+export async function exportInstalledSkill(requestBody: {
+  name: string;
+  target: string;
+  scope: 'project' | 'global';
+}): Promise<void> {
+  const response = await fetch('/api/installed/export', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(requestBody),
+  });
+  if (!response.ok) {
+    await parseJson<never>(response);
+    return;
+  }
+  const blob = await response.blob();
+  const disposition = response.headers.get('content-disposition') ?? '';
+  const fileName =
+    disposition.match(/filename="([^"]+)"/)?.[1] ?? `${requestBody.name}.zip`;
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 }

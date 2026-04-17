@@ -7,7 +7,11 @@ import {
 import { dirname, join } from 'node:path';
 import { copyDir } from '../utils/fs.js';
 import { ensureDir } from '../utils/path.js';
-import { findSkillInCache, getSkillSourceDir } from './skills.js';
+import {
+  findSkillInCache,
+  getSkillSourceDir,
+  updateSkillMarkdownName,
+} from './skills.js';
 
 export interface ConflictCheckResult {
   conflict: boolean;
@@ -76,9 +80,14 @@ export interface InstallWithConflictResult {
 
 function syncMetaNameWithFolder(skillDir: string, folderName: string): void {
   const p = join(skillDir, 'meta.json');
+  if (!existsSync(p)) {
+    updateSkillMarkdownName(skillDir, folderName);
+    return;
+  }
   const raw = JSON.parse(readFileSync(p, 'utf8')) as Record<string, unknown>;
   raw.name = folderName;
   writeFileSync(p, `${JSON.stringify(raw, null, 2)}\n`, 'utf8');
+  updateSkillMarkdownName(skillDir, folderName);
 }
 
 /**

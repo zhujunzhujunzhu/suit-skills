@@ -4,11 +4,18 @@ import { dirname, extname, join, normalize, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { CliContext } from '../../cli/context.js';
 import {
+  addWebSource,
+  exportWebInstalledSkill,
   getWebSkillDetail,
+  installWebSkill,
   listWebInstalledSkills,
   listWebSkills,
   listWebSources,
+  removeWebSource,
+  removeWebInstalledSkill,
   toApiErrorPayload,
+  updateWebSource,
+  WebApiError,
 } from './api.js';
 
 export interface WebServerOptions {
@@ -56,6 +63,28 @@ function sendText(
   res.end(text);
 }
 
+async function readJsonBody(req: IncomingMessage): Promise<unknown> {
+  const chunks: Buffer[] = [];
+  let total = 0;
+  for await (const chunk of req) {
+    const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    total += buf.length;
+    if (total > 1024 * 1024) {
+      throw new WebApiError('PAYLOAD_TOO_LARGE', 'Request body too large', 413);
+    }
+    chunks.push(buf);
+  }
+  if (chunks.length === 0) {
+    return {};
+  }
+  try {
+    return JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new WebApiError('INVALID_JSON', `Invalid JSON body: ${message}`, 400);
+  }
+}
+
 function routeParam(pathname: string, prefix: string): string | null {
   if (!pathname.startsWith(prefix)) return null;
   const raw = pathname.slice(prefix.length).split('/')[0];
@@ -71,24 +100,37 @@ async function handleApi(
   url: URL,
 ): Promise<void> {
   try {
-    if (req.method !== 'GET') {
-      sendJson(res, 405, {
-        error: { code: 'METHOD_NOT_ALLOWED', message: 'Method not allowed' },
-      });
-      return;
-    }
-
-    if (url.pathname === '/api/health') {
+    if (req.method === 'GET' && url.pathname === '/api/health') {
       sendJson(res, 200, { ok: true });
       return;
     }
 
-    if (url.pathname === '/api/sources') {
+    if (req.method === 'GET' && url.pathname === '/api/sources') {
       sendJson(res, 200, listWebSources(ctx));
       return;
     }
 
-    if (url.pathname === '/api/skills') {
+    if (req.method === 'POST' && url.pathname === '/api/sources') {
+      sendJson(res, 200, addWebSource(ctx, (await readJsonBody(req)) as never));
+      return;
+    }
+
+    const sourceName = routeParam(url.pathname, '/api/sources/');
+    if (sourceName && req.method === 'DELETE') {
+      sendJson(res, 200, removeWebSource(ctx, sourceName));
+      return;
+    }
+
+    if (sourceName && req.method === 'PATCH') {
+      sendJson(
+        res,
+        200,
+        updateWebSource(ctx, sourceName, (await readJsonBody(req)) as never),
+      );
+      return;
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/skills') {
       sendJson(
         res,
         200,
@@ -102,7 +144,7 @@ async function handleApi(
     }
 
     const skillName = routeParam(url.pathname, '/api/skills/');
-    if (skillName) {
+    if (req.method === 'GET' && skillName) {
       sendJson(
         res,
         200,
@@ -113,15 +155,52 @@ async function handleApi(
       return;
     }
 
-    if (url.pathname === '/api/installed') {
+    if (req.method === 'GET' && url.pathname === '/api/installed') {
       sendJson(
         res,
         200,
         listWebInstalledSkills(ctx, {
           scope: url.searchParams.get('scope') ?? undefined,
-          agent: url.searchParams.get('agent') ?? undefined,
+          target:
+            url.searchParams.get('target') ??
+            url.searchParams.get('agent') ??
+            undefined,
+          q: url.searchParams.get('q') ?? undefined,
         }),
       );
+      return;
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/install') {
+      sendJson(res, 200, installWebSkill(ctx, (await readJsonBody(req)) as never));
+      return;
+    }
+
+    const installedName = routeParam(url.pathname, '/api/installed/');
+    if (req.method === 'DELETE' && installedName) {
+      sendJson(
+        res,
+        200,
+        removeWebInstalledSkill(
+          ctx,
+          installedName,
+          (await readJsonBody(req)) as never,
+        ),
+      );
+      return;
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/installed/export') {
+      const zip = exportWebInstalledSkill(
+        ctx,
+        (await readJsonBody(req)) as never,
+      );
+      res.writeHead(200, {
+        'content-type': zip.contentType,
+        'content-disposition': `attachment; filename="${zip.fileName}"`,
+        'cache-control': 'no-store',
+      });
+      res.end(zip.body);
       return;
     }
 

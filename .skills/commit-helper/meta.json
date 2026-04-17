@@ -1,0 +1,7 @@
+{
+  "name": "commit-helper",
+  "version": "1.0.0",
+  "description": "Git 提交助手，生成规范的 commit message",
+  "author": "suit-skills",
+  "tags": ["git", "commit", "conventions"]
+}
