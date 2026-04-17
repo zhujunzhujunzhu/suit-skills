@@ -22,8 +22,13 @@ export function registerList(program: Command, ctx: CliContext): void {
       if (opts.tag) {
         rows = rows.filter(({ meta }) => tagMatches(meta, opts.tag!));
       }
-      for (const { meta } of rows) {
-        console.log(meta.name);
+      for (const { meta, sourceName } of rows) {
+        const desc = meta.description ?? '';
+        const version = meta.version ?? 'unknown';
+        const tags = meta.tags?.join(', ') ?? '';
+        // 格式: name - description [version] (source) [tags]
+        const line = `${meta.name}\t${desc}\t[v${version}]\t(${sourceName})\t[${tags}]`;
+        console.log(line);
       }
     });
 }

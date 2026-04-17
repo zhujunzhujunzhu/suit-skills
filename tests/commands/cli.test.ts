@@ -820,7 +820,8 @@ describe('阶段 9 CLI', () => {
       });
       const prog = createProgramForTest(ctx());
       await runCliUserArgs(prog, ['ls']);
-      expect(lines).toContain('react-helper');
+      // 新格式: name\tdescription\t[version]\t(source)\t[tags]
+      expect(lines.some((l) => l.startsWith('react-helper'))).toBe(true);
     });
 
     it('rm 等同 remove', async () => {
