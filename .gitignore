@@ -5,3 +5,7 @@ dist/
 .env
 .env.local
 *.tsbuildinfo
+.agents/
+.claude/
+.skills/
+.cursor/

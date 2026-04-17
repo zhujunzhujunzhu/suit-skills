@@ -1,7 +1,0 @@
-{
-  "name": "code-review",
-  "version": "1.0.1",
-  "description": "代码审查技能，自动检查代码质量、风格和潜在问题",
-  "author": "suit-skills",
-  "tags": ["review", "quality", "best-practices"]
-}
