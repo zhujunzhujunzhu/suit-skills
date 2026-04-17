@@ -145,6 +145,30 @@ describe('web api', () => {
     expect(removed.sources.some((source) => source.name === 'team')).toBe(false);
   });
 
+  it('does not disable the last enabled source', () => {
+    expect(() => updateWebSource(ctx(), 'default', { enabled: false })).toThrow(
+      'Cannot disable the last enabled source',
+    );
+  });
+
+  it('does not remove the last enabled source', () => {
+    const config = getDefaultConfig();
+    config.sources[0] = { ...config.sources[0]!, enabled: false };
+    config.sources.push({
+      name: 'team',
+      url: 'https://github.com/acme/team-skills.git',
+      enabled: true,
+    });
+    writeFileSync(
+      join(suitHome, 'config.json'),
+      `${JSON.stringify(config, null, 2)}\n`,
+    );
+
+    expect(() => removeWebSource(ctx(), 'team')).toThrow(
+      'Cannot remove the last enabled source',
+    );
+  });
+
   it('does not remove the default source', () => {
     expect(() => removeWebSource(ctx(), 'default')).toThrow(
       'Cannot remove default source',
@@ -157,6 +181,21 @@ describe('web api', () => {
 
     const filtered = listWebSkills(ctx(), { q: 'react', tag: 'frontend' });
     expect(filtered.items.map((item) => item.name)).toEqual(['react-helper']);
+  });
+
+  it('returns no skills from all when no sources are enabled', () => {
+    const config = getDefaultConfig();
+    config.sources = config.sources.map((source) => ({
+      ...source,
+      enabled: false,
+    }));
+    writeFileSync(
+      join(suitHome, 'config.json'),
+      `${JSON.stringify(config, null, 2)}\n`,
+    );
+
+    const all = listWebSkills(ctx(), { source: 'all' });
+    expect(all.items).toEqual([]);
   });
 
   it('reads skill detail markdown', () => {
@@ -222,6 +261,69 @@ describe('web api', () => {
       q: installedDir,
     });
     expect(byPath.items.map((item) => item.name)).toEqual(['local-helper']);
+  });
+
+  it('searches installed skills across project and user locations', () => {
+    writeStandardSkill(join(projectDir, '.codex', 'skills'), 'project-codex', {
+      description: 'Workspace codex helper',
+      tags: ['workspace'],
+    });
+    writeStandardSkill(join(userHome, '.claude', 'skills'), 'global-claude', {
+      description: 'User claude helper',
+      tags: ['user'],
+    });
+
+    const all = listWebInstalledSkills(ctx(), { scope: 'all', q: 'helper' });
+    expect(all.items.map((item) => item.name)).toEqual([
+      'global-claude',
+      'project-codex',
+    ]);
+    expect(all.items.map((item) => `${item.target}:${item.scope}`)).toEqual([
+      'claude:global',
+      'codex:project',
+    ]);
+
+    const codexOnly = listWebInstalledSkills(ctx(), {
+      target: 'codex',
+      scope: 'all',
+      q: 'workspace',
+    });
+    expect(codexOnly.items.map((item) => item.name)).toEqual([
+      'project-codex',
+    ]);
+
+    const globalOnly = listWebInstalledSkills(ctx(), {
+      scope: 'global',
+      q: 'user',
+    });
+    expect(globalOnly.items.map((item) => item.name)).toEqual([
+      'global-claude',
+    ]);
+  });
+
+  it('deduplicates project and user locations that resolve to the same directory', () => {
+    writeStandardSkill(join(userHome, '.agents', 'skills'), 'same-place', {
+      description: 'Shared user home helper',
+    });
+
+    const sameHomeCtx = createCliContext({
+      cwd: userHome,
+      userHome,
+      refreshExtra: {
+        cloneOrPullRepo: (_url, path) => ({ path, freshlyCloned: false }),
+      },
+    });
+    const listed = listWebInstalledSkills(sameHomeCtx, {
+      target: 'agents',
+      scope: 'all',
+      q: 'shared',
+    });
+    expect(listed.items).toHaveLength(1);
+    expect(listed.items[0]).toMatchObject({
+      name: 'same-place',
+      target: 'agents',
+      scope: 'global',
+    });
   });
 
   it('generates npx install commands', () => {

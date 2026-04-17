@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import {
   addSource,
   exportInstalledSkill,
@@ -17,7 +17,8 @@ import {
 } from './api/client';
 
 type View = 'library' | 'installed' | 'sources' | 'tags';
-type Scope = 'project' | 'global';
+type LocationScope = 'project' | 'global';
+type ScopeFilter = 'all' | LocationScope;
 type InstallStrategy = 'overwrite' | 'skip' | 'rename';
 
 const TARGETS = ['skills', 'claude', 'cursor', 'codex', 'agents', 'copilot'];
@@ -220,22 +221,77 @@ function ErrorState({ message }: { message: string }) {
   return <div className="state error">{message}</div>;
 }
 
+function installedSkillMatches(item: InstalledSkill, query: string): boolean {
+  const needle = query.trim().toLowerCase();
+  if (!needle) return true;
+  const fields = [
+    item.name,
+    item.version,
+    item.description,
+    item.path,
+    item.target,
+    item.scope,
+    item.sourceName,
+    item.metadataSource,
+    ...(item.tags ?? []),
+  ].filter((value): value is string => typeof value === 'string');
+  return fields.some((value) => value.toLowerCase().includes(needle));
+}
+
+function highlightText(value: string, query: string): ReactNode {
+  const needle = query.trim();
+  if (!needle) return value;
+
+  const lowerValue = value.toLowerCase();
+  const lowerNeedle = needle.toLowerCase();
+  const parts: ReactNode[] = [];
+  let cursor = 0;
+
+  while (cursor < value.length) {
+    const index = lowerValue.indexOf(lowerNeedle, cursor);
+    if (index === -1) {
+      parts.push(value.slice(cursor));
+      break;
+    }
+    if (index > cursor) {
+      parts.push(value.slice(cursor, index));
+    }
+    const end = index + needle.length;
+    parts.push(
+      <mark className="search-hit" key={`${index}-${end}`}>
+        {value.slice(index, end)}
+      </mark>,
+    );
+    cursor = end;
+  }
+
+  return parts;
+}
+
+function nextSelectableSource(sources: Source[], current: string): string {
+  if (current === 'all') return current;
+  return sources.some((item) => item.enabled && item.name === current)
+    ? current
+    : 'all';
+}
+
 export default function App() {
   const [view, setView] = useState<View>('library');
   const [sources, setSources] = useState<Source[]>([]);
-  const [source, setSource] = useState('default');
+  const [source, setSource] = useState('all');
   const [defaultSource, setDefaultSource] = useState('default');
   const [query, setQuery] = useState('');
   const [tag, setTag] = useState('');
   const [skills, setSkills] = useState<SkillSummary[]>([]);
+  const [debouncedQuery, setDebouncedQuery] = useState('');
   const [selected, setSelected] = useState('');
   const [detail, setDetail] = useState<SkillDetail | null>(null);
   const [installed, setInstalled] = useState<InstalledSkill[]>([]);
   const [installedQuery, setInstalledQuery] = useState('');
   const [installedTarget, setInstalledTarget] = useState('');
-  const [scope, setScope] = useState<Scope>('project');
+  const [scope, setScope] = useState<ScopeFilter>('all');
   const [installTarget, setInstallTarget] = useState('skills');
-  const [installScope, setInstallScope] = useState<Scope>('project');
+  const [installScope, setInstallScope] = useState<LocationScope>('project');
   const [installStrategy, setInstallStrategy] = useState<InstallStrategy>('skip');
   const [loading, setLoading] = useState(false);
   const [installedLoading, setInstalledLoading] = useState(false);
@@ -244,27 +300,48 @@ export default function App() {
   const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
   const [sourceName, setSourceName] = useState('');
   const [sourceUrl, setSourceUrl] = useState('');
+  const skillRequestId = useRef(0);
+  const detailRequestId = useRef(0);
+  const installedRequestId = useRef(0);
 
   function notify(message: string) {
     setToast(message);
     window.setTimeout(() => setToast(''), 1800);
   }
 
-  async function loadSkills(nextSource = source, q = query, nextTag = tag) {
+  async function loadSkills(
+    nextSource = source,
+    q = debouncedQuery,
+    nextTag = tag,
+    refresh = false,
+  ) {
+    const requestId = skillRequestId.current + 1;
+    skillRequestId.current = requestId;
     setLoading(true);
     setError('');
     try {
-      const data = await fetchSkills({ source: nextSource, q, tag: nextTag });
-      setSkills(data.items);
-      setSelected((current) =>
-        current && data.items.some((item) => item.name === current)
-          ? current
-          : data.items[0]?.name ?? '',
-      );
+      const data = await fetchSkills({
+        source: nextSource,
+        q,
+        tag: nextTag,
+        refresh,
+      });
+      if (skillRequestId.current === requestId) {
+        setSkills(data.items);
+        setSelected((current) =>
+          current && data.items.some((item) => item.name === current)
+            ? current
+            : data.items[0]?.name ?? '',
+        );
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      if (skillRequestId.current === requestId) {
+        setError(err instanceof Error ? err.message : String(err));
+      }
     } finally {
-      setLoading(false);
+      if (skillRequestId.current === requestId) {
+        setLoading(false);
+      }
     }
   }
 
@@ -273,6 +350,8 @@ export default function App() {
     target = installedTarget,
     q = installedQuery,
   ) {
+    const requestId = installedRequestId.current + 1;
+    installedRequestId.current = requestId;
     setInstalledLoading(true);
     try {
       const data = await fetchInstalled({
@@ -280,11 +359,17 @@ export default function App() {
         target: target || undefined,
         q,
       });
-      setInstalled(data.items);
+      if (installedRequestId.current === requestId) {
+        setInstalled(data.items);
+      }
     } catch {
-      setInstalled([]);
+      if (installedRequestId.current === requestId) {
+        setInstalled([]);
+      }
     } finally {
-      setInstalledLoading(false);
+      if (installedRequestId.current === requestId) {
+        setInstalledLoading(false);
+      }
     }
   }
 
@@ -293,11 +378,7 @@ export default function App() {
       const data = await fetchSources();
       setSources(data.sources);
       setDefaultSource(data.defaultSource);
-      setSource((current) =>
-        data.sources.some((item) => item.name === current)
-          ? current
-          : data.defaultSource,
-      );
+      setSource((current) => nextSelectableSource(data.sources, current));
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -309,18 +390,36 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    void loadSkills();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [source, query, tag]);
+    const timer = window.setTimeout(() => setDebouncedQuery(query), 200);
+    return () => window.clearTimeout(timer);
+  }, [query]);
 
   useEffect(() => {
+    void loadSkills();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [source, debouncedQuery, tag]);
+
+  useEffect(() => {
+    const requestId = detailRequestId.current + 1;
+    detailRequestId.current = requestId;
     if (!selected) {
       setDetail(null);
+      setError((current) => (current === 'Skill not found' ? '' : current));
       return;
     }
     fetchSkillDetail(selected, source)
-      .then(setDetail)
-      .catch((err: Error) => setError(err.message));
+      .then((nextDetail) => {
+        if (detailRequestId.current === requestId) {
+          setDetail(nextDetail);
+          setError((current) => (current === 'Skill not found' ? '' : current));
+        }
+      })
+      .catch((err: Error) => {
+        if (detailRequestId.current === requestId) {
+          setDetail(null);
+          setError(err.message);
+        }
+      });
   }, [selected, source]);
 
   useEffect(() => {
@@ -335,6 +434,16 @@ export default function App() {
     }
     return Array.from(all).sort();
   }, [skills]);
+
+  const enabledSources = useMemo(
+    () => sources.filter((item) => item.enabled),
+    [sources],
+  );
+
+  const visibleInstalled = useMemo(
+    () => installed.filter((item) => installedSkillMatches(item, installedQuery)),
+    [installed, installedQuery],
+  );
 
   const selectedSummary =
     skills.find((skill) => skill.name === selected) ?? null;
@@ -411,6 +520,7 @@ export default function App() {
       const result = await addSource({ name: sourceName, url: sourceUrl });
       setSources(result.sources);
       setDefaultSource(result.defaultSource);
+      setSource((current) => nextSelectableSource(result.sources, current));
       setSourceName('');
       setSourceUrl('');
       notify('Source added');
@@ -422,10 +532,12 @@ export default function App() {
   async function toggleSource(item: Source) {
     try {
       const result = await updateSource(item.name, { enabled: !item.enabled });
+      const nextSource = nextSelectableSource(result.sources, source);
       setSources(result.sources);
       setDefaultSource(result.defaultSource);
+      setSource(nextSource);
       notify(item.enabled ? 'Source disabled' : 'Source enabled');
-      await loadSkills();
+      await loadSkills(nextSource);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -434,10 +546,12 @@ export default function App() {
   async function deleteSource(name: string) {
     try {
       const result = await removeSource(name);
+      const nextSource = nextSelectableSource(result.sources, source);
       setSources(result.sources);
       setDefaultSource(result.defaultSource);
+      setSource(nextSource);
       notify('Source removed');
-      await loadSkills(result.defaultSource);
+      await loadSkills(nextSource);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -475,7 +589,7 @@ export default function App() {
             <em>{view}</em>
           </div>
           <button className="icon-button" title="Refresh" onClick={() => {
-            void loadSkills();
+            void loadSkills(source, debouncedQuery, tag, true);
             void loadInstalled();
           }}>
             <Icon name="refresh" />
@@ -505,7 +619,7 @@ export default function App() {
             selectedSummary={selectedSummary}
             skills={skills}
             source={source}
-            sources={sources}
+            sources={enabledSources}
             tag={tag}
             tags={tags}
           />
@@ -514,7 +628,7 @@ export default function App() {
         {view === 'installed' ? (
           <InstalledView
             confirmRemove={confirmRemove}
-            installed={installed}
+            installed={visibleInstalled}
             loading={installedLoading}
             onConfirmRemove={setConfirmRemove}
             onExport={exportSkill}
@@ -573,13 +687,13 @@ function NavButton({
 
 function LibraryView(props: {
   detail: SkillDetail | null;
-  installScope: Scope;
+  installScope: LocationScope;
   installStrategy: InstallStrategy;
   installTarget: string;
   loading: boolean;
   onCopyCommand: () => void;
   onInstall: () => void;
-  onInstallScopeChange: (value: Scope) => void;
+  onInstallScopeChange: (value: LocationScope) => void;
   onInstallStrategyChange: (value: InstallStrategy) => void;
   onInstallTargetChange: (value: string) => void;
   onQueryChange: (value: string) => void;
@@ -613,12 +727,12 @@ function LibraryView(props: {
             value={props.source}
             onChange={(event) => props.onSourceChange(event.target.value)}
           >
+            <option value="all">all enabled</option>
             {props.sources.map((item) => (
               <option key={item.name} value={item.name}>
                 {item.name}
               </option>
             ))}
-            <option value="all">all enabled</option>
           </select>
         </div>
 
@@ -626,7 +740,11 @@ function LibraryView(props: {
 
         {props.loading ? <EmptyState>Scanning source cache...</EmptyState> : null}
         {!props.loading && props.skills.length === 0 ? (
-          <EmptyState>No matching skills.</EmptyState>
+          <EmptyState>
+            {props.sources.length === 0
+              ? 'No enabled sources.'
+              : 'No matching skills.'}
+          </EmptyState>
         ) : null}
 
         <div className="skill-grid">
@@ -640,12 +758,19 @@ function LibraryView(props: {
                 <span className="skill-icon">
                   <Icon name={skill.installed ? 'check' : 'database'} />
                 </span>
-                <em>{skill.installed ? 'installed' : `v${skill.version ?? 'unknown'}`}</em>
+                <em>
+                  {highlightText(
+                    skill.installed ? 'installed' : `v${skill.version ?? 'unknown'}`,
+                    props.query,
+                  )}
+                </em>
               </span>
-              <strong>{skill.name}</strong>
-              <span>{skill.description || 'No description'}</span>
+              <strong>{highlightText(skill.name, props.query)}</strong>
+              <span>{highlightText(skill.description || 'No description', props.query)}</span>
               <span className="card-tags">
-                {skill.tags?.slice(0, 4).map((item) => <i key={item}>{item}</i>)}
+                {skill.tags?.slice(0, 4).map((item) => (
+                  <i key={item}>{highlightText(item, props.query)}</i>
+                ))}
               </span>
             </button>
           ))}
@@ -684,7 +809,7 @@ function LibraryView(props: {
             </select>
             <select
               value={props.installScope}
-              onChange={(event) => props.onInstallScopeChange(event.target.value as Scope)}
+              onChange={(event) => props.onInstallScopeChange(event.target.value as LocationScope)}
             >
               <option value="project">project</option>
               <option value="global">global</option>
@@ -748,10 +873,10 @@ function InstalledView(props: {
   onExport: (item: InstalledSkill) => void;
   onQueryChange: (value: string) => void;
   onRemove: (item: InstalledSkill) => void;
-  onScopeChange: (value: Scope) => void;
+  onScopeChange: (value: ScopeFilter) => void;
   onTargetChange: (value: string) => void;
   query: string;
-  scope: Scope;
+  scope: ScopeFilter;
   target: string;
 }) {
   return (
@@ -781,10 +906,11 @@ function InstalledView(props: {
         </select>
         <select
           value={props.scope}
-          onChange={(event) => props.onScopeChange(event.target.value as Scope)}
+          onChange={(event) => props.onScopeChange(event.target.value as ScopeFilter)}
         >
-          <option value="project">project</option>
-          <option value="global">global</option>
+          <option value="all">all locations</option>
+          <option value="project">workspace</option>
+          <option value="global">user</option>
         </select>
       </div>
 
@@ -800,14 +926,14 @@ function InstalledView(props: {
           return (
             <article key={key}>
               <div className="installed-main">
-                <strong>{item.name}</strong>
-                <span>{item.description || 'No description'}</span>
-                <code>{item.path}</code>
+                <strong>{highlightText(item.name, props.query)}</strong>
+                <span>{highlightText(item.description || 'No description', props.query)}</span>
+                <code>{highlightText(item.path, props.query)}</code>
               </div>
               <div className="installed-meta">
-                <b>{item.target}</b>
-                <span>{item.scope}</span>
-                <span>{item.version ?? 'unknown'}</span>
+                <b>{highlightText(item.target, props.query)}</b>
+                <span>{highlightText(item.scope, props.query)}</span>
+                <span>{highlightText(item.version ?? 'unknown', props.query)}</span>
               </div>
               <div className="installed-actions">
                 <button className="icon-button" title="Export zip" onClick={() => props.onExport(item)}>
@@ -857,6 +983,8 @@ function SourcesView({
   sources: Source[];
   url: string;
 }) {
+  const enabledCount = sources.filter((source) => source.enabled).length;
+
   return (
     <section className="installed-page">
       <div className="page-head">
@@ -884,32 +1012,53 @@ function SourcesView({
         </button>
       </div>
       <div className="source-list">
-        {sources.map((source) => (
-          <article key={source.name}>
-            <div className="source-main">
-              <strong>
-                {source.name}
-                {source.name === defaultSource ? <i>default</i> : null}
-              </strong>
-              <code>{source.url}</code>
-            </div>
-            <span className={source.enabled ? 'source-status on' : 'source-status'}>
-              {source.enabled ? 'enabled' : 'disabled'}
-            </span>
-            <div className="source-actions">
-              <button className="button" onClick={() => onToggle(source)}>
-                {source.enabled ? 'Disable' : 'Enable'}
-              </button>
-              <button
-                className="button danger"
-                disabled={source.name === defaultSource || source.name === 'default'}
-                onClick={() => onDelete(source.name)}
-              >
-                Delete
-              </button>
-            </div>
-          </article>
-        ))}
+        {sources.map((source) => {
+          const isLastEnabledSource = source.enabled && enabledCount <= 1;
+          return (
+            <article key={source.name}>
+              <div className="source-main">
+                <strong>
+                  {source.name}
+                  {source.name === defaultSource ? <i>default</i> : null}
+                </strong>
+                <code>{source.url}</code>
+              </div>
+              <span className={source.enabled ? 'source-status on' : 'source-status'}>
+                {source.enabled ? 'enabled' : 'disabled'}
+              </span>
+              <div className="source-actions">
+                <button
+                  className="button"
+                  disabled={isLastEnabledSource}
+                  onClick={() => onToggle(source)}
+                  title={
+                    isLastEnabledSource
+                      ? 'At least one source must stay enabled'
+                      : undefined
+                  }
+                >
+                  {source.enabled ? 'Disable' : 'Enable'}
+                </button>
+                <button
+                  className="button danger"
+                  disabled={
+                    source.name === defaultSource ||
+                    source.name === 'default' ||
+                    isLastEnabledSource
+                  }
+                  onClick={() => onDelete(source.name)}
+                  title={
+                    isLastEnabledSource
+                      ? 'At least one source must stay enabled'
+                      : undefined
+                  }
+                >
+                  Delete
+                </button>
+              </div>
+            </article>
+          );
+        })}
       </div>
     </section>
   );

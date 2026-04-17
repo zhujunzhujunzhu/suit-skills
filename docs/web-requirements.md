@@ -898,3 +898,183 @@ API 只能访问已知目录：
 - Skill 编辑器。
 - Skill 校验。
 - Skill 发布流程。
+
+## 15. 近期需求补充与澄清
+
+本节记录 Web 控制台近期已确认的行为要求。若本节与前文旧描述存在差异，以本节为准。
+
+### 15.1 `suit-skills web` 发布与构建要求
+
+`suit-skills web` 必须作为正式 CLI 子命令随 npm 包发布，不能只存在于源码开发态。
+
+要求：
+
+- CLI 帮助中必须展示 `web [options]`。
+- npm 发布包必须包含 `dist/index.js`、`dist/commands/web.js`、`dist/lib/web/*` 和 `dist/web/*`。
+- 发布或打包前必须自动执行完整构建，避免发布旧的 `dist`。
+- TypeScript 构建不能依赖可能过期的增量构建缓存；当 `dist/index.js` 缺失时，构建必须重新产出 CLI 入口。
+- `npx suit-skills@latest web` 应拉取到包含 Web 命令的新版本。
+
+验收：
+
+- `node dist/index.js --help` 输出包含 `web [options]`。
+- `npm pack --dry-run` 输出的 tarball contents 包含 CLI 入口、Web 命令和 Web 静态资源。
+
+### 15.2 Installed 页面搜索范围
+
+Installed 页面不是只搜索 `.agents`，必须同时覆盖所有已知 target 和所有位置。
+
+默认 target：
+
+- `skills`
+- `claude`
+- `cursor`
+- `codex`
+- `agents`
+- `copilot`
+
+默认 location：
+
+- `all locations`，同时扫描 workspace/project 和 user/global。
+
+位置映射：
+
+| target | workspace/project | user/global |
+| --- | --- | --- |
+| `skills` | `./.skills/` | `~/.suit-skills/skills/` |
+| `claude` | `./.claude/skills/` | `~/.claude/skills/` |
+| `cursor` | `./.cursor/skills/` | `~/.cursor/skills/` |
+| `codex` | `./.codex/skills/` | `~/.codex/skills/` |
+| `agents` | `./.agents/skills/` | `~/.agents/skills/` |
+| `copilot` | `./.copilot/skills/` | `~/.copilot/skills/` |
+
+筛选控件：
+
+- target 筛选：`all targets` / `skills` / `claude` / `cursor` / `codex` / `agents` / `copilot`。
+- location 筛选：`all locations` / `workspace` / `user`。
+- `all locations` 为默认值。
+
+后端 API 行为：
+
+```http
+GET /api/installed?scope=all
+GET /api/installed?scope=all&target=codex
+GET /api/installed?scope=global&q=review
+GET /api/installed?scope=project&q=review&target=claude
+```
+
+`scope` 允许值：
+
+- `all`：扫描 user/global 和 workspace/project。
+- `global`：只扫描用户目录。
+- `project`：只扫描当前工作区目录。
+- 未传或空值时等价于 `all`。
+
+返回的单条 `InstalledSkill.scope` 仍然只能是：
+
+```ts
+"project" | "global"
+```
+
+因为每条记录都必须指向一个明确的安装位置。
+
+### 15.3 Installed 搜索字段与过滤行为
+
+Installed 搜索必须同时在服务端和前端生效：
+
+- 服务端根据 `q` 返回过滤后的结果。
+- 前端在已返回结果上再次做即时过滤，保证输入后列表立即收窄。
+- 前端需要防止请求竞态：快速输入时，旧请求不能覆盖新查询结果。
+
+搜索字段必须包含：
+
+- skill 名称 `name`
+- 版本 `version`
+- 描述 `description`
+- 标签 `tags`
+- 安装路径 `path`
+- target
+- location/scope
+- sourceName
+- metadataSource
+
+搜索规则：
+
+- 大小写不敏感。
+- 支持匹配任意子串。
+- 搜索路径时必须匹配完整路径中的任意片段，例如 `.agents`、`Administrator`、`adapt`。
+
+### 15.4 Installed 搜索命中高亮
+
+Library/Skills 页面与 Installed 页面搜索后，匹配到的可见文本片段必须高亮显示。
+
+Library/Skills 页面需要高亮的可见字段：
+
+- skill 名称
+- 描述
+- 标签
+- 安装状态或版本文本
+
+Installed 页面需要高亮的可见字段：
+
+- skill 名称
+- 描述
+- 安装路径
+- target
+- location/scope
+- 版本
+
+高亮实现要求：
+
+- 使用安全的文本分段渲染，不使用 `dangerouslySetInnerHTML`。
+- 命中片段使用 `<mark>` 或等价语义元素。
+- 高亮样式需要清楚但克制，不能遮挡文字或破坏 Installed 列表的可读性。
+- 当搜索词为空时，不显示高亮。
+
+### 15.5 路径去重与显示优先级
+
+当 workspace/project 和 user/global 解析到同一个物理目录时，Installed 列表不能显示重复记录。
+
+典型场景：
+
+```text
+cwd = C:\Users\Administrator
+project ./.agents/skills = C:\Users\Administrator\.agents\skills
+global ~/.agents/skills = C:\Users\Administrator\.agents\skills
+```
+
+要求：
+
+- 按解析后的绝对 root 路径加 skill 名称去重。
+- Windows 下去重应大小写不敏感。
+- 当同一路径同时可被解释为 project 和 global 时，优先保留 `global` 记录，因为它更符合用户对 `~/.agents/skills` 的直觉。
+
+### 15.6 Installed 删除与导出边界
+
+搜索和展示可以跨 all locations，但删除和导出必须始终绑定到具体记录的：
+
+- `name`
+- `target`
+- `scope`
+- `path`
+
+后端必须根据 `name + target + scope` 重新解析路径，并校验最终路径位于允许的 install root 内。
+
+前端不得把任意路径直接作为删除或导出的信任输入。
+
+### 15.7 回归测试要求
+
+必须覆盖以下回归测试：
+
+- CLI help 包含 `web` 命令。
+- `--version` 输出与 `package.json` 版本一致，不能硬编码旧版本号。
+- `npm pack --dry-run` 的包内容包含 Web 命令和 Web 静态资源。
+- `GET /api/installed?scope=all` 能同时返回 project 与 global 安装项。
+- `target=codex`、`target=claude`、`target=cursor`、`target=agents` 至少应覆盖跨位置搜索场景。
+- Installed 搜索能匹配名称、描述、标签、路径、target、scope。
+- 当 project 与 global 指向同一路径时，结果去重且优先显示 global。
+- Library/Skills 默认 source 为 `all enabled`，只聚合 `enabled: true` 的 source。
+- Library/Skills source 下拉框只展示 `all enabled` 和 `enabled: true` 的具体 source。
+- 当只剩一条 `enabled: true` 的 source 时，Sources 页面必须禁用该 source 的 Disable/Delete 按钮，后端也必须拒绝禁用或删除最后一条 enabled source。
+- Library/Skills 搜索命中高亮覆盖名称、描述、标签、安装状态或版本。
+- Installed 搜索命中高亮覆盖名称、描述、路径、target、scope、版本。

@@ -1,6 +1,6 @@
 {
   "name": "suit-skills",
-  "version": "0.0.2",
+  "version": "0.0.5",
   "type": "module",
   "description": "A CLI tool for skills management",
   "main": "dist/index.js",
@@ -15,6 +15,7 @@
     "build": "tsc",
     "build:all": "npm run build && npm run build:web",
     "build:web": "vite build --config web/vite.config.ts",
+    "prepack": "npm run build:all",
     "dev": "tsx src/index.ts",
     "dev:web": "node scripts/dev-web.mjs",
     "dev:web:vite": "vite --config web/vite.config.ts",

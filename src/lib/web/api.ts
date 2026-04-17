@@ -1,5 +1,6 @@
 import {
   existsSync,
+  readdirSync,
   rmSync,
   statSync,
 } from 'node:fs';
@@ -7,7 +8,6 @@ import { isAbsolute, join, relative, resolve } from 'node:path';
 import type { CliContext } from '../../cli/context.js';
 import {
   assertSourceExists,
-  collectMetasFromSources,
   findSourceByName,
   tagMatches,
 } from '../../cli/helpers.js';
@@ -23,7 +23,6 @@ import {
   installSkillWithConflict,
 } from '../install.js';
 import {
-  getSkillSourceDir,
   readSkillMarkdownMetadata,
   searchSkills,
 } from '../skills.js';
@@ -106,8 +105,40 @@ export interface WebUpdateSourceRequest {
   enabled?: boolean;
 }
 
+interface SkillSourceRow {
+  meta: SkillMeta;
+  sourceName: string;
+  skillDir: string;
+  frontmatter: Record<string, unknown>;
+  markdown: string;
+  metadataSource: MetadataSource;
+}
+
+const sourceRowsCache = new WeakMap<CliContext, Map<string, SkillSourceRow[]>>();
+
+function getRowsCacheForContext(ctx: CliContext): Map<string, SkillSourceRow[]> {
+  let cache = sourceRowsCache.get(ctx);
+  if (!cache) {
+    cache = new Map();
+    sourceRowsCache.set(ctx, cache);
+  }
+  return cache;
+}
+
 function listKnownInstallTargets(config: Config): string[] {
   return [SKILLS_TARGET_TOKEN, ...Object.keys(config.agents)];
+}
+
+type InstalledScope = 'project' | 'global';
+
+function listScopesForFilter(scope: string | undefined): InstalledScope[] {
+  if (scope === undefined || scope === '' || scope === 'all') {
+    return ['global', 'project'];
+  }
+  if (scope === 'project' || scope === 'global') {
+    return [scope];
+  }
+  throw new WebApiError('INVALID_SCOPE', `Invalid scope: ${scope}`, 400);
 }
 
 function assertValidScope(scope: string | undefined): 'project' | 'global' {
@@ -195,13 +226,138 @@ function getInstalledTargetsForSkill(
   return installed;
 }
 
+function addInstalledTarget(
+  installed: Map<string, string[]>,
+  name: string,
+  targetLabel: string,
+): void {
+  const current = installed.get(name);
+  if (current) {
+    current.push(targetLabel);
+    return;
+  }
+  installed.set(name, [targetLabel]);
+}
+
+function buildInstalledTargetsIndex(
+  ctx: CliContext,
+  config: Config,
+): Map<string, string[]> {
+  const installed = new Map<string, string[]>();
+  for (const scope of [false, true]) {
+    for (const target of listKnownInstallTargets(config)) {
+      const root = getTargetRoot(ctx, config, target, scope);
+      const targetLabel = scope ? `${target}:global` : target;
+      for (const name of getInstalledSkills(root)) {
+        addInstalledTarget(installed, name, targetLabel);
+      }
+    }
+  }
+  return installed;
+}
+
+function hasSkillEntry(skillDir: string): boolean {
+  return (
+    existsSync(join(skillDir, 'SKILL.md')) ||
+    existsSync(join(skillDir, 'meta.json'))
+  );
+}
+
+function collectSkillRowsFromParent(
+  parent: string,
+  sourceName: string,
+  rows: SkillSourceRow[],
+  seenNames: Set<string>,
+): void {
+  if (!existsSync(parent)) {
+    return;
+  }
+  for (const ent of readdirSync(parent, { withFileTypes: true })) {
+    if (!ent.isDirectory() || ent.name === '.git') {
+      continue;
+    }
+    const skillDir = join(parent, ent.name);
+    if (!hasSkillEntry(skillDir)) {
+      continue;
+    }
+    const metadata = readSkillMarkdownMetadata(skillDir);
+    if (
+      metadata.meta.version === 'unknown' &&
+      metadata.metadataSource === 'unknown' &&
+      !existsSync(join(skillDir, 'SKILL.md'))
+    ) {
+      continue;
+    }
+    if (seenNames.has(metadata.meta.name)) {
+      continue;
+    }
+    seenNames.add(metadata.meta.name);
+    rows.push({
+      meta: metadata.meta,
+      sourceName,
+      skillDir,
+      frontmatter: metadata.frontmatter,
+      markdown: metadata.markdown,
+      metadataSource: metadata.metadataSource,
+    });
+  }
+}
+
+function scanSourceRows(
+  cacheRoot: string,
+  sourceName: string,
+): SkillSourceRow[] {
+  const rows: SkillSourceRow[] = [];
+  const seenNames = new Set<string>();
+  collectSkillRowsFromParent(cacheRoot, sourceName, rows, seenNames);
+  collectSkillRowsFromParent(join(cacheRoot, 'skills'), sourceName, rows, seenNames);
+  return rows;
+}
+
+function rowsForSingleSource(
+  ctx: CliContext,
+  source: Source,
+  forceRefresh = false,
+): SkillSourceRow[] {
+  const cache = getRowsCacheForContext(ctx);
+  const cacheKey = `${source.name}\0${source.url}`;
+  const cached = cache.get(cacheKey);
+  if (cached && !forceRefresh) {
+    return cached;
+  }
+  const refresh = ctx.refreshForSource(source.url);
+  const rows = scanSourceRows(refresh.path, source.name);
+  cache.set(cacheKey, rows);
+  return rows;
+}
+
+function sourcesForFilter(config: Config, sourceFilter: string): Source[] {
+  if (sourceFilter !== 'all') {
+    return [assertSourceExists(config, sourceFilter)];
+  }
+  return config.sources.filter((source) => source.enabled);
+}
+
 function rowsForSource(
   ctx: CliContext,
   config: Config,
   sourceFilter: string,
-): { meta: SkillMeta; sourceName: string }[] {
+  forceRefresh = false,
+): SkillSourceRow[] {
   try {
-    return collectMetasFromSources(ctx, config, sourceFilter);
+    const sources = sourcesForFilter(config, sourceFilter);
+    const rows: SkillSourceRow[] = [];
+    const seenNames = new Set<string>();
+    for (const source of sources) {
+      for (const row of rowsForSingleSource(ctx, source, forceRefresh)) {
+        if (seenNames.has(row.meta.name)) {
+          continue;
+        }
+        seenNames.add(row.meta.name);
+        rows.push(row);
+      }
+    }
+    return rows;
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     if (msg === 'Source not found') {
@@ -209,10 +365,6 @@ function rowsForSource(
     }
     throw e;
   }
-}
-
-function metadataSourceForSkillDir(skillDir: string): MetadataSource {
-  return readSkillMarkdownMetadata(skillDir).metadataSource;
 }
 
 function findSkillRow(
@@ -228,49 +380,35 @@ function findSkillRow(
   markdown: string;
   metadataSource: MetadataSource;
 } | null {
-  const names =
-    sourceFilter === 'all'
-      ? config.sources.filter((source) => source.enabled).map((s) => s.name)
-      : [sourceFilter];
-
-  for (const sourceName of names) {
-    let source;
-    try {
-      source = assertSourceExists(config, sourceName);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      if (msg === 'Source not found') {
-        throw new WebApiError('SOURCE_NOT_FOUND', msg, 404);
-      }
-      throw e;
+  for (const row of rowsForSource(ctx, config, sourceFilter)) {
+    if (row.meta.name !== skillName) {
+      continue;
     }
-    const refresh = ctx.refreshForSource(source.url);
-    const skillDir = getSkillSourceDir(refresh.path, skillName);
-    if (!skillDir) continue;
-    const metadata = readSkillMarkdownMetadata(skillDir);
-    if (metadata.meta.name !== skillName) continue;
     return {
-      meta: metadata.meta,
-      sourceName: source.name,
-      skillDir,
-      frontmatter: metadata.frontmatter,
-      markdown: metadata.markdown,
-      metadataSource: metadata.metadataSource,
+      meta: row.meta,
+      sourceName: row.sourceName,
+      skillDir: row.skillDir,
+      frontmatter: row.frontmatter,
+      markdown: row.markdown,
+      metadataSource: row.metadataSource,
     };
   }
   return null;
 }
 
-function sourceNameForInstalledSkill(
+function sourceNameIndexForInstalledSkills(
   ctx: CliContext,
   config: Config,
-  name: string,
-): string | undefined {
+): Map<string, string> {
   try {
-    return rowsForSource(ctx, config, 'all').find((row) => row.meta.name === name)
-      ?.sourceName;
+    return new Map(
+      rowsForSource(ctx, config, 'all').map((row) => [
+        row.meta.name,
+        row.sourceName,
+      ]),
+    );
   } catch {
-    return undefined;
+    return new Map();
   }
 }
 
@@ -290,13 +428,18 @@ function installedMatches(item: WebInstalledSkill, q: string): boolean {
   return haystacks.some((value) => value.toLowerCase().includes(needle));
 }
 
+function installedDedupeKey(root: string, name: string): string {
+  const key = `${resolve(root)}\0${name}`;
+  return process.platform === 'win32' ? key.toLowerCase() : key;
+}
+
 export function listWebSkills(
   ctx: CliContext,
-  options: { source?: string; q?: string; tag?: string },
+  options: { source?: string; q?: string; tag?: string; refresh?: boolean },
 ): { items: WebSkillSummary[] } {
   const config = ctx.loadConfig();
-  const sourceFilter = options.source ?? config.defaultSource;
-  let rows = rowsForSource(ctx, config, sourceFilter);
+  const sourceFilter = options.source ?? 'all';
+  let rows = rowsForSource(ctx, config, sourceFilter, options.refresh === true);
 
   if (options.q?.trim()) {
     const found = new Set(
@@ -312,20 +455,17 @@ export function listWebSkills(
     rows = rows.filter((row) => tagMatches(row.meta, options.tag!));
   }
 
+  const installedTargetsIndex = buildInstalledTargetsIndex(ctx, config);
   return {
-    items: rows.map(({ meta, sourceName }) => {
-      const hit = findSkillRow(ctx, config, sourceName, meta.name);
-      const installedTargets = getInstalledTargetsForSkill(
-        ctx,
-        config,
-        meta.name,
-      );
+    items: rows.map((row) => {
+      const { meta, sourceName } = row;
+      const installedTargets = installedTargetsIndex.get(meta.name) ?? [];
       return {
         ...meta,
         sourceName,
         installed: installedTargets.length > 0,
         installedTargets,
-        metadataSource: hit?.metadataSource ?? 'unknown',
+        metadataSource: row.metadataSource,
       };
     }),
   };
@@ -341,7 +481,7 @@ export function getWebSkillDetail(
   }
 
   const config = ctx.loadConfig();
-  const sourceFilter = options.source ?? config.defaultSource;
+  const sourceFilter = options.source ?? 'all';
   const hit = findSkillRow(ctx, config, sourceFilter, skillName);
   if (!hit) {
     throw new WebApiError('SKILL_NOT_FOUND', 'Skill not found', 404);
@@ -363,30 +503,41 @@ export function listWebInstalledSkills(
   options: { scope?: string; target?: string; agent?: string; q?: string },
 ): { items: WebInstalledSkill[] } {
   const config = ctx.loadConfig();
-  const scope = assertValidScope(options.scope);
+  const scopes = listScopesForFilter(options.scope);
   const targetFilter = options.target ?? options.agent;
   const targets = targetFilter
     ? [assertValidTarget(config, targetFilter)]
     : listKnownInstallTargets(config);
   const items: WebInstalledSkill[] = [];
+  const seen = new Set<string>();
+  const sourceNameBySkill = sourceNameIndexForInstalledSkills(ctx, config);
 
-  for (const target of targets) {
-    const root = getTargetRoot(ctx, config, target, scope === 'global');
-    for (const name of getInstalledSkills(root)) {
-      const skillPath = join(root, name);
-      assertInstalledSkillPathAllowed(root, skillPath);
-      const metadata = readSkillMarkdownMetadata(skillPath);
-      const item: WebInstalledSkill = {
-        ...metadata.meta,
-        name: metadata.meta.name || name,
-        target,
-        scope,
-        path: skillPath,
-        sourceName: sourceNameForInstalledSkill(ctx, config, name),
-        metadataSource: metadata.metadataSource,
-      };
-      if (installedMatches(item, options.q ?? '')) {
-        items.push(item);
+  for (const scope of scopes) {
+    for (const target of targets) {
+      const root = getTargetRoot(ctx, config, target, scope === 'global');
+      for (const name of getInstalledSkills(root)) {
+        const key = installedDedupeKey(root, name);
+        if (seen.has(key)) {
+          continue;
+        }
+        seen.add(key);
+        const skillPath = join(root, name);
+        assertInstalledSkillPathAllowed(root, skillPath);
+        const metadata = readSkillMarkdownMetadata(skillPath);
+        const item: WebInstalledSkill = {
+          ...metadata.meta,
+          name: metadata.meta.name || name,
+          target,
+          scope,
+          path: skillPath,
+          sourceName:
+            sourceNameBySkill.get(metadata.meta.name) ??
+            sourceNameBySkill.get(name),
+          metadataSource: metadata.metadataSource,
+        };
+        if (installedMatches(item, options.q ?? '')) {
+          items.push(item);
+        }
       }
     }
   }
@@ -450,6 +601,7 @@ export function addWebSource(
   const source: Source = { name, url, enabled: true };
   config.sources.push(source);
   ctx.saveConfig(config);
+  getRowsCacheForContext(ctx).clear();
   return {
     source,
     defaultSource: config.defaultSource,
@@ -474,8 +626,18 @@ export function removeWebSource(
   if (index === -1) {
     throw new WebApiError('SOURCE_NOT_FOUND', 'Source not found', 404);
   }
+  const source = config.sources[index]!;
+  const enabledCount = config.sources.filter((item) => item.enabled).length;
+  if (source.enabled && enabledCount <= 1) {
+    throw new WebApiError(
+      'CANNOT_REMOVE_LAST_ENABLED_SOURCE',
+      'Cannot remove the last enabled source',
+      400,
+    );
+  }
   config.sources.splice(index, 1);
   ctx.saveConfig(config);
+  getRowsCacheForContext(ctx).clear();
   return {
     removed: sourceName,
     defaultSource: config.defaultSource,
@@ -495,9 +657,18 @@ export function updateWebSource(
     throw new WebApiError('SOURCE_NOT_FOUND', 'Source not found', 404);
   }
   if (typeof request.enabled === 'boolean') {
+    const enabledCount = config.sources.filter((item) => item.enabled).length;
+    if (source.enabled && request.enabled === false && enabledCount <= 1) {
+      throw new WebApiError(
+        'CANNOT_DISABLE_LAST_ENABLED_SOURCE',
+        'Cannot disable the last enabled source',
+        400,
+      );
+    }
     source.enabled = request.enabled;
   }
   ctx.saveConfig(config);
+  getRowsCacheForContext(ctx).clear();
   return {
     source,
     defaultSource: config.defaultSource,

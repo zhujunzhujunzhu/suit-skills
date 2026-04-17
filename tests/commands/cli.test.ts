@@ -129,6 +129,7 @@ describe('阶段 9 CLI', () => {
       expect(text).toMatch(/source/);
       expect(text).toMatch(/config/);
       expect(text).toMatch(/env/);
+      expect(text).toMatch(/web/);
       spy.mockRestore();
     });
 
@@ -142,7 +143,10 @@ describe('阶段 9 CLI', () => {
         });
       const prog = createProgramForTest(ctx());
       await expect(runCliUserArgs(prog, ['--version'])).rejects.toThrow();
-      expect(chunks.join('')).toMatch(/1\.0\.0/);
+      const pkg = JSON.parse(
+        readFileSync(join(process.cwd(), 'package.json'), 'utf8'),
+      ) as { version: string };
+      expect(chunks.join('').trim()).toBe(pkg.version);
       spy.mockRestore();
     });
 

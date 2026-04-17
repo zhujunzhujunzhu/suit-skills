@@ -138,6 +138,7 @@ async function handleApi(
           source: url.searchParams.get('source') ?? options.source,
           q: url.searchParams.get('q') ?? undefined,
           tag: url.searchParams.get('tag') ?? undefined,
+          refresh: url.searchParams.get('refresh') === 'true',
         }),
       );
       return;

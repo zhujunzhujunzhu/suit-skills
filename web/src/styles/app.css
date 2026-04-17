@@ -421,6 +421,11 @@ button {
   font-style: normal;
 }
 
+.card-tags .search-hit,
+.skill-card em .search-hit {
+  color: var(--text);
+}
+
 .detail {
   position: sticky;
   top: 88px;
@@ -617,6 +622,15 @@ button {
 
 .installed-meta b {
   color: var(--secondary);
+}
+
+.search-hit {
+  display: inline;
+  padding: 0 2px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--primary) 34%, transparent);
+  color: var(--text);
+  box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--primary) 72%, transparent);
 }
 
 .installed-actions {

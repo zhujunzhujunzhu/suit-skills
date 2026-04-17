@@ -95,10 +95,15 @@ async function request<T>(
   return parseJson<T>(response);
 }
 
-function withParams(path: string, params: Record<string, string | undefined>) {
+function withParams(
+  path: string,
+  params: Record<string, boolean | string | undefined>,
+) {
   const url = new URL(path, window.location.origin);
   for (const [key, value] of Object.entries(params)) {
-    if (value) url.searchParams.set(key, value);
+    if (value !== undefined && value !== '') {
+      url.searchParams.set(key, String(value));
+    }
   }
   return `${url.pathname}${url.search}`;
 }
@@ -143,6 +148,7 @@ export function fetchSkills(params: {
   source?: string;
   q?: string;
   tag?: string;
+  refresh?: boolean;
 }): Promise<{ items: SkillSummary[] }> {
   return request<{ items: SkillSummary[] }>(withParams('/api/skills', params));
 }
@@ -157,7 +163,7 @@ export function fetchSkillDetail(
 }
 
 export function fetchInstalled(params: {
-  scope?: string;
+  scope?: 'all' | 'project' | 'global';
   target?: string;
   q?: string;
 }): Promise<{ items: InstalledSkill[] }> {

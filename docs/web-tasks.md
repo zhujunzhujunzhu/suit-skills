@@ -555,7 +555,7 @@
 验收：
 
 - 可以新增 source。
-- 可以禁用 source，让它不参与 `source=all` 聚合。
+- 可以禁用 source，让它不参与 `source=all` 聚合；当只剩一条 enabled source 时，不能继续禁用或删除它。
 - 可以重新启用 source。
 - 可以删除非默认 source。
 - 默认 source 不允许删除。
