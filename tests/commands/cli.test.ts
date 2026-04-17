@@ -801,6 +801,18 @@ describe('阶段 9 CLI', () => {
       ).toBe(true);
     });
 
+    it('add 等同 install（全局安装）', async () => {
+      mkdirSync(join(projectDir, '.claude'), { recursive: true });
+      const prog = createProgramForTest(ctx());
+      await runCliUserArgs(prog, ['add', 'code-review']);
+      // 全局安装：中央存储 ~/.agents/skills
+      expect(
+        existsSync(
+          join(userHome, '.agents', 'skills', 'code-review', 'meta.json'),
+        ),
+      ).toBe(true);
+    });
+
     it('ls 等同 list', async () => {
       const lines: string[] = [];
       vi.mocked(console.log).mockImplementation((m: unknown) => {

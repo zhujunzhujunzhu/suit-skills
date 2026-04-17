@@ -20,6 +20,7 @@ export function registerInstall(program: Command, ctx: CliContext): void {
   program
     .command('install')
     .alias('i')
+    .alias('add')
     .description('Install a skill from a source')
     .argument('<identifier>', 'skill name or name@version')
     .option('--local', 'install to current project instead of global')
