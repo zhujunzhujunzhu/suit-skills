@@ -275,8 +275,21 @@ function nextSelectableSource(sources: Source[], current: string): string {
     : 'all';
 }
 
+const VIEW_KEYS: Record<View, string> = {
+  library: 'skills',
+  installed: 'installed',
+  sources: 'sources',
+  tags: 'tags',
+};
+
+function viewFromHash(): View {
+  const hash = window.location.hash.slice(1);
+  const key = Object.keys(VIEW_KEYS).find((v) => VIEW_KEYS[v as View] === hash);
+  return (key as View) || 'library';
+}
+
 export default function App() {
-  const [view, setView] = useState<View>('library');
+  const [view, setView] = useState<View>(viewFromHash);
   const [sources, setSources] = useState<Source[]>([]);
   const [source, setSource] = useState('all');
   const [defaultSource, setDefaultSource] = useState('default');
@@ -387,6 +400,16 @@ export default function App() {
   useEffect(() => {
     void loadSources();
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    window.location.hash = VIEW_KEYS[view];
+  }, [view]);
+
+  useEffect(() => {
+    const handler = () => setView(viewFromHash());
+    window.addEventListener('hashchange', handler);
+    return () => window.removeEventListener('hashchange', handler);
   }, []);
 
   useEffect(() => {
@@ -919,44 +942,46 @@ function InstalledView(props: {
         <EmptyState>No installed skills found.</EmptyState>
       ) : null}
 
-      <div className="installed-list">
-        {props.installed.map((item) => {
-          const key = `${item.scope}:${item.target}:${item.name}`;
-          const confirming = props.confirmRemove === key;
-          return (
-            <article key={key}>
-              <div className="installed-main">
-                <strong>{highlightText(item.name, props.query)}</strong>
-                <span>{highlightText(item.description || 'No description', props.query)}</span>
-                <code>{highlightText(item.path, props.query)}</code>
-              </div>
-              <div className="installed-meta">
-                <b>{highlightText(item.target, props.query)}</b>
-                <span>{highlightText(item.scope, props.query)}</span>
-                <span>{highlightText(item.version ?? 'unknown', props.query)}</span>
-              </div>
-              <div className="installed-actions">
-                <button className="icon-button" title="Export zip" onClick={() => props.onExport(item)}>
-                  <Icon name="package" />
-                </button>
-                <button className="icon-button danger" title="Remove" onClick={() => props.onConfirmRemove(confirming ? null : key)}>
-                  <Icon name="trash" />
-                </button>
-              </div>
-              {confirming ? (
-                <div className="confirm-strip">
-                  <span>{item.path}</span>
-                  <button className="button danger" onClick={() => props.onRemove(item)}>
-                    Remove
+      <div className="installed-scroll">
+        <div className="installed-list">
+          {props.installed.map((item) => {
+            const key = `${item.scope}:${item.target}:${item.name}`;
+            const confirming = props.confirmRemove === key;
+            return (
+              <article key={key}>
+                <div className="installed-main">
+                  <strong>{highlightText(item.name, props.query)}</strong>
+                  <span>{highlightText(item.description || 'No description', props.query)}</span>
+                  <code>{highlightText(item.path, props.query)}</code>
+                </div>
+                <div className="installed-meta">
+                  <b>{highlightText(item.target, props.query)}</b>
+                  <span>{highlightText(item.scope, props.query)}</span>
+                  <span>{highlightText(item.version ?? 'unknown', props.query)}</span>
+                </div>
+                <div className="installed-actions">
+                  <button className="icon-button" title="Export zip" onClick={() => props.onExport(item)}>
+                    <Icon name="package" />
                   </button>
-                  <button className="button" onClick={() => props.onConfirmRemove(null)}>
-                    Cancel
+                  <button className="icon-button danger" title="Remove" onClick={() => props.onConfirmRemove(confirming ? null : key)}>
+                    <Icon name="trash" />
                   </button>
                 </div>
-              ) : null}
-            </article>
-          );
-        })}
+                {confirming ? (
+                  <div className="confirm-strip">
+                    <span>{item.path}</span>
+                    <button className="button danger" onClick={() => props.onRemove(item)}>
+                      Remove
+                    </button>
+                    <button className="button" onClick={() => props.onConfirmRemove(null)}>
+                      Cancel
+                    </button>
+                  </div>
+                ) : null}
+              </article>
+            );
+          })}
+        </div>
       </div>
     </section>
   );
