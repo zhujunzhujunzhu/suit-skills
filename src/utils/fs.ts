@@ -1,4 +1,4 @@
-import { cpSync, readFileSync, existsSync } from 'node:fs';
+import { cpSync, readFileSync, existsSync, symlinkSync, lstatSync, rmSync, mkdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 
 /** 递归拷贝目录 */
@@ -7,6 +7,31 @@ export function copyDir(src: string, dest: string): void {
     throw new Error(`Source directory does not exist: ${src}`);
   }
   cpSync(src, dest, { recursive: true });
+}
+
+/**
+ * 创建软链接（目录）
+ * Windows 需要管理员权限或开发者模式
+ * @param target 链接指向的目标（真实目录）
+ * @param linkPath 软链接路径
+ */
+export function createSymlink(target: string, linkPath: string): void {
+  // 如果链接路径已存在，先删除
+  try {
+    const stat = lstatSync(linkPath);
+    if (stat.isSymbolicLink() || stat.isDirectory()) {
+      rmSync(linkPath, { recursive: true, force: true });
+    }
+  } catch {
+    // 文件不存在，忽略
+  }
+  // 确保父目录存在
+  const parent = dirname(linkPath);
+  if (!existsSync(parent)) {
+    mkdirSync(parent, { recursive: true });
+  }
+  // 创建软链接（Windows 使用 'junction' 类型）
+  symlinkSync(target, linkPath, 'junction');
 }
 
 export interface SemVer {

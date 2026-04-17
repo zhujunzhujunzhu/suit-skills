@@ -38,6 +38,12 @@ export function getDefaultConfig(): Config {
     ],
     defaultSource: 'default',
     agents: {
+      /** 中央存储：全局安装的实际目录 */
+      agents: {
+        globalDir: '~/.agents/skills',
+        projectDir: './.agents/skills',
+      },
+      /** 各平台目录：全局时通过软链接指向 ~/.agents/skills */
       claude: {
         globalDir: '~/.claude/skills',
         projectDir: './.claude/skills',
@@ -45,11 +51,6 @@ export function getDefaultConfig(): Config {
       cursor: {
         globalDir: '~/.cursor/skills',
         projectDir: './.cursor/skills',
-      },
-      /** 与 npx skills / Cursor 等文档中的 `.agents/skills` 约定一致 */
-      agents: {
-        globalDir: '~/.agents/skills',
-        projectDir: './.agents/skills',
       },
       copilot: {
         globalDir: '~/.copilot/skills',
@@ -60,8 +61,8 @@ export function getDefaultConfig(): Config {
         projectDir: './.codex/skills',
       },
     },
-    /** 默认不装 `./.skills/`，仅按项目下已存在的 Agent 目录自动合并；需要时用 `env set` 或 `--env skills` */
-    installTargets: [],
+    /** 默认安装目标：全局安装到 agents（中央存储） */
+    installTargets: ['agents'],
   };
 }
 
