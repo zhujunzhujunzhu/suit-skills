@@ -5,6 +5,12 @@ import {
   tagMatches,
 } from '../cli/helpers.js';
 
+interface ListOptions {
+  tag?: string;
+  source?: string;
+  json?: boolean;
+}
+
 export function registerList(program: Command, ctx: CliContext): void {
   program
     .command('list')
@@ -15,15 +21,29 @@ export function registerList(program: Command, ctx: CliContext): void {
       '--source <name>',
       'source name, or "all" for all enabled sources',
     )
-    .action((opts: { tag?: string; source?: string }) => {
+    .option('--json', 'output as JSON')
+    .action((opts: ListOptions) => {
       const config = ctx.loadConfig();
       const sourceFilter = opts.source ?? config.defaultSource;
       let rows = collectMetasFromSources(ctx, config, sourceFilter);
       if (opts.tag) {
         rows = rows.filter(({ meta }) => tagMatches(meta, opts.tag!));
       }
-      for (const { meta } of rows) {
-        console.log(meta.name);
+
+      if (opts.json) {
+        const items = rows.map(({ meta, sourceName }) => ({
+          name: meta.name,
+          version: meta.version,
+          description: meta.description,
+          author: meta.author,
+          tags: meta.tags,
+          sourceName,
+        }));
+        console.log(JSON.stringify({ items }, null, 2));
+      } else {
+        for (const { meta } of rows) {
+          console.log(meta.name);
+        }
       }
     });
 }

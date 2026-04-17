@@ -4,24 +4,42 @@ import { collectMetasFromSources } from '../cli/helpers.js';
 import { searchSkills } from '../lib/skills.js';
 import { warn } from '../utils/output.js';
 
+interface SearchOptions {
+  source?: string;
+  json?: boolean;
+}
+
 export function registerSearch(program: Command, ctx: CliContext): void {
   program
     .command('search')
     .description('Search skills by keyword')
     .argument('<keyword>', 'search keyword')
     .option('--source <name>', 'source name, or omit to use default source')
-    .action((keyword: string, opts: { source?: string }) => {
+    .option('--json', 'output as JSON')
+    .action((keyword: string, opts: SearchOptions) => {
       const config = ctx.loadConfig();
       const sourceFilter = opts.source ?? config.defaultSource;
       const rows = collectMetasFromSources(ctx, config, sourceFilter);
       const metas = rows.map((r) => r.meta);
       const found = searchSkills(metas, keyword);
-      if (found.length === 0) {
-        warn('No skills found');
-        return;
-      }
-      for (const m of found) {
-        console.log(m.name);
+
+      if (opts.json) {
+        const items = found.map((m) => ({
+          name: m.name,
+          version: m.version,
+          description: m.description,
+          author: m.author,
+          tags: m.tags,
+        }));
+        console.log(JSON.stringify({ items }, null, 2));
+      } else {
+        if (found.length === 0) {
+          warn('No skills found');
+          return;
+        }
+        for (const m of found) {
+          console.log(m.name);
+        }
       }
     });
 }

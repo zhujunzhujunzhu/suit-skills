@@ -9,10 +9,41 @@ function urlExists(config: { sources: Source[] }, url: string): boolean {
   return config.sources.some((s) => s.url.trim() === u);
 }
 
+interface SourceListOptions {
+  json?: boolean;
+}
+
 export function registerSource(program: Command, ctx: CliContext): void {
   const src = program
     .command('source')
     .description('Manage remote skill sources');
+
+  // 无子命令时显示列表
+  src
+    .command('list', { isDefault: true })
+    .description('List sources')
+    .option('--json', 'output as JSON')
+    .action((opts: SourceListOptions) => {
+      const cfg = ctx.loadConfig();
+      if (opts.json) {
+        console.log(
+          JSON.stringify(
+            {
+              sources: cfg.sources,
+              defaultSource: cfg.defaultSource,
+            },
+            null,
+            2,
+          ),
+        );
+      } else {
+        for (const s of cfg.sources) {
+          console.log(
+            `${s.name}\t${s.url}\t${s.enabled ? 'enabled' : 'disabled'}`,
+          );
+        }
+      }
+    });
 
   src
     .command('add')
@@ -32,8 +63,8 @@ export function registerSource(program: Command, ctx: CliContext): void {
         url: url.trim(),
         enabled: true,
       });
-        ctx.saveConfig(cfg);
-        success(`Added source ${name}`);
+      ctx.saveConfig(cfg);
+      success(`Added source ${name}`);
     });
 
   src
@@ -50,20 +81,8 @@ export function registerSource(program: Command, ctx: CliContext): void {
         throw new Error('Source not found');
       }
       cfg.sources.splice(idx, 1);
-        ctx.saveConfig(cfg);
-        success(`Removed source ${name}`);
-    });
-
-  src
-    .command('list')
-    .description('List sources')
-    .action(() => {
-      const cfg = ctx.loadConfig();
-      for (const s of cfg.sources) {
-        console.log(
-          `${s.name}\t${s.url}\t${s.enabled ? 'enabled' : 'disabled'}`,
-        );
-      }
+      ctx.saveConfig(cfg);
+      success(`Removed source ${name}`);
     });
 
   src

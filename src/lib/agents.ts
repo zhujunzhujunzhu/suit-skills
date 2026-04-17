@@ -1,5 +1,7 @@
-import { existsSync, readdirSync } from 'node:fs';
-import type { Config } from '../types/index.js';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import type { Config, SkillMeta } from '../types/index.js';
+import { readSkillMarkdownMetadata } from './skills.js';
 
 export interface ResolveTargetOptions {
   /** 全局安装（`-g`） */
@@ -48,4 +50,26 @@ export function getInstalledSkills(targetDir: string): string[] {
     .filter((e) => e.isDirectory())
     .map((e) => e.name)
     .sort();
+}
+
+/**
+ * 获取已安装 skill 的详细信息（从 SKILL.md 或 meta.json 读取）
+ */
+export function getInstalledSkillDetail(
+  targetDir: string,
+  skillName: string,
+): (SkillMeta & { metadataSource?: string }) | null {
+  const skillDir = join(targetDir, skillName);
+  if (!existsSync(skillDir)) {
+    return null;
+  }
+  try {
+    const metadata = readSkillMarkdownMetadata(skillDir);
+    return {
+      ...metadata.meta,
+      metadataSource: metadata.metadataSource,
+    };
+  } catch {
+    return null;
+  }
 }

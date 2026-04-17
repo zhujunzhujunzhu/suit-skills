@@ -49,6 +49,14 @@ export interface InstallResult {
   message?: string;
 }
 
+// 动态检测运行环境并导入 Tauri API
+const getTauriApi = async () => {
+  if (typeof window !== 'undefined' && '__TAURI__' in window) {
+    return import('./tauri');
+  }
+  return null;
+};
+
 async function parseJson<T>(response: Response): Promise<T> {
   const text = await response.text();
   if (!text.trim()) {
@@ -108,24 +116,58 @@ function withParams(
   return `${url.pathname}${url.search}`;
 }
 
-export function fetchSources(): Promise<SourcesResponse> {
+export async function fetchSources(): Promise<SourcesResponse> {
+  const tauri = await getTauriApi();
+  if (tauri) {
+    const result = await tauri.tauriGetSources();
+    return {
+      defaultSource: result.defaultSource,
+      sources: result.sources.map((s) => ({
+        name: s.name,
+        url: s.url,
+        enabled: s.enabled,
+      })),
+    };
+  }
   return request<SourcesResponse>('/api/sources');
 }
 
-export function addSource(requestBody: {
+export async function addSource(requestBody: {
   name: string;
   url: string;
 }): Promise<SourcesResponse & { source: Source }> {
+  const tauri = await getTauriApi();
+  if (tauri) {
+    await tauri.tauriAddSource(requestBody.name, requestBody.url);
+    const result = await tauri.tauriGetSources();
+    const newSource = result.sources.find((s) => s.name === requestBody.name);
+    return {
+      defaultSource: result.defaultSource,
+      sources: result.sources,
+      source: newSource ?? { name: requestBody.name, url: requestBody.url, enabled: true },
+    };
+  }
   return request<SourcesResponse & { source: Source }>('/api/sources', {
     method: 'POST',
     body: JSON.stringify(requestBody),
   });
 }
 
-export function updateSource(
+export async function updateSource(
   name: string,
   requestBody: { enabled: boolean },
 ): Promise<SourcesResponse & { source: Source }> {
+  const tauri = await getTauriApi();
+  if (tauri) {
+    await tauri.tauriUpdateSource(name, requestBody.enabled);
+    const result = await tauri.tauriGetSources();
+    const updatedSource = result.sources.find((s) => s.name === name);
+    return {
+      defaultSource: result.defaultSource,
+      sources: result.sources,
+      source: updatedSource ?? { name, url: '', enabled: requestBody.enabled },
+    };
+  }
   return request<SourcesResponse & { source: Source }>(
     `/api/sources/${encodeURIComponent(name)}`,
     {
@@ -135,57 +177,155 @@ export function updateSource(
   );
 }
 
-export function removeSource(
+export async function removeSource(
   name: string,
 ): Promise<SourcesResponse & { removed: string }> {
+  const tauri = await getTauriApi();
+  if (tauri) {
+    await tauri.tauriRemoveSource(name);
+    const result = await tauri.tauriGetSources();
+    return {
+      defaultSource: result.defaultSource,
+      sources: result.sources,
+      removed: name,
+    };
+  }
   return request<SourcesResponse & { removed: string }>(
     `/api/sources/${encodeURIComponent(name)}`,
     { method: 'DELETE' },
   );
 }
 
-export function fetchSkills(params: {
+export async function fetchSkills(params: {
   source?: string;
   q?: string;
   tag?: string;
   refresh?: boolean;
 }): Promise<{ items: SkillSummary[] }> {
+  const tauri = await getTauriApi();
+  if (tauri) {
+    const result = await tauri.tauriGetSkillsList({
+      source: params.source,
+      query: params.q,
+      tag: params.tag,
+    });
+    // 获取已安装状态
+    const installed = await tauri.tauriGetInstalledSkills();
+    const installedMap = new Map<string, string[]>();
+    for (const item of installed.items) {
+      const targets = installedMap.get(item.name) ?? [];
+      targets.push(item.target);
+      installedMap.set(item.name, targets);
+    }
+    return {
+      items: result.items.map((skill) => ({
+        name: skill.name,
+        version: skill.version,
+        description: skill.description,
+        author: skill.author,
+        tags: skill.tags ?? [],
+        sourceName: skill.sourceName,
+        installed: installedMap.has(skill.name),
+        installedTargets: installedMap.get(skill.name) ?? [],
+        metadataSource: 'skill-md',
+      })),
+    };
+  }
   return request<{ items: SkillSummary[] }>(withParams('/api/skills', params));
 }
 
-export function fetchSkillDetail(
+export async function fetchSkillDetail(
   name: string,
   source?: string,
 ): Promise<SkillDetail> {
+  const tauri = await getTauriApi();
+  if (tauri) {
+    const result = await tauri.tauriGetSkillDetail(name, source);
+    const installed = await tauri.tauriGetInstalledSkills();
+    const targets = installed.items
+      .filter((i) => i.name === name)
+      .map((i) => i.target);
+    return {
+      name: result.name,
+      version: result.version,
+      description: result.description,
+      author: result.author,
+      tags: result.tags ?? [],
+      sourceName: result.sourceName,
+      installed: targets.length > 0,
+      installedTargets: targets,
+      metadataSource: 'skill-md',
+      skillDir: '',
+      markdown: result.markdown ?? '',
+      frontmatter: {},
+    };
+  }
   return request<SkillDetail>(
     withParams(`/api/skills/${encodeURIComponent(name)}`, { source }),
   );
 }
 
-export function fetchInstalled(params: {
+export async function fetchInstalled(params: {
   scope?: 'all' | 'project' | 'global';
   target?: string;
   q?: string;
 }): Promise<{ items: InstalledSkill[] }> {
+  const tauri = await getTauriApi();
+  if (tauri) {
+    const result = await tauri.tauriGetInstalledSkills({
+      scope: params.scope === 'all' ? undefined : params.scope,
+      target: params.target,
+    });
+    return {
+      items: result.items.map((skill) => ({
+        name: skill.name,
+        version: skill.version,
+        description: skill.description,
+        tags: [],
+        target: skill.target,
+        scope: skill.scope as 'project' | 'global',
+        path: skill.path,
+        sourceName: skill.sourceName,
+        metadataSource: 'skill-md',
+      })),
+    };
+  }
   return request<{ items: InstalledSkill[] }>(
     withParams('/api/installed', params),
   );
 }
 
-export function installSkill(requestBody: {
+export async function installSkill(requestBody: {
   identifier: string;
   source?: string;
   targets: string[];
   global?: boolean;
   strategy?: 'overwrite' | 'skip' | 'rename';
 }): Promise<{ results: InstallResult[] }> {
+  const tauri = await getTauriApi();
+  if (tauri) {
+    await tauri.tauriInstallSkill({
+      identifier: requestBody.identifier,
+      source: requestBody.source,
+      targets: requestBody.targets,
+      global: requestBody.global ?? true,
+    });
+    // 返回模拟结果
+    return {
+      results: requestBody.targets.map((target) => ({
+        target,
+        scope: requestBody.global ? 'global' : 'project',
+        status: 'installed',
+      })),
+    };
+  }
   return request<{ results: InstallResult[] }>('/api/install', {
     method: 'POST',
     body: JSON.stringify(requestBody),
   });
 }
 
-export function removeInstalledSkill(
+export async function removeInstalledSkill(
   name: string,
   requestBody: { target: string; scope: 'project' | 'global' },
 ): Promise<{
@@ -195,6 +335,21 @@ export function removeInstalledSkill(
   scope: 'project' | 'global';
   path: string;
 }> {
+  const tauri = await getTauriApi();
+  if (tauri) {
+    await tauri.tauriRemoveSkill({
+      name,
+      target: requestBody.target,
+      scope: requestBody.scope,
+    });
+    return {
+      status: 'removed',
+      name,
+      target: requestBody.target,
+      scope: requestBody.scope,
+      path: '',
+    };
+  }
   return request(`/api/installed/${encodeURIComponent(name)}`, {
     method: 'DELETE',
     body: JSON.stringify(requestBody),
@@ -206,6 +361,15 @@ export async function exportInstalledSkill(requestBody: {
   target: string;
   scope: 'project' | 'global';
 }): Promise<void> {
+  const tauri = await getTauriApi();
+  if (tauri) {
+    await tauri.tauriExportSkill({
+      name: requestBody.name,
+      target: requestBody.target,
+      scope: requestBody.scope,
+    });
+    return;
+  }
   const response = await fetch('/api/installed/export', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },

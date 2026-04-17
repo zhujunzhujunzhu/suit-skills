@@ -362,3 +362,18 @@ export function searchSkills(metas: SkillMeta[], keyword: string): SkillMeta[] {
     return false;
   });
 }
+
+/** 读取指定 skill 的 SKILL.md 文件内容 */
+export function readSkillMarkdown(cacheRoot: string, skillName: string): string {
+  const skillDir = getSkillSourceDir(cacheRoot, skillName);
+  if (!skillDir) {
+    return '';
+  }
+  const markdownPath = join(skillDir, 'SKILL.md');
+  if (!existsSync(markdownPath)) {
+    return '';
+  }
+  const markdown = readFileSync(markdownPath, 'utf8');
+  const { body } = parseSkillFrontmatter(markdown);
+  return body.trim();
+}
