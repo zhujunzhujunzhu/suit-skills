@@ -34,7 +34,9 @@
   "pkg": {
     "scripts": "dist/**/*.js",
     "assets": "dist/**/*",
-    "targets": ["node18-win-x64"],
+    "targets": [
+      "node18-win-x64"
+    ],
     "outputPath": "src-tauri/binaries"
   },
   "files": [
@@ -56,6 +58,7 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.2",
     "pkg": "^5.8.1",
+    "sharp": "^0.34.5",
     "tsx": "^4.21.0",
     "typescript": "^6.0.2",
     "vite": "^7.3.0",
