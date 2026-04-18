@@ -27,7 +27,14 @@ async function runCommand<T>(
   if (!result.success) {
     throw new Error(result.error ?? 'Command failed');
   }
-  return result.data as T;
+  if (result.data !== undefined && result.data !== null) {
+    return result.data;
+  }
+  const stdout = result.stdout?.trim();
+  if (stdout?.startsWith('{') || stdout?.startsWith('[')) {
+    return JSON.parse(stdout) as T;
+  }
+  return undefined as T;
 }
 
 // Sources API

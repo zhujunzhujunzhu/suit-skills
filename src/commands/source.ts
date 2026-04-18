@@ -66,11 +66,7 @@ function printSourceList(ctx: CliContext, opts: SourceListOptions): void {
 export function registerSource(program: Command, ctx: CliContext): void {
   const src = program
     .command('source')
-    .description('Manage remote skill sources')
-    .option('--json', 'output as JSON')
-    .action((opts: SourceListOptions) => {
-      printSourceList(ctx, opts);
-    });
+    .description('Manage remote skill sources');
 
   // 无子命令时显示列表
   src
@@ -78,22 +74,7 @@ export function registerSource(program: Command, ctx: CliContext): void {
     .description('List sources')
     .option('--json', 'output as JSON')
     .action((opts: SourceListOptions) => {
-      const cfg = ctx.loadConfig();
-      if (opts.json) {
-        console.log(
-          JSON.stringify(
-            sourceJsonPayload(cfg),
-            null,
-            2,
-          ),
-        );
-      } else {
-        for (const s of cfg.sources) {
-          console.log(
-            `${s.name}\t${s.url}\t${s.enabled ? 'enabled' : 'disabled'}`,
-          );
-        }
-      }
+      printSourceList(ctx, opts);
     });
 
   src
