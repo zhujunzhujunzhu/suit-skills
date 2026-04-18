@@ -4,10 +4,12 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import type { Config } from '../../src/types/index.js';
 import {
+  BUILTIN_SOURCE_CATALOG,
   getDefaultConfig,
   loadConfig,
   saveConfig,
   getConfigValue,
+  restoreBuiltinSources,
   setConfigValue,
   getConfigPath,
 } from '../../src/lib/config.js';
@@ -32,6 +34,39 @@ describe('getDefaultConfig', () => {
     expect(cfg.agents.agents?.projectDir).toBe('./.agents/skills');
     expect(cfg.agents.copilot?.projectDir).toBe('./.copilot/skills');
     expect(cfg.agents.codex?.projectDir).toBe('./.codex/skills');
+  });
+
+  it('recommended sources are present but disabled by default', () => {
+    const cfg = getDefaultConfig();
+    expect(cfg.sources).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: 'anthropics-skills',
+          url: 'https://github.com/anthropics/skills.git',
+          enabled: false,
+        }),
+        expect.objectContaining({
+          name: 'superpowers',
+          url: 'https://github.com/obra/superpowers.git',
+          enabled: false,
+        }),
+        expect.objectContaining({
+          name: 'awesome-claude-skills',
+          url: 'https://github.com/ComposioHQ/awesome-claude-skills.git',
+          enabled: false,
+        }),
+      ]),
+    );
+    expect(
+      cfg.sources.filter((source) => source.enabled).map((source) => source.name),
+    ).toEqual(['default']);
+    for (const builtin of BUILTIN_SOURCE_CATALOG) {
+      expect(cfg.sources).toContainEqual({
+        name: builtin.name,
+        url: builtin.url,
+        enabled: false,
+      });
+    }
   });
 });
 
@@ -82,7 +117,11 @@ describe('loadConfig', () => {
     };
     writeFileSync(getConfigPath(), JSON.stringify(custom), 'utf8');
     const cfg = loadConfig();
-    expect(cfg).toMatchObject(custom);
+    expect(cfg.sources[0]).toEqual(custom.sources[0]);
+    expect(cfg.defaultSource).toBe(custom.defaultSource);
+    expect(cfg.sources.some((source) => source.name === 'anthropics-skills')).toBe(
+      false,
+    );
     expect(cfg.agents.codex?.projectDir).toBe('./.codex/skills');
   });
 
@@ -117,6 +156,26 @@ describe('loadConfig', () => {
     expect(disk.agents.codex).toEqual(getDefaultConfig().agents.codex);
   });
 
+  it('does not auto-restore missing recommended sources to existing config', () => {
+    const minimal = {
+      sources: [
+        {
+          name: 'default',
+          url: 'https://gitee.com/digital-construction-center_1/suit-skills-lib.git',
+          enabled: true,
+        },
+      ],
+      defaultSource: 'default',
+      agents: getDefaultConfig().agents,
+      installTargets: [],
+    };
+    writeFileSync(getConfigPath(), JSON.stringify(minimal), 'utf8');
+    const cfg = loadConfig();
+    expect(cfg.sources.map((source) => source.name)).toEqual(['default']);
+    const disk = JSON.parse(readFileSync(getConfigPath(), 'utf8')) as Config;
+    expect(disk.sources.map((source) => source.name)).toEqual(['default']);
+  });
+
   it('installTargetsAuto 为 false 且仅有 skills 时不迁移', () => {
     const onDisk = {
       sources: getDefaultConfig().sources,
@@ -138,6 +197,67 @@ describe('loadConfig', () => {
     expect(logSpy).toHaveBeenCalled();
     const first = String(logSpy.mock.calls[0]?.[0] ?? '');
     expect(first).toMatch(/Invalid config|falling back/);
+  });
+});
+
+describe('restoreBuiltinSources', () => {
+  it('adds only missing built-ins as disabled without changing custom sources', () => {
+    const superpowers = BUILTIN_SOURCE_CATALOG.find(
+      (source) => source.name === 'superpowers',
+    )!;
+    const anthropics = BUILTIN_SOURCE_CATALOG.find(
+      (source) => source.name === 'anthropics-skills',
+    )!;
+    const cfg: Config = {
+      sources: [
+        {
+          name: 'default',
+          url: 'https://gitee.com/digital-construction-center_1/suit-skills-lib.git',
+          enabled: true,
+        },
+        {
+          name: superpowers.name,
+          url: 'https://example.com/not-superpowers.git',
+          enabled: true,
+        },
+        {
+          name: 'anthropics-copy',
+          url: anthropics.url.replace(/\.git$/, ''),
+          enabled: true,
+        },
+        {
+          name: 'team',
+          url: 'https://github.com/acme/team-skills.git',
+          enabled: true,
+        },
+      ],
+      defaultSource: 'team',
+      agents: getDefaultConfig().agents,
+      installTargets: [],
+    };
+
+    const added = restoreBuiltinSources(cfg);
+
+    expect(added).not.toContain('superpowers');
+    expect(added).not.toContain('anthropics-skills');
+    expect(added).toContain('claude-arsenal');
+    expect(cfg.defaultSource).toBe('team');
+    expect(cfg.sources).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: 'team',
+          url: 'https://github.com/acme/team-skills.git',
+          enabled: true,
+        }),
+        expect.objectContaining({
+          name: 'claude-arsenal',
+          enabled: false,
+        }),
+      ]),
+    );
+    expect(
+      cfg.sources.filter((source) => source.name === 'superpowers'),
+    ).toHaveLength(1);
   });
 });
 

@@ -38,14 +38,15 @@ export function registerSearch(program: Command, ctx: CliContext): void {
           tags: m.tags,
         }));
         console.log(JSON.stringify({ items }, null, 2));
-      } else {
-        if (found.length === 0) {
-          warn('No skills found');
-          return;
-        }
-        for (const m of found) {
-          console.log(m.name);
-        }
+        return;
+      }
+
+      if (found.length === 0) {
+        warn('No skills found');
+        return;
+      }
+      for (const m of found) {
+        console.log(m.name);
       }
     });
 }

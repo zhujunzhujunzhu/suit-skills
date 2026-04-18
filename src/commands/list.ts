@@ -52,10 +52,15 @@ export function registerList(program: Command, ctx: CliContext): void {
           sourceName,
         }));
         console.log(JSON.stringify({ items }, null, 2));
-      } else {
-        for (const { meta } of rows) {
-          console.log(meta.name);
-        }
+        return;
+      }
+
+      for (const { meta, sourceName } of rows) {
+        const desc = meta.description ?? '';
+        const version = meta.version ?? 'unknown';
+        const tags = meta.tags?.join(', ') ?? '';
+        const line = `${meta.name}\t${desc}\t[v${version}]\t(${sourceName})\t[${tags}]`;
+        console.log(line);
       }
     });
 }

@@ -1,9 +1,20 @@
 export type MetadataSource = 'skill-md' | 'meta-json-fallback' | 'unknown';
+export type SourceCategory =
+  | 'official'
+  | 'engineering'
+  | 'collection'
+  | 'cn'
+  | 'specialized'
+  | 'custom';
 
 export interface Source {
   name: string;
   url: string;
   enabled: boolean;
+  builtin: boolean;
+  label: string;
+  category: SourceCategory;
+  description: string;
 }
 
 export interface SkillSummary {
@@ -116,17 +127,32 @@ function withParams(
   return `${url.pathname}${url.search}`;
 }
 
+function normalizeSource(
+  source: Pick<Source, 'name' | 'url' | 'enabled'> & {
+    builtin?: boolean;
+    label?: string;
+    category?: SourceCategory | string;
+    description?: string;
+  },
+): Source {
+  return {
+    name: source.name,
+    url: source.url,
+    enabled: source.enabled,
+    builtin: source.builtin ?? false,
+    label: source.label ?? source.name,
+    category: (source.category as SourceCategory | undefined) ?? 'custom',
+    description: source.description ?? 'User-defined skill source.',
+  };
+}
+
 export async function fetchSources(): Promise<SourcesResponse> {
   const tauri = await getTauriApi();
   if (tauri) {
     const result = await tauri.tauriGetSources();
     return {
       defaultSource: result.defaultSource,
-      sources: result.sources.map((s) => ({
-        name: s.name,
-        url: s.url,
-        enabled: s.enabled,
-      })),
+      sources: result.sources.map(normalizeSource),
     };
   }
   return request<SourcesResponse>('/api/sources');
@@ -143,8 +169,10 @@ export async function addSource(requestBody: {
     const newSource = result.sources.find((s) => s.name === requestBody.name);
     return {
       defaultSource: result.defaultSource,
-      sources: result.sources,
-      source: newSource ?? { name: requestBody.name, url: requestBody.url, enabled: true },
+      sources: result.sources.map(normalizeSource),
+      source: normalizeSource(
+        newSource ?? { name: requestBody.name, url: requestBody.url, enabled: true },
+      ),
     };
   }
   return request<SourcesResponse & { source: Source }>('/api/sources', {
@@ -164,8 +192,8 @@ export async function updateSource(
     const updatedSource = result.sources.find((s) => s.name === name);
     return {
       defaultSource: result.defaultSource,
-      sources: result.sources,
-      source: updatedSource ?? { name, url: '', enabled: requestBody.enabled },
+      sources: result.sources.map(normalizeSource),
+      source: normalizeSource(updatedSource ?? { name, url: '', enabled: requestBody.enabled }),
     };
   }
   return request<SourcesResponse & { source: Source }>(
@@ -174,6 +202,24 @@ export async function updateSource(
       method: 'PATCH',
       body: JSON.stringify(requestBody),
     },
+  );
+}
+
+export async function restoreBuiltinSources(): Promise<
+  SourcesResponse & { added: string[] }
+> {
+  const tauri = await getTauriApi();
+  if (tauri) {
+    const stdout = await tauri.tauriRunCommand([
+      'source',
+      'restore-builtins',
+      '--json',
+    ]);
+    return JSON.parse(stdout) as SourcesResponse & { added: string[] };
+  }
+  return request<SourcesResponse & { added: string[] }>(
+    '/api/sources/restore-builtins',
+    { method: 'POST' },
   );
 }
 
@@ -186,7 +232,7 @@ export async function removeSource(
     const result = await tauri.tauriGetSources();
     return {
       defaultSource: result.defaultSource,
-      sources: result.sources,
+      sources: result.sources.map(normalizeSource),
       removed: name,
     };
   }
@@ -352,6 +398,40 @@ export async function removeInstalledSkill(
   }
   return request(`/api/installed/${encodeURIComponent(name)}`, {
     method: 'DELETE',
+    body: JSON.stringify(requestBody),
+  });
+}
+
+export function copyInstalledSkillPackage(requestBody: {
+  name: string;
+  target: string;
+  scope: 'project' | 'global';
+}): Promise<{ status: 'copied'; fileName: string; path: string }> {
+  return request<{ status: 'copied'; fileName: string; path: string }>(
+    '/api/installed/copy-package',
+    {
+      method: 'POST',
+      body: JSON.stringify(requestBody),
+    },
+  );
+}
+
+export function linkInstalledSkillTargets(requestBody: {
+  name: string;
+  target: string;
+  scope: 'project' | 'global';
+  targets: string[];
+}): Promise<{
+  results: {
+    target: string;
+    scope: 'project' | 'global';
+    status: 'linked' | 'skipped';
+    path: string;
+    message?: string;
+  }[];
+}> {
+  return request('/api/installed/link-targets', {
+    method: 'POST',
     body: JSON.stringify(requestBody),
   });
 }

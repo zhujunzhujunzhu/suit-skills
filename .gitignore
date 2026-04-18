@@ -8,3 +8,8 @@ dist/
 src-tauri/binaries/
 src-tauri/gen/
 src-tauri/target/
+.agents/
+.claude/
+.skills/
+.cursor/
+.claude/worktrees/

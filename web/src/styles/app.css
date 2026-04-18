@@ -305,9 +305,18 @@ button {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(360px, 420px);
   gap: 28px;
+  height: calc(100vh - 60px);
   width: min(1480px, 100%);
   margin: 0 auto;
   padding: 28px;
+  overflow: hidden;
+}
+
+.library {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
 }
 
 .toolbar {
@@ -316,6 +325,20 @@ button {
   gap: 12px;
   align-items: center;
   margin-bottom: 16px;
+}
+
+.library-controls {
+  flex-shrink: 0;
+  margin-bottom: 18px;
+  background: var(--surface);
+}
+
+.library-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 4px;
+  padding-bottom: 36px;
 }
 
 .search {
@@ -402,6 +425,10 @@ button {
   flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 18px;
+}
+
+.library-controls .tag-row {
+  margin-bottom: 0;
 }
 
 .tag-row button {
@@ -562,7 +589,7 @@ button {
 .action-row,
 .install-options {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr);
   gap: 10px;
   margin-bottom: 10px;
 }
@@ -575,6 +602,36 @@ button {
   background: var(--surface-lowest);
   color: var(--text);
   padding: 0 10px;
+}
+
+.target-checkboxes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.target-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border: 1px solid var(--outline-soft);
+  border-radius: var(--radius);
+  background: var(--surface-lowest);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.target-checkbox input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--primary);
+}
+
+.target-checkbox:hover {
+  border-color: var(--primary);
 }
 
 .meta-table {
@@ -666,16 +723,22 @@ button {
 }
 
 .installed-page {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 60px);
   width: min(1080px, 100%);
   margin: 0 auto;
-  padding: 36px 28px;
+  padding: 0 28px;
+  overflow: hidden;
 }
 
 .page-head {
+  flex-shrink: 0;
   display: flex;
   align-items: end;
   justify-content: space-between;
   gap: 16px;
+  padding-top: 36px;
   margin-bottom: 18px;
 }
 
@@ -684,13 +747,19 @@ button {
 }
 
 .installed-toolbar {
+  flex-shrink: 0;
   grid-template-columns: minmax(260px, 1fr) 160px 140px;
+}
+
+.installed-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding-bottom: 36px;
 }
 
 .installed-list {
   display: grid;
   gap: 10px;
-  margin-top: 24px;
 }
 
 .installed-list article {
@@ -756,13 +825,39 @@ button {
   background: color-mix(in srgb, var(--error) 8%, var(--surface-lowest));
 }
 
-.confirm-strip span {
+.choice-strip {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px;
+  border: 1px solid color-mix(in srgb, var(--primary) 28%, transparent);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--primary) 8%, var(--surface-lowest));
+}
+
+.choice-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.confirm-strip span,
+.choice-strip > span {
   overflow-wrap: anywhere;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 12px;
 }
 
 .source-list {
+  flex: 1;
   display: grid;
   gap: 10px;
+  min-height: 0;
+  overflow-y: auto;
+  padding-bottom: 36px;
 }
 
 .source-form {
@@ -819,7 +914,19 @@ button {
 .source-main strong {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+}
+
+.source-main strong > span:first-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.source-tags {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
 .source-main i {
@@ -832,10 +939,17 @@ button {
   font-style: normal;
 }
 
+.source-description {
+  color: var(--muted);
+  line-height: 1.45;
+}
+
 .source-list code {
   min-width: 0;
   overflow-wrap: anywhere;
   color: var(--muted);
+  font-family: var(--mono);
+  font-size: 12px;
 }
 
 .source-status {
@@ -852,6 +966,10 @@ button {
   display: flex;
   gap: 8px;
   justify-content: end;
+}
+
+.source-confirm-strip {
+  margin-top: 2px;
 }
 
 .tag-cloud {
@@ -951,7 +1069,15 @@ button {
   }
 
   .console-grid {
+    height: auto;
+    overflow: visible;
     padding: 18px 14px 28px;
+  }
+
+  .library,
+  .library-scroll {
+    height: auto;
+    overflow: visible;
   }
 
   .toolbar,
@@ -962,8 +1088,14 @@ button {
   .installed-toolbar,
   .source-form,
   .source-list article,
-  .confirm-strip {
+  .confirm-strip,
+  .choice-strip {
     grid-template-columns: 1fr;
+  }
+
+  .state.error {
+    width: calc(100% - 28px);
+    margin-top: 14px;
   }
 
   .skill-card.wide {

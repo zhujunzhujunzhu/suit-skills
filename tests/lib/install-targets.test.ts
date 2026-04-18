@@ -11,6 +11,11 @@ import {
 } from '../../src/lib/install-targets.js';
 
 describe('install-targets', () => {
+  it('默认 installTargets 为 ["agents"]', () => {
+    const cfg = getDefaultConfig();
+    expect(normalizeInstallTargets(cfg)).toEqual(['agents']);
+  });
+
   it('未配置或空 installTargets 时归一化为空数组', () => {
     const cfg = getDefaultConfig();
     delete cfg.installTargets;
@@ -51,24 +56,26 @@ describe('install-targets', () => {
     ).toEqual(['claude']);
   });
 
-  it('项目下存在 .cursor 时仅并入 cursor（默认不写 skills）', () => {
+  it('项目下存在 .cursor 时合并默认 agents + cursor', () => {
     const root = mkdtempSync(join(tmpdir(), 'skills-cli-it-'));
     try {
       mkdirSync(join(root, '.cursor'), { recursive: true });
       const cfg = getDefaultConfig();
-      expect(getEffectiveInstallTargets(cfg, {}, root)).toEqual(['cursor']);
+      // 默认 ['agents'] + 检测到的 ['cursor']
+      expect(getEffectiveInstallTargets(cfg, {}, root)).toEqual(['agents', 'cursor']);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
   });
 
-  it('installTargetsAuto: false 时不并入检测目录', () => {
+  it('installTargetsAuto: false 时仅使用 installTargets', () => {
     const root = mkdtempSync(join(tmpdir(), 'skills-cli-it2-'));
     try {
       mkdirSync(join(root, '.cursor'), { recursive: true });
       const cfg = getDefaultConfig();
       cfg.installTargetsAuto = false;
-      expect(getEffectiveInstallTargets(cfg, {}, root)).toEqual([]);
+      // 默认 ['agents']，不并入检测目录
+      expect(getEffectiveInstallTargets(cfg, {}, root)).toEqual(['agents']);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

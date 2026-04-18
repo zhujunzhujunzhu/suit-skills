@@ -1,12 +1,120 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir as nodeHomedir } from 'node:os';
 import { join, dirname } from 'node:path';
-import type { AgentMapping, Config } from '../types/index.js';
+import type { AgentMapping, Config, Source } from '../types/index.js';
 import { ensureDir } from '../utils/path.js';
 import { warn } from '../utils/output.js';
 
 const DEFAULT_SOURCE_URL =
   'https://gitee.com/digital-construction-center_1/suit-skills-lib.git';
+
+export type BuiltinSourceCategory =
+  | 'official'
+  | 'engineering'
+  | 'collection'
+  | 'cn'
+  | 'specialized';
+
+export interface BuiltinSourceInfo {
+  name: string;
+  url: string;
+  label: string;
+  category: BuiltinSourceCategory;
+  description: string;
+}
+
+export const DEFAULT_SOURCE_INFO: BuiltinSourceInfo = {
+  name: 'default',
+  url: DEFAULT_SOURCE_URL,
+  label: 'Suit Skills default',
+  category: 'cn',
+  description: 'Default Suit Skills library, enabled for new installations.',
+};
+
+export const BUILTIN_SOURCE_CATALOG: BuiltinSourceInfo[] = [
+  {
+    name: 'anthropics-skills',
+    url: 'https://github.com/anthropics/skills.git',
+    label: 'Anthropic skills',
+    category: 'official',
+    description: 'Claude official skills library, useful as a baseline source.',
+  },
+  {
+    name: 'superpowers',
+    url: 'https://github.com/obra/superpowers.git',
+    label: 'Superpowers',
+    category: 'engineering',
+    description: 'Engineering skills for complex development, TDD, debugging, and refactoring.',
+  },
+  {
+    name: 'vercel-agent-skills',
+    url: 'https://github.com/vercel-labs/agent-skills.git',
+    label: 'Vercel agent skills',
+    category: 'official',
+    description: 'Web, full-stack, Next.js, and deployment focused skills.',
+  },
+  {
+    name: 'huggingface-skills',
+    url: 'https://github.com/huggingface/skills.git',
+    label: 'Hugging Face skills',
+    category: 'official',
+    description: 'Skills for Hugging Face and the open-source model ecosystem.',
+  },
+  {
+    name: 'claude-arsenal',
+    url: 'https://github.com/majiayu000/claude-arsenal.git',
+    label: 'Claude Arsenal',
+    category: 'cn',
+    description: 'Chinese-friendly engineering skill collection.',
+  },
+  {
+    name: 'daymade-claude-code-skills',
+    url: 'https://github.com/daymade/claude-code-skills.git',
+    label: 'Daymade Claude Code skills',
+    category: 'engineering',
+    description: 'Production development, security, and GitHub operation skills.',
+  },
+  {
+    name: 'remotion-skills',
+    url: 'https://github.com/remotion-dev/skills.git',
+    label: 'Remotion skills',
+    category: 'specialized',
+    description: 'Remotion video, animation, and data visualization skills.',
+  },
+  {
+    name: 'awesome-claude-skills',
+    url: 'https://github.com/ComposioHQ/awesome-claude-skills.git',
+    label: 'Awesome Claude skills',
+    category: 'collection',
+    description: 'Curated index of Claude skill resources.',
+  },
+  {
+    name: 'antigravity-awesome-skills',
+    url: 'https://github.com/sickn33/antigravity-awesome-skills.git',
+    label: 'Antigravity awesome skills',
+    category: 'collection',
+    description: 'Cross-platform AI skill collection.',
+  },
+  {
+    name: 'inbharatai-claude-skills',
+    url: 'https://github.com/inbharatai/claude-skills.git',
+    label: 'InbharatAI Claude skills',
+    category: 'collection',
+    description: 'Multi-category production Claude skills collection.',
+  },
+  {
+    name: 'awesome-agent-skills',
+    url: 'https://github.com/mafichoni/awesome-agent-skills.git',
+    label: 'Awesome agent skills',
+    category: 'collection',
+    description: 'Cross-platform agent skill resource collection.',
+  },
+];
+
+const ALL_BUILTIN_SOURCE_INFOS = [
+  DEFAULT_SOURCE_INFO,
+  ...BUILTIN_SOURCE_CATALOG,
+];
 
 export interface ConfigLocationOptions {
   /** 覆盖用户主目录（测试用），在未设置 `SUIT_SKILLS_HOME` 时生效 */
@@ -35,9 +143,20 @@ export function getDefaultConfig(): Config {
         url: DEFAULT_SOURCE_URL,
         enabled: true,
       },
+      ...BUILTIN_SOURCE_CATALOG.map(({ name, url }) => ({
+        name,
+        url,
+        enabled: false,
+      })),
     ],
     defaultSource: 'default',
     agents: {
+      /** 中央存储：全局安装的实际目录 */
+      agents: {
+        globalDir: '~/.agents/skills',
+        projectDir: './.agents/skills',
+      },
+      /** 各平台目录：全局时通过软链接指向 ~/.agents/skills */
       claude: {
         globalDir: '~/.claude/skills',
         projectDir: './.claude/skills',
@@ -45,11 +164,6 @@ export function getDefaultConfig(): Config {
       cursor: {
         globalDir: '~/.cursor/skills',
         projectDir: './.cursor/skills',
-      },
-      /** 与 npx skills / Cursor 等文档中的 `.agents/skills` 约定一致 */
-      agents: {
-        globalDir: '~/.agents/skills',
-        projectDir: './.agents/skills',
       },
       copilot: {
         globalDir: '~/.copilot/skills',
@@ -60,8 +174,8 @@ export function getDefaultConfig(): Config {
         projectDir: './.codex/skills',
       },
     },
-    /** 默认不装 `./.skills/`，仅按项目下已存在的 Agent 目录自动合并；需要时用 `env set` 或 `--env skills` */
-    installTargets: [],
+    /** 默认安装目标：全局安装到 agents（中央存储） */
+    installTargets: ['agents'],
   };
 }
 
@@ -103,6 +217,73 @@ function mergeMissingAgentsFromDefaults(cfg: Config): boolean {
   return added;
 }
 
+function normalizeSourceUrl(url: string): string {
+  return url.trim().replace(/\/+$/, '').replace(/\.git$/i, '');
+}
+
+export function getBuiltinSourceInfo(source: Source): BuiltinSourceInfo | null {
+  const sourceUrl = normalizeSourceUrl(source.url);
+  return (
+    ALL_BUILTIN_SOURCE_INFOS.find((info) => {
+      const infoUrl = normalizeSourceUrl(info.url);
+      return sourceUrl === infoUrl;
+    }) ?? null
+  );
+}
+
+export function restoreBuiltinSources(config: Config): string[] {
+  if (!Array.isArray(config.sources)) {
+    config.sources = [];
+  }
+
+  const names = new Set(config.sources.map((source) => source.name));
+  const urls = new Set(
+    config.sources.map((source) => normalizeSourceUrl(source.url)),
+  );
+  const added: string[] = [];
+
+  for (const info of BUILTIN_SOURCE_CATALOG) {
+    const sourceUrl = normalizeSourceUrl(info.url);
+    if (names.has(info.name) || urls.has(sourceUrl)) {
+      continue;
+    }
+    config.sources.push({
+      name: info.name,
+      url: info.url,
+      enabled: false,
+    });
+    names.add(info.name);
+    urls.add(sourceUrl);
+    added.push(info.name);
+  }
+
+  return added;
+}
+
+function normalizeConfigSources(cfg: Config): boolean {
+  const def = getDefaultConfig();
+  if (
+    !Array.isArray(cfg.sources) ||
+    cfg.sources.some(
+      (source) =>
+        !source ||
+        typeof source.name !== 'string' ||
+        typeof source.url !== 'string',
+    )
+  ) {
+    cfg.sources = structuredClone(def.sources);
+    cfg.defaultSource = def.defaultSource;
+    return true;
+  }
+
+  let added = false;
+  if (typeof cfg.defaultSource !== 'string' || cfg.defaultSource.trim() === '') {
+    cfg.defaultSource = def.defaultSource;
+    added = true;
+  }
+  return added;
+}
+
 export function loadConfig(options?: ConfigLocationOptions): Config {
   const filePath = getConfigPath(options);
   if (!existsSync(filePath)) {
@@ -112,7 +293,8 @@ export function loadConfig(options?: ConfigLocationOptions): Config {
   try {
     const raw = readFileSync(filePath, 'utf8');
     const parsed = JSON.parse(raw) as Config;
-    let dirty = mergeMissingAgentsFromDefaults(parsed);
+    let dirty = normalizeConfigSources(parsed);
+    dirty = mergeMissingAgentsFromDefaults(parsed) || dirty;
     if (shouldMigrateLegacyInstallTargetsOnlySkills(parsed)) {
       parsed.installTargets = [];
       dirty = true;
