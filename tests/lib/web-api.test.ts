@@ -570,13 +570,26 @@ describe('web api', () => {
       targets: ['skills'],
       strategy: 'overwrite',
     });
-    expect(result.results[0]).toMatchObject({
-      target: 'skills',
-      scope: 'project',
-      status: 'installed',
-    });
+    expect(
+      result.results.some(
+        (r) =>
+          r.target === 'agents' &&
+          r.scope === 'project' &&
+          r.status === 'installed',
+      ),
+    ).toBe(true);
+    expect(
+      result.results.some(
+        (r) =>
+          r.target === 'skills' &&
+          r.scope === 'project' &&
+          r.status === 'installed',
+      ),
+    ).toBe(true);
+    const centralPath = join(projectDir, '.agents', 'skills', 'react-helper');
     const installedPath = join(projectDir, '.skills', 'react-helper');
-    expect(existsSync(installedPath)).toBe(true);
+    expect(existsSync(join(centralPath, 'meta.json'))).toBe(true);
+    expect(existsSync(join(installedPath, 'meta.json'))).toBe(true);
 
     const removed = removeWebInstalledSkill(ctx(), 'react-helper', {
       target: 'skills',

@@ -962,99 +962,73 @@ export function installWebSkill(
   const scope = isGlobal ? 'global' : 'project';
   const results: WebInstallResult[] = [];
 
-  // 全局安装时：先安装到中央存储 ~/.agents/skills，再创建软链接
-  if (isGlobal) {
-    // 1. 安装到中央存储
-    const centralRoot = getTargetRoot(ctx, config, 'agents', true);
-    let centralResult: { path?: string; skipped?: boolean; message?: string };
-    try {
-      centralResult = installSkillWithConflict(
-        refresh.path,
-        centralRoot,
-        identifier,
-        strategy,
-      );
-      if (centralResult.skipped) {
-        results.push({
-          target: 'agents',
-          scope,
-          status: 'skipped',
-          path: centralResult.path,
-          message: centralResult.message,
-        });
-        return { results };
-      }
+  // 全局 ~/.agents/skills 与项目 ./.agents/skills：先安装到中央存储，再为其它目标创建软链接
+  const centralRoot = getTargetRoot(ctx, config, 'agents', isGlobal);
+  let centralResult: { path?: string; skipped?: boolean; message?: string };
+  try {
+    centralResult = installSkillWithConflict(
+      refresh.path,
+      centralRoot,
+      identifier,
+      strategy,
+    );
+    if (centralResult.skipped) {
       results.push({
         target: 'agents',
         scope,
-        status: 'installed',
+        status: 'skipped',
         path: centralResult.path,
         message: centralResult.message,
       });
-    } catch (e) {
-      const message = e instanceof Error ? e.message : String(e);
-      if (message.includes('Skill not found')) {
-        throw new WebApiError('SKILL_NOT_FOUND', message, 404);
-      }
-      throw new WebApiError('INSTALL_FAILED', message, 500);
-    }
-
-    // 2. 为每个目标平台创建软链接
-    const centralSkillPath = centralResult.path;
-    if (!centralSkillPath) {
       return { results };
     }
-    for (const target of targets) {
-      if (target === 'agents') {
-        continue; // 中央存储已处理
-      }
-      const targetRoot = getTargetRoot(ctx, config, target, true);
-      const skillName = parsed.name;
-      const linkPath = join(targetRoot, skillName);
-      try {
-        createSymlink(centralSkillPath, linkPath);
-        results.push({
-          target,
-          scope,
-          status: 'installed',
-          path: linkPath,
-          message: `Linked to ${centralSkillPath}`,
-        });
-      } catch (e) {
-        results.push({
-          target,
-          scope,
-          status: 'skipped',
-          path: linkPath,
-          message: `Failed to create symlink: ${e instanceof Error ? e.message : String(e)}`,
-        });
-      }
+    results.push({
+      target: 'agents',
+      scope,
+      status: 'installed',
+      path: centralResult.path,
+      message: centralResult.message,
+    });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    if (message.includes('Skill not found')) {
+      throw new WebApiError('SKILL_NOT_FOUND', message, 404);
     }
-  } else {
-    // 项目级安装：直接安装到各目标目录
-    for (const target of targets) {
-      const root = getTargetRoot(ctx, config, target, false);
-      try {
-        const result = installSkillWithConflict(
-          refresh.path,
-          root,
-          identifier,
-          strategy,
-        );
-        results.push({
-          target,
-          scope,
-          status: result.skipped ? 'skipped' : 'installed',
-          path: result.path,
-          message: result.message,
-        });
-      } catch (e) {
-        const message = e instanceof Error ? e.message : String(e);
-        if (message.includes('Skill not found')) {
-          throw new WebApiError('SKILL_NOT_FOUND', message, 404);
-        }
-        throw new WebApiError('INSTALL_FAILED', message, 500);
-      }
+    throw new WebApiError('INSTALL_FAILED', message, 500);
+  }
+
+  const centralSkillPath = centralResult.path;
+  if (!centralSkillPath) {
+    return { results };
+  }
+
+  const skillName = parsed.name;
+  for (const target of targets) {
+    if (target === 'agents') {
+      continue;
+    }
+    const targetRoot = getTargetRoot(ctx, config, target, isGlobal);
+    const linkPath = join(targetRoot, skillName);
+    if (resolve(centralSkillPath) === resolve(linkPath)) {
+      continue;
+    }
+    try {
+      createSymlink(centralSkillPath, linkPath);
+      results.push({
+        target,
+        scope,
+        status: 'installed',
+        path: linkPath,
+        message: `Linked to ${centralSkillPath}`,
+      });
+    } catch (e) {
+      results.push({
+        target,
+        scope,
+        status: 'skipped',
+        path: linkPath,
+        message: `Failed to create symlink: ${e instanceof Error ? e.message : String(e)}`,
+      });
     }
   }
   return { results };

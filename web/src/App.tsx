@@ -1,4 +1,5 @@
 import { type MouseEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   addSource,
   copyInstalledSkillPackage,
@@ -19,6 +20,8 @@ import {
   type Source,
   type SourceWarning,
 } from './api/client';
+import { RAW_API, translateApiError } from './i18n/apiErrors';
+import { changeLanguageWithStorage, type AppLocale } from './i18n';
 
 type View = 'library' | 'installed' | 'sources';
 type LocationScope = 'project' | 'global';
@@ -98,8 +101,11 @@ function Icon({ name }: { name: keyof typeof icons }) {
   );
 }
 
-function npxCommand(skill: SkillSummary | SkillDetail | null): string {
-  if (!skill?.name) return 'npx suit-skills@latest install <skill>';
+function npxCommand(
+  skill: SkillSummary | SkillDetail | null,
+  placeholder: string,
+): string {
+  if (!skill?.name) return placeholder;
   const source = skill.sourceName ? ` --source ${skill.sourceName}` : '';
   return `npx suit-skills@latest install ${skill.name}${source}`;
 }
@@ -147,7 +153,7 @@ type MarkdownBlock =
   | { kind: 'h1' | 'h2' | 'p' | 'pre'; text: string }
   | { kind: 'ul'; items: string[] };
 
-function parseMarkdown(markdown: string): MarkdownBlock[] {
+function parseMarkdown(markdown: string, emptyText: string): MarkdownBlock[] {
   const lines = markdown.split(/\r?\n/);
   const blocks: MarkdownBlock[] = [];
   let paragraph: string[] = [];
@@ -211,11 +217,15 @@ function parseMarkdown(markdown: string): MarkdownBlock[] {
   flushParagraph();
   flushList();
   if (code) blocks.push({ kind: 'pre', text: code.join('\n') });
-  return blocks.length ? blocks : [{ kind: 'p', text: 'No SKILL.md content.' }];
+  return blocks.length ? blocks : [{ kind: 'p', text: emptyText }];
 }
 
 function MarkdownView({ markdown }: { markdown: string }) {
-  const blocks = useMemo(() => parseMarkdown(markdown), [markdown]);
+  const { t } = useTranslation();
+  const blocks = useMemo(
+    () => parseMarkdown(markdown, t('markdown.empty')),
+    [markdown, t],
+  );
   return (
     <div className="markdown">
       {blocks.map((block, index) => {
@@ -252,24 +262,24 @@ function ErrorState({ message }: { message: string }) {
 }
 
 function SourceWarnings({ warnings }: { warnings: SourceWarning[] }) {
+  const { t } = useTranslation();
   if (warnings.length === 0) return null;
   return (
     <div className="source-warnings" role="status">
       <strong>
         {warnings.some((warning) => !warning.usingCache)
-          ? 'Some enabled sources could not refresh.'
-          : 'Using local cache for one or more sources.'}
+          ? t('warnings.refreshFailed')
+          : t('warnings.usingCache')}
       </strong>
-      <span>
-        Available skills are still shown. Enable domestic mirrors or disable
-        unreachable sources from Sources if this keeps happening.
-      </span>
+      <span>{t('warnings.hint')}</span>
       <ul>
         {warnings.map((warning) => (
           <li key={`${warning.sourceName}:${warning.url}:${warning.message}`}>
             <b>{warning.sourceName}</b>
             <code>{warning.url}</code>
-            <em>{warning.usingCache ? 'local cache' : 'unreachable'}</em>
+            <em>
+              {warning.usingCache ? t('warnings.localCache') : t('warnings.unreachable')}
+            </em>
             <span>{warning.message}</span>
           </li>
         ))}
@@ -295,28 +305,30 @@ function installedSkillMatches(item: InstalledSkill, query: string): boolean {
   return fields.some((value) => value.toLowerCase().includes(needle));
 }
 
-function highlightText(value: string, query: string): ReactNode {
+function highlightText(value: unknown, query: string): ReactNode {
+  const safe =
+    typeof value === 'string' ? value : value == null ? '' : String(value);
   const needle = query.trim();
-  if (!needle) return value;
+  if (!needle) return safe;
 
-  const lowerValue = value.toLowerCase();
+  const lowerValue = safe.toLowerCase();
   const lowerNeedle = needle.toLowerCase();
   const parts: ReactNode[] = [];
   let cursor = 0;
 
-  while (cursor < value.length) {
+  while (cursor < safe.length) {
     const index = lowerValue.indexOf(lowerNeedle, cursor);
     if (index === -1) {
-      parts.push(value.slice(cursor));
+      parts.push(safe.slice(cursor));
       break;
     }
     if (index > cursor) {
-      parts.push(value.slice(cursor, index));
+      parts.push(safe.slice(cursor, index));
     }
     const end = index + needle.length;
     parts.push(
       <mark className="search-hit" key={`${index}-${end}`}>
-        {value.slice(index, end)}
+        {safe.slice(index, end)}
       </mark>,
     );
     cursor = end;
@@ -345,6 +357,7 @@ function viewFromHash(): View {
 }
 
 export default function App() {
+  const { t, i18n } = useTranslation();
   const isDesktop = typeof window !== 'undefined' && '__TAURI__' in window;
   const [view, setView] = useState<View>(viewFromHash);
   const [sources, setSources] = useState<Source[]>([]);
@@ -488,14 +501,18 @@ export default function App() {
     detailRequestId.current = requestId;
     if (!selected) {
       setDetail(null);
-      setError((current) => (current === 'Skill not found' ? '' : current));
+      setError((current) =>
+        current === RAW_API.SKILL_NOT_FOUND ? '' : current,
+      );
       return;
     }
     fetchSkillDetail(selected, source)
       .then((nextDetail) => {
         if (detailRequestId.current === requestId) {
           setDetail(nextDetail);
-          setError((current) => (current === 'Skill not found' ? '' : current));
+          setError((current) =>
+            current === RAW_API.SKILL_NOT_FOUND ? '' : current,
+          );
         }
       })
       .catch((err: Error) => {
@@ -514,7 +531,11 @@ export default function App() {
   const tags = useMemo(() => {
     const all = new Set<string>();
     for (const skill of skills) {
-      skill.tags?.forEach((item) => all.add(item));
+      skill.tags?.forEach((item) => {
+        if (typeof item === 'string' && item.trim()) {
+          all.add(item.trim());
+        }
+      });
     }
     return Array.from(all).sort();
   }, [skills]);
@@ -534,23 +555,24 @@ export default function App() {
   const activeSkill = detail ?? selectedSummary;
 
   async function copyCommand() {
-    await copyText(npxCommand(activeSkill));
-    notify('Command copied');
+    await copyText(npxCommand(activeSkill, t('install.npxPlaceholder')));
+    notify(t('toast.commandCopied'));
   }
 
   async function shareCommand() {
     if (!activeSkill) return;
+    const unknown = t('common.unknown');
     const text = [
-      `Skill: ${activeSkill.name}`,
-      `Version: ${activeSkill.version ?? 'unknown'}`,
-      `Source: ${activeSkill.sourceName}`,
-      `Tags: ${activeSkill.tags?.join(', ') ?? '-'}`,
+      `${t('share.skill')}: ${activeSkill.name}`,
+      `${t('share.version')}: ${activeSkill.version ?? unknown}`,
+      `${t('share.source')}: ${activeSkill.sourceName}`,
+      `${t('share.tags')}: ${activeSkill.tags?.join(', ') ?? '-'}`,
       '',
-      'Install:',
-      npxCommand(activeSkill),
+      `${t('share.install')}:`,
+      npxCommand(activeSkill, t('install.npxPlaceholder')),
     ].join('\n');
     await copyText(text);
-    notify('Share text copied');
+    notify(t('toast.shareCopied'));
   }
 
   async function installSelected() {
@@ -563,7 +585,7 @@ export default function App() {
         global: installScope === 'global',
         strategy: installStrategy,
       });
-      notify('Installed');
+      notify(t('toast.installed'));
       await loadSkills();
       await loadInstalled();
     } catch (err) {
@@ -578,7 +600,7 @@ export default function App() {
         scope: item.scope,
       });
       setConfirmRemove(null);
-      notify('Removed');
+      notify(t('toast.removed'));
       await loadInstalled();
       await loadSkills();
     } catch (err) {
@@ -594,10 +616,12 @@ export default function App() {
         scope: item.scope,
       });
       if (result.status === 'cancelled') {
-        notify('Export cancelled');
+        notify(t('toast.exportCancelled'));
         return;
       }
-      notify(result.path ? `Exported to ${result.path}` : 'Exported');
+      notify(
+        result.path ? t('toast.exportedTo', { path: result.path }) : t('toast.exported'),
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -610,7 +634,7 @@ export default function App() {
         target: item.target,
         scope: item.scope,
       });
-      notify('Package copied');
+      notify(t('toast.packageCopied'));
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -618,7 +642,7 @@ export default function App() {
 
   async function linkToolTargets(item: InstalledSkill, targets: string[]) {
     if (targets.length === 0) {
-      notify('Choose a target');
+      notify(t('toast.chooseTarget'));
       return;
     }
     try {
@@ -629,7 +653,13 @@ export default function App() {
         targets,
       });
       const linked = result.results.filter((entry) => entry.status === 'linked').length;
-      notify(linked > 0 ? `Linked to ${linked} target${linked > 1 ? 's' : ''}` : 'Already available');
+      notify(
+        linked > 0
+          ? linked === 1
+            ? t('toast.linkedSingle')
+            : t('toast.linkedMulti', { count: linked })
+          : t('toast.alreadyAvailable'),
+      );
       await loadInstalled();
       await loadSkills();
     } catch (err) {
@@ -645,7 +675,7 @@ export default function App() {
       setSource((current) => nextSelectableSource(result.sources, current));
       setSourceName('');
       setSourceUrl('');
-      notify('Source added');
+      notify(t('toast.sourceAdded'));
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -659,8 +689,8 @@ export default function App() {
       setSource((current) => nextSelectableSource(result.sources, current));
       notify(
         result.added.length > 0
-          ? `Added ${result.added.length} built-in sources`
-          : 'Built-in sources already present',
+          ? t('toast.addedBuiltin', { count: result.added.length })
+          : t('toast.builtinPresent'),
       );
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -674,7 +704,7 @@ export default function App() {
       setSources(result.sources);
       setDefaultSource(result.defaultSource);
       setSource(nextSource);
-      notify(item.enabled ? 'Source disabled' : 'Source enabled');
+      notify(item.enabled ? t('toast.sourceDisabled') : t('toast.sourceEnabled'));
       await loadSkills(nextSource);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -693,8 +723,8 @@ export default function App() {
       setDefaultSource(result.defaultSource);
       notify(
         item.domesticMirror.enabled
-          ? 'Domestic mirror disabled'
-          : 'Domestic mirror enabled',
+          ? t('toast.mirrorDisabled')
+          : t('toast.mirrorEnabled'),
       );
       await loadSkills(source);
     } catch (err) {
@@ -705,7 +735,7 @@ export default function App() {
   async function toggleAllSourceMirrors() {
     const mirrorSources = sources.filter((item) => item.domesticMirror);
     if (mirrorSources.length === 0) {
-      notify('No domestic mirrors available');
+      notify(t('toast.noMirrors'));
       return;
     }
     const nextEnabled = !mirrorSources.every(
@@ -726,7 +756,7 @@ export default function App() {
       }
       setSources(nextSources);
       setDefaultSource(nextDefaultSource);
-      notify(nextEnabled ? 'Domestic mirrors enabled' : 'Domestic mirrors disabled');
+      notify(nextEnabled ? t('toast.mirrorsOn') : t('toast.mirrorsOff'));
       await loadSkills(source);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -740,7 +770,7 @@ export default function App() {
       setSources(result.sources);
       setDefaultSource(result.defaultSource);
       setSource(nextSource);
-      notify('Source removed');
+      notify(t('toast.sourceRemoved'));
       await loadSkills(nextSource);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -759,32 +789,54 @@ export default function App() {
             <Icon name="terminal" />
           </span>
           <span data-tauri-drag-region>
-            <strong>Suit Skills</strong>
-            <small>web console</small>
+            <strong>{t('brand.title')}</strong>
+            <small>{t('brand.subtitle')}</small>
           </span>
         </div>
         <div className="topbar-main" data-tauri-drag-region>
           <div className="crumb" data-tauri-drag-region>
-            <strong>Suit Skills</strong>
+            <strong>{t('brand.title')}</strong>
             <span>/</span>
-            <em>{view}</em>
+            <em>
+              {view === 'library'
+                ? t('crumb.viewLibrary')
+                : view === 'installed'
+                  ? t('crumb.viewInstalled')
+                  : t('crumb.viewSources')}
+            </em>
           </div>
           <div className="topbar-actions">
-            <button className="icon-button" title="Refresh" onClick={() => {
-              void loadSkills(source, debouncedQuery, tag, true);
-              void loadInstalled();
-            }}>
+            <select
+              id="app-locale-select"
+              className="locale-select"
+              value={i18n.language === 'en' ? 'en' : 'zh'}
+              onChange={(event) =>
+                changeLanguageWithStorage(event.target.value as AppLocale)
+              }
+              aria-label={t('language.label')}
+            >
+              <option value="zh">{t('language.zh')}</option>
+              <option value="en">{t('language.en')}</option>
+            </select>
+            <button
+              className="icon-button"
+              title={t('topbar.refresh')}
+              onClick={() => {
+                void loadSkills(source, debouncedQuery, tag, true);
+                void loadInstalled();
+              }}
+            >
               <Icon name="refresh" />
             </button>
             {isDesktop ? (
-              <div className="window-chrome" aria-label="Window controls">
-                <button title="Minimize" onClick={() => void windowCommand('minimize')}>
+              <div className="window-chrome" aria-label={t('topbar.windowControls')}>
+                <button title={t('topbar.minimize')} onClick={() => void windowCommand('minimize')}>
                   <span />
                 </button>
-                <button title="Maximize" onClick={() => void windowCommand('toggleMaximize')}>
+                <button title={t('topbar.maximize')} onClick={() => void windowCommand('toggleMaximize')}>
                   <i />
                 </button>
-                <button className="close" title="Close" onClick={() => void windowCommand('close')}>
+                <button className="close" title={t('topbar.close')} onClick={() => void windowCommand('close')}>
                   <b />
                 </button>
               </div>
@@ -794,19 +846,19 @@ export default function App() {
       </header>
 
       <aside className="rail">
-        <nav className="nav" aria-label="Primary">
-          <NavButton active={view === 'library'} onClick={() => setView('library')} icon="database" label="Skills" />
-          <NavButton active={view === 'installed'} onClick={() => setView('installed')} icon="check" label="Installed" />
-          <NavButton active={view === 'sources'} onClick={() => setView('sources')} icon="terminal" label="Sources" />
+        <nav className="nav" aria-label={t('nav.primary')}>
+          <NavButton active={view === 'library'} onClick={() => setView('library')} icon="database" label={t('nav.skills')} />
+          <NavButton active={view === 'installed'} onClick={() => setView('installed')} icon="check" label={t('nav.installed')} />
+          <NavButton active={view === 'sources'} onClick={() => setView('sources')} icon="terminal" label={t('nav.sources')} />
         </nav>
         <div className="rail-status">
-          <span>local index</span>
-          <strong><i /> ready</strong>
+          <span>{t('rail.indexLabel')}</span>
+          <strong><i /> {t('rail.ready')}</strong>
         </div>
       </aside>
 
       <main className="workspace">
-        {error ? <ErrorState message={error} /> : null}
+        {error ? <ErrorState message={translateApiError(t, error)} /> : null}
         {view === 'library' ? (
           <LibraryView
             detail={detail}
@@ -924,7 +976,9 @@ function LibraryView(props: {
   tag: string;
   tags: string[];
 }) {
+  const { t } = useTranslation();
   const activeSkill = props.detail ?? props.selectedSummary;
+  const unknown = t('common.unknown');
   return (
     <section className="console-grid">
       <div className="library">
@@ -935,14 +989,14 @@ function LibraryView(props: {
               <input
                 value={props.query}
                 onChange={(event) => props.onQueryChange(event.target.value)}
-                placeholder="Search skills, tags, descriptions"
+                placeholder={t('library.searchPlaceholder')}
               />
             </label>
             <select
               value={props.source}
               onChange={(event) => props.onSourceChange(event.target.value)}
             >
-              <option value="all">all enabled</option>
+              <option value="all">{t('library.allEnabled')}</option>
               {props.sources.map((item) => (
                 <option key={item.name} value={item.name}>
                   {item.name}
@@ -957,17 +1011,15 @@ function LibraryView(props: {
         <div className="library-scroll">
           <SourceWarnings warnings={props.sourceWarnings} />
           {props.loading ? (
-            <EmptyState>
-              Refreshing source cache. Network checks time out after 30 seconds.
-            </EmptyState>
+            <EmptyState>{t('library.loading')}</EmptyState>
           ) : null}
           {!props.loading && props.skills.length === 0 ? (
             <EmptyState>
               {props.sources.length === 0
-                ? 'No enabled sources.'
+                ? t('library.emptyNoSources')
                 : props.sourceWarnings.length > 0
-                  ? 'No skills from reachable enabled sources. Check Sources or enable domestic mirrors.'
-                  : 'No matching skills.'}
+                  ? t('library.emptyUnreachable')
+                  : t('library.emptyNoMatch')}
             </EmptyState>
           ) : null}
 
@@ -984,13 +1036,19 @@ function LibraryView(props: {
                   </span>
                   <em>
                     {highlightText(
-                      skill.installed ? 'installed' : `v${skill.version ?? 'unknown'}`,
+                      skill.installed
+                        ? t('library.installedBadge')
+                        : t('library.versionPrefix', {
+                            version: skill.version ?? unknown,
+                          }),
                       props.query,
                     )}
                   </em>
                 </span>
                 <strong>{highlightText(skill.name, props.query)}</strong>
-                <span>{highlightText(skill.description || 'No description', props.query)}</span>
+                <span>
+                  {highlightText(skill.description || t('library.noDescription'), props.query)}
+                </span>
                 <span className="card-tags">
                   {skill.tags?.slice(0, 4).map((item) => (
                     <i key={item}>{highlightText(item, props.query)}</i>
@@ -1004,21 +1062,21 @@ function LibraryView(props: {
 
       <aside className="detail">
         <div className="detail-hero">
-          <h1>{activeSkill?.name ?? 'Skill detail'}</h1>
-          <p>{activeSkill?.description ?? 'Select a skill.'}</p>
+          <h1>{activeSkill?.name ?? t('library.detailTitle')}</h1>
+          <p>{activeSkill?.description ?? t('library.selectSkill')}</p>
         </div>
         <div className="detail-body">
           <div className="action-row">
             <button className="button primary" onClick={props.onInstall} disabled={!activeSkill}>
               <Icon name="package" />
-              Install
+              {t('library.install')}
             </button>
             <button className="button" onClick={props.onCopyCommand} disabled={!activeSkill}>
               <Icon name="copy" />
-              Copy
+              {t('library.copy')}
             </button>
             <button className="button" onClick={props.onShare} disabled={!activeSkill}>
-              Share
+              {t('library.share')}
             </button>
           </div>
           <div className="install-options">
@@ -1046,8 +1104,8 @@ function LibraryView(props: {
               value={props.installScope}
               onChange={(event) => props.onInstallScopeChange(event.target.value as LocationScope)}
             >
-              <option value="global">global</option>
-              <option value="project">project</option>
+              <option value="global">{t('library.scopeGlobal')}</option>
+              <option value="project">{t('library.scopeProject')}</option>
             </select>
             <select
               value={props.installStrategy}
@@ -1055,20 +1113,31 @@ function LibraryView(props: {
                 props.onInstallStrategyChange(event.target.value as InstallStrategy)
               }
             >
-              <option value="skip">skip</option>
-              <option value="overwrite">overwrite</option>
-              <option value="rename">rename</option>
+              <option value="skip">{t('library.strategySkip')}</option>
+              <option value="overwrite">{t('library.strategyOverwrite')}</option>
+              <option value="rename">{t('library.strategyRename')}</option>
             </select>
           </div>
           <div className="meta-table">
-            <Info label="Version" value={activeSkill?.version} />
-            <Info label="Author" value={activeSkill?.author} />
-            <Info label="Source" value={activeSkill?.sourceName} />
+            <Info label={t('library.metaVersion')} value={activeSkill?.version} />
+            <Info label={t('library.metaAuthor')} value={activeSkill?.author} />
+            <Info label={t('library.metaSource')} value={activeSkill?.sourceName} />
             <Info
-              label="Targets"
-              value={props.detail?.installedTargets.join(', ') || 'not installed'}
+              label={t('library.metaTargets')}
+              value={
+                props.detail?.installedTargets.join(', ') || t('library.notInstalled')
+              }
             />
-            <Info label="Metadata" value={activeSkill?.metadataSource} />
+            <Info
+              label={t('library.metaMetadata')}
+              value={
+                activeSkill?.metadataSource
+                  ? t(`metadataSource.${activeSkill.metadataSource}`, {
+                      defaultValue: activeSkill.metadataSource,
+                    })
+                  : undefined
+              }
+            />
           </div>
           <MarkdownView markdown={props.detail?.markdown ?? ''} />
         </div>
@@ -1086,6 +1155,7 @@ function TagRow({
   tags: string[];
   onChange: (value: string) => void;
 }) {
+  const { t } = useTranslation();
   const orderedTags =
     active && tags.includes(active)
       ? [active, ...tags.filter((item) => item !== active)]
@@ -1099,7 +1169,7 @@ function TagRow({
     <div className={`tag-row-frame ${isCollapsible ? 'is-collapsible' : ''}`}>
       <div className="tag-row">
         <button className={active === '' ? 'active' : ''} onClick={() => onChange('')}>
-          all
+          {t('common.all')}
         </button>
         {visibleTags.map((item) => (
           <button
@@ -1113,7 +1183,7 @@ function TagRow({
         {isCollapsible ? (
           <button
             aria-haspopup="true"
-            aria-label={`Show ${overflowTags.length} more tags`}
+            aria-label={t('tags.showMore', { count: overflowTags.length })}
             className="tag-overflow-trigger"
             type="button"
           >
@@ -1154,6 +1224,8 @@ function InstalledView(props: {
   scope: ScopeFilter;
   target: string;
 }) {
+  const { t } = useTranslation();
+  const unknown = t('common.unknown');
   const [linkTargetKey, setLinkTargetKey] = useState<string | null>(null);
   const [linkSelections, setLinkSelections] = useState<Record<string, string[]>>({});
 
@@ -1194,7 +1266,7 @@ function InstalledView(props: {
   return (
     <section className="installed-page">
       <div className="page-head">
-        <h1>Installed Skills</h1>
+        <h1>{t('installed.title')}</h1>
       </div>
       <div className="toolbar installed-toolbar">
         <label className="search">
@@ -1202,14 +1274,14 @@ function InstalledView(props: {
           <input
             value={props.query}
             onChange={(event) => props.onQueryChange(event.target.value)}
-            placeholder="Search installed skills"
+            placeholder={t('installed.searchPlaceholder')}
           />
         </label>
         <select
           value={props.target}
           onChange={(event) => props.onTargetChange(event.target.value)}
         >
-          <option value="">all targets</option>
+          <option value="">{t('installed.allTargets')}</option>
           {TARGETS.map((target) => (
             <option key={target} value={target}>
               {target}
@@ -1220,15 +1292,15 @@ function InstalledView(props: {
           value={props.scope}
           onChange={(event) => props.onScopeChange(event.target.value as ScopeFilter)}
         >
-          <option value="all">all locations</option>
-          <option value="project">workspace</option>
-          <option value="global">user</option>
+          <option value="all">{t('installed.allLocations')}</option>
+          <option value="project">{t('installed.scopeWorkspace')}</option>
+          <option value="global">{t('installed.scopeUser')}</option>
         </select>
       </div>
 
-      {props.loading ? <EmptyState>Scanning installed directories...</EmptyState> : null}
+      {props.loading ? <EmptyState>{t('installed.scanning')}</EmptyState> : null}
       {!props.loading && props.installed.length === 0 ? (
-        <EmptyState>No installed skills found.</EmptyState>
+        <EmptyState>{t('installed.empty')}</EmptyState>
       ) : null}
 
       <div className="installed-scroll">
@@ -1243,27 +1315,46 @@ function InstalledView(props: {
               <article key={key}>
                 <div className="installed-main">
                   <strong>{highlightText(item.name, props.query)}</strong>
-                  <span>{highlightText(item.description || 'No description', props.query)}</span>
+                  <span>
+                    {highlightText(item.description || t('library.noDescription'), props.query)}
+                  </span>
                   <code>{highlightText(item.path, props.query)}</code>
                 </div>
                 <div className="installed-meta">
                   <b>{highlightText(item.target, props.query)}</b>
-                  <span>{highlightText(item.scope, props.query)}</span>
-                  <span>{highlightText(item.version ?? 'unknown', props.query)}</span>
+                  <span>
+                    {highlightText(
+                      t(`installed.scope.${item.scope}` as 'installed.scope.global'),
+                      props.query,
+                    )}
+                  </span>
+                  <span>{highlightText(item.version ?? unknown, props.query)}</span>
                 </div>
                 <div className="installed-actions">
-                  <button className="icon-button" title="Copy zip to clipboard" onClick={() => props.onCopyPackage(item)}>
+                  <button
+                    className="icon-button"
+                    title={t('installed.copyZipTitle')}
+                    onClick={() => props.onCopyPackage(item)}
+                  >
                     <Icon name="copy" />
                   </button>
-                  <button className="icon-button" title="Choose target agents" onClick={() => openLinkPicker(key, item)}>
+                  <button
+                    className="icon-button"
+                    title={t('installed.linkTargetsTitle')}
+                    onClick={() => openLinkPicker(key, item)}
+                  >
                     <Icon name="link" />
                   </button>
-                  <button className="icon-button" title="Export zip" onClick={() => props.onExport(item)}>
+                  <button
+                    className="icon-button"
+                    title={t('installed.exportZipTitle')}
+                    onClick={() => props.onExport(item)}
+                  >
                     <Icon name="package" />
                   </button>
                   <button
                     className="icon-button danger"
-                    title="Confirm remove"
+                    title={t('installed.confirmRemoveTitle')}
                     onClick={() => {
                       setLinkTargetKey(null);
                       props.onConfirmRemove(confirming ? null : key);
@@ -1274,7 +1365,7 @@ function InstalledView(props: {
                 </div>
                 {pickingTargets ? (
                   <div className="choice-strip">
-                    <span>Enable this skill in</span>
+                    <span>{t('installed.enableIn')}</span>
                     <div className="choice-options">
                       {linkOptions.map((target) => (
                         <label key={target} className="target-checkbox">
@@ -1295,21 +1386,28 @@ function InstalledView(props: {
                         setLinkTargetKey(null);
                       }}
                     >
-                      Apply
+                      {t('installed.apply')}
                     </button>
                     <button className="button" onClick={() => setLinkTargetKey(null)}>
-                      Cancel
+                      {t('installed.cancel')}
                     </button>
                   </div>
                 ) : null}
                 {confirming ? (
                   <div className="confirm-strip">
-                    <span>Delete {item.name} from {item.target} {item.scope}? {item.path}</span>
+                    <span>
+                      {t('installed.confirmDelete', {
+                        name: item.name,
+                        target: item.target,
+                        scope: t(`installed.scope.${item.scope}` as 'installed.scope.global'),
+                        path: item.path,
+                      })}
+                    </span>
                     <button className="button danger" onClick={() => props.onRemove(item)}>
-                      Delete
+                      {t('installed.delete')}
                     </button>
                     <button className="button" onClick={() => props.onConfirmRemove(null)}>
-                      Cancel
+                      {t('installed.cancel')}
                     </button>
                   </div>
                 ) : null}
@@ -1351,6 +1449,7 @@ function SourcesView({
   sources: Source[];
   url: string;
 }) {
+  const { t } = useTranslation();
   const [confirmDeleteSource, setConfirmDeleteSource] = useState<string | null>(
     null,
   );
@@ -1360,10 +1459,20 @@ function SourcesView({
     mirrorSources.length > 0 &&
     mirrorSources.every((source) => source.domesticMirror?.enabled);
 
+  function sourceDisplayLabel(source: Source): string {
+    return t(`builtinSources.${source.name}.label`, { defaultValue: source.label });
+  }
+
+  function sourceDisplayDescription(source: Source): string {
+    return t(`builtinSources.${source.name}.description`, {
+      defaultValue: source.description,
+    });
+  }
+
   return (
     <section className="installed-page">
       <div className="page-head">
-        <h1>Sources</h1>
+        <h1>{t('sources.title')}</h1>
         <div className="source-head-actions">
           <button
             className={allMirrorsEnabled ? 'button source-mirror-global active' : 'button source-mirror-global'}
@@ -1371,39 +1480,39 @@ function SourcesView({
             onClick={onToggleAllMirrors}
             title={
               mirrorSources.length === 0
-                ? '当前没有可切换的国内镜像'
+                ? t('sources.mirrorAllTitleNone')
                 : allMirrorsEnabled
-                  ? '切换所有内置源为上游 URL'
-                  : '切换所有内置源为国内镜像 URL'
+                  ? t('sources.mirrorAllTitleOn')
+                  : t('sources.mirrorAllTitleOff')
             }
           >
-            使用国内源
+            {t('sources.mirrorAllButton')}
           </button>
           <button className="button" disabled={refreshing} onClick={onRestore}>
             <Icon name="database" />
-            Add built-in sources
+            {t('sources.addBuiltin')}
           </button>
         </div>
       </div>
       <div className="source-form">
         <label>
-          <span>Name</span>
+          <span>{t('sources.nameLabel')}</span>
           <input
             value={name}
             onChange={(event) => onNameChange(event.target.value)}
-            placeholder="team-skills"
+            placeholder={t('sources.namePlaceholder')}
           />
         </label>
         <label>
-          <span>Git URL</span>
+          <span>{t('sources.urlLabel')}</span>
           <input
             value={url}
             onChange={(event) => onUrlChange(event.target.value)}
-            placeholder="https://github.com/acme/skills.git"
+            placeholder={t('sources.urlPlaceholder')}
           />
         </label>
         <button className="button primary" disabled={refreshing} onClick={onAdd}>
-          Add source
+          {t('sources.addSource')}
         </button>
       </div>
       <div className="source-list" aria-busy={refreshing}>
@@ -1415,44 +1524,50 @@ function SourcesView({
             isLastEnabledSource;
           const deleteTitle =
             source.name === defaultSource || source.name === 'default'
-              ? 'Default source cannot be removed'
+              ? t('sources.deleteTitleDefault')
               : isLastEnabledSource
-                ? 'At least one source must stay enabled'
+                ? t('sources.deleteTitleLast')
                 : undefined;
           const confirming = confirmDeleteSource === source.name;
           return (
             <article key={source.name}>
               <div className="source-main">
                 <strong>
-                  <span>{source.label}</span>
+                  <span>{sourceDisplayLabel(source)}</span>
                   <span className="source-tags">
-                    {source.name === defaultSource ? <i>default</i> : null}
-                    <i>{source.builtin ? 'builtin' : 'custom'}</i>
-                    <i>{source.category}</i>
+                    {source.name === defaultSource ? <i>{t('sources.tagDefault')}</i> : null}
+                    <i>
+                      {source.builtin ? t('sources.tagBuiltin') : t('sources.tagCustom')}
+                    </i>
+                    <i>
+                      {t(`sourceCategory.${source.category}`, {
+                        defaultValue: source.category,
+                      })}
+                    </i>
                     {source.domesticMirror ? (
                       <i>
                         {source.domesticMirror.enabled
-                          ? '国内镜像'
-                          : '上游'}
+                          ? t('sources.mirrorOn')
+                          : t('sources.mirrorOff')}
                       </i>
                     ) : null}
                   </span>
                 </strong>
                 <span className="source-description">
-                  {source.description}
+                  {sourceDisplayDescription(source)}
                 </span>
                 <span className="source-url-row">
-                  <b>上游</b>
+                  <b>{t('sources.upstream')}</b>
                   <code>{source.url}</code>
                 </span>
                 <span className="source-url-row">
-                  <b>当前</b>
+                  <b>{t('sources.current')}</b>
                   <code>{source.effectiveUrl}</code>
                 </span>
                 <span className="source-key">{source.name}</span>
               </div>
               <span className={source.enabled ? 'source-status on' : 'source-status'}>
-                {source.enabled ? 'enabled' : 'disabled'}
+                {source.enabled ? t('sources.statusEnabled') : t('sources.statusDisabled')}
               </span>
               <div className="source-actions">
                 <button
@@ -1461,11 +1576,11 @@ function SourcesView({
                   onClick={() => onToggle(source)}
                   title={
                     isLastEnabledSource
-                      ? 'At least one source must stay enabled'
+                      ? t('sources.toggleTitleLast')
                       : undefined
                   }
                 >
-                  {source.enabled ? 'Disable' : 'Enable'}
+                  {source.enabled ? t('sources.disable') : t('sources.enable')}
                 </button>
                 {source.domesticMirror ? (
                   <button
@@ -1474,11 +1589,13 @@ function SourcesView({
                     onClick={() => onToggleMirror(source)}
                     title={
                       source.domesticMirror.enabled
-                        ? '切换为上游 GitHub URL'
-                        : '切换为国内镜像 URL'
+                        ? t('sources.mirrorRowTitleOn')
+                        : t('sources.mirrorRowTitleOff')
                     }
                   >
-                    {source.domesticMirror.enabled ? '国内镜像 开' : '国内镜像 关'}
+                    {source.domesticMirror.enabled
+                      ? t('sources.mirrorToggleOn')
+                      : t('sources.mirrorToggleOff')}
                   </button>
                 ) : null}
                 <button
@@ -1489,14 +1606,16 @@ function SourcesView({
                   }
                   title={deleteTitle}
                 >
-                  Delete
+                  {t('sources.delete')}
                 </button>
               </div>
               {confirming ? (
                 <div className="confirm-strip source-confirm-strip">
                   <span>
-                    Delete source "{source.name}"? Installed skills are not
-                    removed. {source.description}
+                    {t('sources.confirmDelete', {
+                      name: source.name,
+                      description: sourceDisplayDescription(source),
+                    })}
                   </span>
                   <button
                     className="button danger"
@@ -1505,13 +1624,13 @@ function SourcesView({
                       setConfirmDeleteSource(null);
                     }}
                   >
-                    Delete
+                    {t('sources.delete')}
                   </button>
                   <button
                     className="button"
                     onClick={() => setConfirmDeleteSource(null)}
                   >
-                    Cancel
+                    {t('installed.cancel')}
                   </button>
                 </div>
               ) : null}
@@ -1522,8 +1641,8 @@ function SourcesView({
       {refreshing ? (
         <div className="source-sync-status" role="status" aria-live="polite">
           <span className="source-sync-spinner" />
-          <strong>Refreshing source cache</strong>
-          <em>Network checks time out after 30s</em>
+          <strong>{t('sources.syncingTitle')}</strong>
+          <em>{t('sources.syncingHint')}</em>
         </div>
       ) : null}
     </section>

@@ -1,0 +1,241 @@
+{
+  "common": {
+    "unknown": "unknown",
+    "all": "all",
+    "dash": "—"
+  },
+  "brand": {
+    "title": "Suit Skills",
+    "subtitle": "web console"
+  },
+  "crumb": {
+    "viewLibrary": "skills",
+    "viewInstalled": "installed",
+    "viewSources": "sources"
+  },
+  "nav": {
+    "primary": "Primary",
+    "skills": "Skills",
+    "installed": "Installed",
+    "sources": "Sources"
+  },
+  "rail": {
+    "indexLabel": "local index",
+    "ready": "ready"
+  },
+  "language": {
+    "label": "Language",
+    "zh": "中文",
+    "en": "English"
+  },
+  "topbar": {
+    "refresh": "Refresh",
+    "windowControls": "Window controls",
+    "minimize": "Minimize",
+    "maximize": "Maximize",
+    "close": "Close"
+  },
+  "markdown": {
+    "empty": "No SKILL.md content."
+  },
+  "warnings": {
+    "refreshFailed": "Some enabled sources could not refresh.",
+    "usingCache": "Using local cache for one or more sources.",
+    "hint": "Available skills are still shown. Enable domestic mirrors or disable unreachable sources from Sources if this keeps happening.",
+    "localCache": "local cache",
+    "unreachable": "unreachable"
+  },
+  "library": {
+    "searchPlaceholder": "Search skills, tags, descriptions",
+    "allEnabled": "all enabled",
+    "loading": "Refreshing source cache. Network checks time out after 30 seconds.",
+    "emptyNoSources": "No enabled sources.",
+    "emptyUnreachable": "No skills from reachable enabled sources. Check Sources or enable domestic mirrors.",
+    "emptyNoMatch": "No matching skills.",
+    "installedBadge": "installed",
+    "versionPrefix": "v{{version}}",
+    "noDescription": "No description",
+    "detailTitle": "Skill detail",
+    "selectSkill": "Select a skill.",
+    "install": "Install",
+    "copy": "Copy",
+    "share": "Share",
+    "scopeGlobal": "global",
+    "scopeProject": "project",
+    "strategySkip": "skip",
+    "strategyOverwrite": "overwrite",
+    "strategyRename": "rename",
+    "metaVersion": "Version",
+    "metaAuthor": "Author",
+    "metaSource": "Source",
+    "metaTargets": "Targets",
+    "metaMetadata": "Metadata",
+    "notInstalled": "not installed"
+  },
+  "tags": {
+    "showMore": "Show {{count}} more tags"
+  },
+  "installed": {
+    "title": "Installed Skills",
+    "searchPlaceholder": "Search installed skills",
+    "allTargets": "all targets",
+    "allLocations": "all locations",
+    "scopeWorkspace": "workspace",
+    "scopeUser": "user",
+    "scanning": "Scanning installed directories...",
+    "empty": "No installed skills found.",
+    "copyZipTitle": "Copy zip to clipboard",
+    "linkTargetsTitle": "Choose target agents",
+    "exportZipTitle": "Export zip",
+    "confirmRemoveTitle": "Confirm remove",
+    "enableIn": "Enable this skill in",
+    "apply": "Apply",
+    "cancel": "Cancel",
+    "confirmDelete": "Delete {{name}} from {{target}} {{scope}}? {{path}}",
+    "delete": "Delete",
+    "scope": {
+      "project": "project",
+      "global": "global"
+    }
+  },
+  "sources": {
+    "title": "Sources",
+    "mirrorAllTitleNone": "No domestic mirrors available for built-in sources",
+    "mirrorAllTitleOff": "Switch all built-in sources to domestic mirror URLs",
+    "mirrorAllTitleOn": "Switch all built-in sources to upstream URLs",
+    "mirrorAllButton": "Use domestic mirrors",
+    "addBuiltin": "Add built-in sources",
+    "nameLabel": "Name",
+    "urlLabel": "Git URL",
+    "namePlaceholder": "team-skills",
+    "urlPlaceholder": "https://github.com/acme/skills.git",
+    "addSource": "Add source",
+    "tagDefault": "default",
+    "tagBuiltin": "builtin",
+    "tagCustom": "custom",
+    "upstream": "Upstream",
+    "current": "Current",
+    "mirrorOn": "Domestic mirror",
+    "mirrorOff": "Upstream",
+    "mirrorToggleOn": "Domestic mirror on",
+    "mirrorToggleOff": "Domestic mirror off",
+    "mirrorRowTitleOn": "Switch to upstream Git URL",
+    "mirrorRowTitleOff": "Switch to domestic mirror URL",
+    "statusEnabled": "enabled",
+    "statusDisabled": "disabled",
+    "enable": "Enable",
+    "disable": "Disable",
+    "delete": "Delete",
+    "deleteTitleDefault": "Default source cannot be removed",
+    "deleteTitleLast": "At least one source must stay enabled",
+    "toggleTitleLast": "At least one source must stay enabled",
+    "confirmDelete": "Delete source \"{{name}}\"? Installed skills are not removed. {{description}}",
+    "syncingTitle": "Refreshing source cache",
+    "syncingHint": "Network checks time out after 30s"
+  },
+  "sourceCategory": {
+    "official": "official",
+    "engineering": "engineering",
+    "collection": "collection",
+    "cn": "cn",
+    "specialized": "specialized",
+    "custom": "custom"
+  },
+  "metadataSource": {
+    "skill-md": "skill-md",
+    "meta-json-fallback": "meta-json-fallback",
+    "unknown": "unknown"
+  },
+  "toast": {
+    "commandCopied": "Command copied",
+    "shareCopied": "Share text copied",
+    "installed": "Installed",
+    "removed": "Removed",
+    "exportCancelled": "Export cancelled",
+    "exported": "Exported",
+    "exportedTo": "Exported to {{path}}",
+    "packageCopied": "Package copied",
+    "chooseTarget": "Choose a target",
+    "linkedSingle": "Linked to 1 target",
+    "linkedMulti": "Linked to {{count}} targets",
+    "alreadyAvailable": "Already available",
+    "sourceAdded": "Source added",
+    "addedBuiltin": "Added {{count}} built-in sources",
+    "builtinPresent": "Built-in sources already present",
+    "sourceDisabled": "Source disabled",
+    "sourceEnabled": "Source enabled",
+    "mirrorDisabled": "Domestic mirror disabled",
+    "mirrorEnabled": "Domestic mirror enabled",
+    "noMirrors": "No domestic mirrors available",
+    "mirrorsOn": "Domestic mirrors enabled",
+    "mirrorsOff": "Domestic mirrors disabled",
+    "sourceRemoved": "Source removed"
+  },
+  "share": {
+    "skill": "Skill",
+    "version": "Version",
+    "source": "Source",
+    "tags": "Tags",
+    "install": "Install"
+  },
+  "install": {
+    "npxPlaceholder": "npx suit-skills@latest install <skill>"
+  },
+  "builtinSources": {
+    "default": {
+      "label": "Suit Skills default catalog",
+      "description": "Default skill library maintained for Suit Skills, enabled by default on new installs."
+    },
+    "anthropics-skills": {
+      "label": "Anthropic official skills",
+      "description": "Official Claude skills collection—solid foundation for your skill sources."
+    },
+    "superpowers": {
+      "label": "Superpowers engineering skills",
+      "description": "Engineering-focused skills for complex development, TDD, debugging, and refactoring."
+    },
+    "vercel-agent-skills": {
+      "label": "Vercel Agent skills",
+      "description": "Skills centered on Web, full-stack, Next.js, and deployment workflows."
+    },
+    "huggingface-skills": {
+      "label": "Hugging Face skills",
+      "description": "Skills for the Hugging Face and open-source model ecosystem."
+    },
+    "antigravity-awesome-skills": {
+      "label": "Antigravity awesome skills",
+      "description": "Cross-platform collection of AI skill resources."
+    },
+    "awesome-claude-skills": {
+      "label": "Awesome Claude skills index",
+      "description": "Curated index of Claude skill resources—great for discovering more sources."
+    }
+  },
+  "apiErrors": {
+    "skillNotFound": "Skill not found",
+    "skillNotInstalled": "Skill not installed",
+    "sourceNotFound": "Source not found",
+    "apiRouteNotFound": "API route not found",
+    "installTargetRequired": "Install target is required",
+    "invalidSkillName": "Invalid skill name",
+    "skillNameRequired": "Skill name is required",
+    "sourceNameRequired": "Source name is required",
+    "sourceNameInvalid": "Source name may only contain letters, numbers, dot, underscore, and dash",
+    "sourceUrlRequired": "Source URL is required",
+    "sourceAlreadyExists": "Source already exists",
+    "cannotRemoveDefaultSource": "Cannot remove default source",
+    "cannotRemoveLastSource": "Cannot remove the last enabled source",
+    "cannotDisableLastSource": "Cannot disable the last enabled source",
+    "pathNotAllowed": "Resolved skill path is outside the install target",
+    "sourceTargetHasSkill": "Source target already has this skill",
+    "targetHasSkill": "Target already has this skill",
+    "payloadTooLarge": "Request body too large",
+    "clipboardWindowsOnly": "Copying a file to the clipboard is currently supported on Windows only",
+    "invalidScope": "Invalid scope: {{scope}}",
+    "unknownInstallTarget": "Unknown install target: {{target}}",
+    "invalidJson": "Invalid JSON body: {{detail}}",
+    "invalidInstallStrategy": "Invalid install strategy: {{strategy}}",
+    "symlinkFailed": "Failed to create symlink: {{detail}}",
+    "linkedTo": "Linked to {{path}}"
+  }
+}

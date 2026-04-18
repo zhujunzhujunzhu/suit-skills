@@ -1,6 +1,6 @@
 import type { Config, SkillMeta, Source } from '../types/index.js';
 import type { CliContext } from './context.js';
-import { scanSkillsFromCache } from '../lib/skills.js';
+import { includesInsensitive, scanSkillsFromCache } from '../lib/skills.js';
 import { getEffectiveSourceUrl } from '../lib/config.js';
 import { warn } from '../utils/output.js';
 
@@ -53,9 +53,9 @@ export function collectMetasFromSources(
 }
 
 export function tagMatches(meta: SkillMeta, tagFilter: string): boolean {
-  const t = tagFilter.trim().toLowerCase();
+  const t = tagFilter.trim();
   if (!t) return true;
   return (
-    meta.tags?.some((x) => x.toLowerCase().includes(t)) === true
+    meta.tags?.some((x) => includesInsensitive(x, t)) === true
   );
 }

@@ -12,7 +12,7 @@ import { resolveInstallTargetsOrPrompt } from '../lib/prompt-install-targets.js'
 import { parseSkillIdentifier, validateSkillName } from '../utils/validate.js';
 import { success, warn } from '../utils/output.js';
 import { createSymlink } from '../utils/fs.js';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 
 /** 中央存储的 agent key */
 const CENTRAL_STORE_AGENT = 'agents';
@@ -81,96 +81,67 @@ export function registerInstall(program: Command, ctx: CliContext): void {
           | 'skip'
           | 'rename';
 
-        // 全局安装时：先安装到中央存储，再为其他平台创建软链接
-        if (isGlobal) {
-          // 1. 安装到中央存储 ~/.agents/skills
-          const centralDisplayTarget = resolveDisplayPathForToken(
-            config,
-            CENTRAL_STORE_AGENT,
-            true,
+        // 全局 ~/.agents/skills 与项目 ./.agents/skills：先写入中央存储，再为其它目标创建软链接
+        const centralDisplayTarget = resolveDisplayPathForToken(
+          config,
+          CENTRAL_STORE_AGENT,
+          isGlobal,
+        );
+        const centralAbsTarget = toAbsoluteInstallRoot(
+          centralDisplayTarget,
+          ctx.cwd,
+          ctx.userHome,
+        );
+
+        let centralResult: { path?: string; skipped?: boolean; message?: string };
+        try {
+          centralResult = installSkillWithConflict(
+            cacheRoot,
+            centralAbsTarget,
+            id,
+            strategy,
           );
-          const centralAbsTarget = toAbsoluteInstallRoot(
-            centralDisplayTarget,
+          if (centralResult.skipped) {
+            warn(`[${CENTRAL_STORE_AGENT}] ${centralResult.message ?? 'Skipped'}`);
+            return;
+          }
+          success(`[${CENTRAL_STORE_AGENT}] Installed to ${centralResult.path}`);
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          if (msg.includes('Skill not found')) {
+            throw new Error('Skill not found');
+          }
+          throw e;
+        }
+
+        const centralSkillPath = centralResult.path;
+        if (!centralSkillPath) {
+          return;
+        }
+
+        for (const token of tokens) {
+          if (token === CENTRAL_STORE_AGENT) {
+            continue;
+          }
+          const displayTarget = resolveDisplayPathForToken(config, token, isGlobal);
+          const absTarget = toAbsoluteInstallRoot(
+            displayTarget,
             ctx.cwd,
             ctx.userHome,
           );
+          const linkPath = join(absTarget, name);
 
-          let centralResult: { path?: string; skipped?: boolean; message?: string };
+          if (resolve(centralSkillPath) === resolve(linkPath)) {
+            continue;
+          }
+
           try {
-            centralResult = installSkillWithConflict(
-              cacheRoot,
-              centralAbsTarget,
-              id,
-              strategy,
-            );
-            if (centralResult.skipped) {
-              warn(`[${CENTRAL_STORE_AGENT}] ${centralResult.message ?? 'Skipped'}`);
-              return;
-            }
-            success(`[${CENTRAL_STORE_AGENT}] Installed to ${centralResult.path}`);
+            createSymlink(centralSkillPath, linkPath);
+            success(`[${token}] Linked to ${linkPath}`);
           } catch (e) {
-            const msg = e instanceof Error ? e.message : String(e);
-            if (msg.includes('Skill not found')) {
-              throw new Error('Skill not found');
-            }
-            throw e;
-          }
-
-          // 2. 为用户选择的平台（除 agents 外）创建软链接
-          const centralSkillPath = centralResult.path;
-          if (!centralSkillPath) {
-            return;
-          }
-
-          for (const token of tokens) {
-            if (token === CENTRAL_STORE_AGENT) {
-              continue; // 中央存储已安装，跳过
-            }
-            const displayTarget = resolveDisplayPathForToken(config, token, true);
-            const absTarget = toAbsoluteInstallRoot(
-              displayTarget,
-              ctx.cwd,
-              ctx.userHome,
+            warn(
+              `[${token}] Failed to create symlink: ${e instanceof Error ? e.message : String(e)}`,
             );
-            const linkPath = join(absTarget, name);
-
-            try {
-              createSymlink(centralSkillPath, linkPath);
-              success(`[${token}] Linked to ${linkPath}`);
-            } catch (e) {
-              warn(`[${token}] Failed to create symlink: ${e instanceof Error ? e.message : String(e)}`);
-            }
-          }
-        } else {
-          // 项目级安装：直接安装到各目标目录（不使用软链接）
-          for (const token of tokens) {
-            const displayTarget = resolveDisplayPathForToken(config, token, false);
-            const absTarget = toAbsoluteInstallRoot(
-              displayTarget,
-              ctx.cwd,
-              ctx.userHome,
-            );
-
-            try {
-              const result = installSkillWithConflict(
-                cacheRoot,
-                absTarget,
-                id,
-                strategy,
-              );
-
-              if (result.skipped) {
-                warn(`[${token}] ${result.message ?? 'Skipped'}`);
-                continue;
-              }
-              success(`[${token}] Installed to ${result.path}`);
-            } catch (e) {
-              const msg = e instanceof Error ? e.message : String(e);
-              if (msg.includes('Skill not found')) {
-                throw new Error('Skill not found');
-              }
-              throw e;
-            }
           }
         }
       },

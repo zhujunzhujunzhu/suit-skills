@@ -329,6 +329,11 @@ describe('阶段 9 CLI', () => {
         'skills',
       ]);
       expect(
+        existsSync(
+          join(projectDir, '.agents', 'skills', 'code-review', 'meta.json'),
+        ),
+      ).toBe(true);
+      expect(
         existsSync(join(projectDir, '.skills', 'code-review', 'meta.json')),
       ).toBe(true);
     });
@@ -843,6 +848,11 @@ describe('阶段 9 CLI', () => {
       const prog = createProgramForTest(ctx());
       await runCliUserArgs(prog, ['env', 'set', 'skills,claude']);
       await runCliUserArgs(prog, ['install', 'code-review', '--local']);
+      expect(
+        existsSync(
+          join(projectDir, '.agents', 'skills', 'code-review', 'meta.json'),
+        ),
+      ).toBe(true);
       expect(
         existsSync(join(projectDir, '.skills', 'code-review', 'meta.json')),
       ).toBe(true);

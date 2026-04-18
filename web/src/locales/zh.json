@@ -1,0 +1,241 @@
+{
+  "common": {
+    "unknown": "未知",
+    "all": "全部",
+    "dash": "—"
+  },
+  "brand": {
+    "title": "Suit Skills",
+    "subtitle": "网页控制台"
+  },
+  "crumb": {
+    "viewLibrary": "技能库",
+    "viewInstalled": "已安装",
+    "viewSources": "源"
+  },
+  "nav": {
+    "primary": "主导航",
+    "skills": "技能库",
+    "installed": "已安装",
+    "sources": "源"
+  },
+  "rail": {
+    "indexLabel": "本地索引",
+    "ready": "就绪"
+  },
+  "language": {
+    "label": "语言",
+    "zh": "中文",
+    "en": "English"
+  },
+  "topbar": {
+    "refresh": "刷新",
+    "windowControls": "窗口控制",
+    "minimize": "最小化",
+    "maximize": "最大化",
+    "close": "关闭"
+  },
+  "markdown": {
+    "empty": "暂无 SKILL.md 内容。"
+  },
+  "warnings": {
+    "refreshFailed": "部分已启用的源未能刷新。",
+    "usingCache": "一个或多个源正在使用本地缓存。",
+    "hint": "仍可浏览可用技能。若持续出现此提示，请在「源」中启用国内镜像或关闭无法访问的源。",
+    "localCache": "本地缓存",
+    "unreachable": "不可达"
+  },
+  "library": {
+    "searchPlaceholder": "搜索技能、标签、描述",
+    "allEnabled": "全部已启用",
+    "loading": "正在刷新源缓存，网络检查最长约 30 秒。",
+    "emptyNoSources": "没有已启用的源。",
+    "emptyUnreachable": "已启用的源均不可达，暂无技能。请检查「源」或启用国内镜像。",
+    "emptyNoMatch": "没有匹配的技能。",
+    "installedBadge": "已安装",
+    "versionPrefix": "v{{version}}",
+    "noDescription": "无描述",
+    "detailTitle": "技能详情",
+    "selectSkill": "请选择一个技能。",
+    "install": "安装",
+    "copy": "复制",
+    "share": "分享",
+    "scopeGlobal": "全局",
+    "scopeProject": "项目",
+    "strategySkip": "跳过",
+    "strategyOverwrite": "覆盖",
+    "strategyRename": "重命名",
+    "metaVersion": "版本",
+    "metaAuthor": "作者",
+    "metaSource": "源",
+    "metaTargets": "目标",
+    "metaMetadata": "元数据",
+    "notInstalled": "未安装"
+  },
+  "tags": {
+    "showMore": "还有 {{count}} 个标签"
+  },
+  "installed": {
+    "title": "已安装技能",
+    "searchPlaceholder": "搜索已安装技能",
+    "allTargets": "全部目标",
+    "allLocations": "全部位置",
+    "scopeWorkspace": "工作区",
+    "scopeUser": "用户",
+    "scanning": "正在扫描已安装目录…",
+    "empty": "未发现已安装技能。",
+    "copyZipTitle": "复制 zip 到剪贴板",
+    "linkTargetsTitle": "选择目标智能体",
+    "exportZipTitle": "导出 zip",
+    "confirmRemoveTitle": "确认移除",
+    "enableIn": "在以下目标中启用此技能",
+    "apply": "应用",
+    "cancel": "取消",
+    "confirmDelete": "从 {{target}}（{{scope}}）删除「{{name}}」？{{path}}",
+    "delete": "删除",
+    "scope": {
+      "project": "项目",
+      "global": "全局"
+    }
+  },
+  "sources": {
+    "title": "源",
+    "mirrorAllTitleNone": "当前没有可切换的国内镜像",
+    "mirrorAllTitleOff": "将所有内置源切换为国内镜像地址",
+    "mirrorAllTitleOn": "将所有内置源切换为上游地址",
+    "mirrorAllButton": "使用国内源",
+    "addBuiltin": "添加内置源",
+    "nameLabel": "名称",
+    "urlLabel": "Git 地址",
+    "namePlaceholder": "team-skills",
+    "urlPlaceholder": "https://github.com/acme/skills.git",
+    "addSource": "添加源",
+    "tagDefault": "默认",
+    "tagBuiltin": "内置",
+    "tagCustom": "自定义",
+    "upstream": "上游",
+    "current": "当前",
+    "mirrorOn": "国内镜像",
+    "mirrorOff": "上游",
+    "mirrorToggleOn": "国内镜像 开",
+    "mirrorToggleOff": "国内镜像 关",
+    "mirrorRowTitleOn": "切换为上游 Git 地址",
+    "mirrorRowTitleOff": "切换为国内镜像地址",
+    "statusEnabled": "已启用",
+    "statusDisabled": "已停用",
+    "enable": "启用",
+    "disable": "停用",
+    "delete": "删除",
+    "deleteTitleDefault": "默认源不可删除",
+    "deleteTitleLast": "至少保留一个已启用的源",
+    "toggleTitleLast": "至少保留一个已启用的源",
+    "confirmDelete": "删除源「{{name}}」？不会移除已安装的技能。{{description}}",
+    "syncingTitle": "正在刷新源缓存",
+    "syncingHint": "网络检查最长约 30 秒"
+  },
+  "sourceCategory": {
+    "official": "官方",
+    "engineering": "工程",
+    "collection": "合集",
+    "cn": "国内",
+    "specialized": "专题",
+    "custom": "自定义"
+  },
+  "metadataSource": {
+    "skill-md": "SKILL.md",
+    "meta-json-fallback": "meta.json",
+    "unknown": "未知"
+  },
+  "toast": {
+    "commandCopied": "已复制命令",
+    "shareCopied": "已复制分享文本",
+    "installed": "安装完成",
+    "removed": "已移除",
+    "exportCancelled": "已取消导出",
+    "exported": "已导出",
+    "exportedTo": "已导出到 {{path}}",
+    "packageCopied": "已复制安装包",
+    "chooseTarget": "请选择目标",
+    "linkedSingle": "已关联 1 个目标",
+    "linkedMulti": "已关联 {{count}} 个目标",
+    "alreadyAvailable": "已在目标中可用",
+    "sourceAdded": "已添加源",
+    "addedBuiltin": "已添加 {{count}} 个内置源",
+    "builtinPresent": "内置源已存在",
+    "sourceDisabled": "已停用源",
+    "sourceEnabled": "已启用源",
+    "mirrorDisabled": "已关闭国内镜像",
+    "mirrorEnabled": "已启用国内镜像",
+    "noMirrors": "没有可用的国内镜像",
+    "mirrorsOn": "已批量启用国内镜像",
+    "mirrorsOff": "已批量关闭国内镜像",
+    "sourceRemoved": "已删除源"
+  },
+  "share": {
+    "skill": "技能",
+    "version": "版本",
+    "source": "源",
+    "tags": "标签",
+    "install": "安装"
+  },
+  "install": {
+    "npxPlaceholder": "npx suit-skills@latest install <skill>"
+  },
+  "builtinSources": {
+    "default": {
+      "label": "Suit Skills 默认源",
+      "description": "数知建维护的默认技能库，新安装默认启用。"
+    },
+    "anthropics-skills": {
+      "label": "Anthropic 官方技能库",
+      "description": "Claude 官方技能合集，适合作为基础技能来源。"
+    },
+    "superpowers": {
+      "label": "Superpowers 工程技能库",
+      "description": "面向复杂开发、TDD、调试和重构的工程技能库。"
+    },
+    "vercel-agent-skills": {
+      "label": "Vercel Agent 技能库",
+      "description": "聚焦 Web、全栈、Next.js 和部署场景的技能库。"
+    },
+    "huggingface-skills": {
+      "label": "Hugging Face 技能库",
+      "description": "面向 Hugging Face 与开源模型生态的技能库。"
+    },
+    "antigravity-awesome-skills": {
+      "label": "Antigravity 技能合集",
+      "description": "跨平台 AI 技能资源合集。"
+    },
+    "awesome-claude-skills": {
+      "label": "Claude 技能资源索引",
+      "description": "Claude 技能资源的精选索引，适合发现更多来源。"
+    }
+  },
+  "apiErrors": {
+    "skillNotFound": "未找到技能",
+    "skillNotInstalled": "技能未安装",
+    "sourceNotFound": "未找到源",
+    "apiRouteNotFound": "API 路径不存在",
+    "installTargetRequired": "必须指定安装目标",
+    "invalidSkillName": "技能名称无效",
+    "skillNameRequired": "必须填写技能名称",
+    "sourceNameRequired": "必须填写源名称",
+    "sourceNameInvalid": "源名称只能包含字母、数字、点、下划线和连字符",
+    "sourceUrlRequired": "必须填写源地址",
+    "sourceAlreadyExists": "源已存在",
+    "cannotRemoveDefaultSource": "不能删除默认源",
+    "cannotRemoveLastSource": "不能删除最后一个已启用的源",
+    "cannotDisableLastSource": "不能停用最后一个已启用的源",
+    "pathNotAllowed": "解析出的技能路径超出安装目标允许范围",
+    "sourceTargetHasSkill": "该源目标下已有此技能",
+    "targetHasSkill": "该目标下已有此技能",
+    "payloadTooLarge": "请求体过大",
+    "clipboardWindowsOnly": "目前仅 Windows 支持将文件复制到剪贴板",
+    "invalidScope": "无效的作用域：{{scope}}",
+    "unknownInstallTarget": "未知的安装目标：{{target}}",
+    "invalidJson": "JSON 无效：{{detail}}",
+    "invalidInstallStrategy": "无效的安装策略：{{strategy}}",
+    "symlinkFailed": "创建符号链接失败：{{detail}}",
+    "linkedTo": "已关联到 {{path}}"
+  }
+}
