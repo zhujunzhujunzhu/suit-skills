@@ -13,6 +13,7 @@ import { registerConfig } from '../commands/config-cmd.js';
 import { registerEnv } from '../commands/env.js';
 import { registerWeb } from '../commands/web.js';
 import { registerShare } from '../commands/share.js';
+import { registerTargets } from '../commands/targets-cmd.js';
 
 export function buildProgram(ctx: CliContext): Command {
   const program = new Command();
@@ -33,6 +34,7 @@ export function buildProgram(ctx: CliContext): Command {
   registerEnv(program, ctx);
   registerWeb(program, ctx);
   registerShare(program, ctx);
+  registerTargets(program, ctx);
 
   return program;
 }

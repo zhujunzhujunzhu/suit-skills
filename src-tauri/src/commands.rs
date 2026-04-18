@@ -197,6 +197,43 @@ pub async fn get_skills_list(
     run_cli_command(&app, args).await
 }
 
+/// 安装目标列表（与 Web UI 一致）
+#[command]
+pub async fn get_install_targets(app: AppHandle) -> SkillResult {
+    run_cli_command(
+        &app,
+        vec![
+            "targets".to_string(),
+            "list".to_string(),
+            "--json".to_string(),
+        ],
+    )
+    .await
+}
+
+/// 添加自定义安装目标映射
+#[command]
+pub async fn add_install_target(
+    app: AppHandle,
+    id: String,
+    global_dir: String,
+    project_dir: String,
+) -> SkillResult {
+    run_cli_command(
+        &app,
+        vec![
+            "targets".to_string(),
+            "add".to_string(),
+            id,
+            "--global-dir".to_string(),
+            global_dir,
+            "--project-dir".to_string(),
+            project_dir,
+        ],
+    )
+    .await
+}
+
 /// 获取技能详情
 #[command]
 pub async fn get_skill_detail(app: AppHandle, name: String, source: Option<String>) -> SkillResult {
@@ -231,8 +268,9 @@ pub async fn install_skill(
             args.push(t_list.join(","));
         }
     }
-    if global {
-        args.push("--global".to_string());
+    // `install` 子命令只有 `--local`（项目），省略则为全局；不要传 `--global`（会报错）
+    if !global {
+        args.push("--local".to_string());
     }
 
     run_cli_command(&app, args).await

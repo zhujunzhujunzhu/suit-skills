@@ -155,6 +155,18 @@ export function getDefaultConfig(): Config {
         globalDir: '~/.codex/skills',
         projectDir: './.codex/skills',
       },
+      gemini: {
+        globalDir: '~/.gemini/skills',
+        projectDir: './.gemini/skills',
+      },
+      opencode: {
+        globalDir: '~/.opencode/skills',
+        projectDir: './.opencode/skills',
+      },
+      openclaw: {
+        globalDir: '~/.openclaw/skills',
+        projectDir: './.openclaw/skills',
+      },
     },
     /** 默认安装目标：全局安装到 agents（中央存储） */
     installTargets: ['agents'],

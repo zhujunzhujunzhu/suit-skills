@@ -28,13 +28,16 @@ describe('getDefaultConfig', () => {
     );
   });
 
-  it('agents 包含常见约定目录（claude / cursor / agents / copilot / codex）', () => {
+  it('agents 包含常见约定目录（claude / cursor / agents / copilot / codex / gemini / opencode / openclaw）', () => {
     const cfg = getDefaultConfig();
     expect(cfg.agents.claude?.projectDir).toBe('./.claude/skills');
     expect(cfg.agents.cursor?.projectDir).toBe('./.cursor/skills');
     expect(cfg.agents.agents?.projectDir).toBe('./.agents/skills');
     expect(cfg.agents.copilot?.projectDir).toBe('./.copilot/skills');
     expect(cfg.agents.codex?.projectDir).toBe('./.codex/skills');
+    expect(cfg.agents.gemini?.projectDir).toBe('./.gemini/skills');
+    expect(cfg.agents.opencode?.projectDir).toBe('./.opencode/skills');
+    expect(cfg.agents.openclaw?.projectDir).toBe('./.openclaw/skills');
   });
 
   it('recommended sources are present but disabled by default', () => {

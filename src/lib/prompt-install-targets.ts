@@ -13,6 +13,9 @@ function agentDisplayName(key: string): string {
     codex: 'OpenAI Codex',
     copilot: 'GitHub Copilot',
     agents: 'Open Agents',
+    gemini: 'Gemini CLI',
+    opencode: 'OpenCode',
+    openclaw: 'OpenClaw',
   };
   return map[key] ?? key.charAt(0).toUpperCase() + key.slice(1);
 }

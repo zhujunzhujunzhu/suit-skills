@@ -130,6 +130,47 @@ export async function tauriInstallSkill(options: {
   await runCommand('install_skill', options);
 }
 
+export async function tauriGetInstallTargets(): Promise<{
+  library?: {
+    id: string;
+    label: string;
+    globalDir: string;
+    projectDir: string;
+    globalPath: string;
+    projectPath: string;
+    globalExists: boolean;
+    projectExists: boolean;
+  };
+  targets: Array<{
+    id: string;
+    label: string;
+    globalDir?: string;
+    projectDir?: string;
+    globalPath?: string;
+    projectPath?: string;
+    globalExists?: boolean;
+    projectExists?: boolean;
+    builtin?: boolean;
+    hidden?: boolean;
+    editable?: boolean;
+    removable?: boolean;
+  }>;
+}> {
+  return runCommand('get_install_targets', {});
+}
+
+export async function tauriAddInstallTarget(options: {
+  id: string;
+  globalDir: string;
+  projectDir: string;
+}): Promise<void> {
+  await runCommand('add_install_target', {
+    id: options.id,
+    global_dir: options.globalDir,
+    project_dir: options.projectDir,
+  });
+}
+
 export async function tauriRemoveSkill(options: {
   name: string;
   target?: string;
