@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, readdirSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
 export type GitSpawnSync = typeof spawnSync;
@@ -9,6 +9,8 @@ export interface GitModuleOptions {
   env?: NodeJS.ProcessEnv;
   /** 测试注入：替代 `spawnSync` */
   spawnSync?: GitSpawnSync;
+  /** Git 子进程超时时间，默认 30 秒 */
+  timeoutMs?: number;
 }
 
 export interface PullRepoResult {
@@ -20,9 +22,12 @@ export interface CloneOrPullRepoResult {
   path: string;
   /** pull 失败但保留本地缓存时为 `true`（阶段 4.4） */
   warning?: boolean;
+  warningMessage?: string;
   /** 本次调用是否执行了全新 clone（非 pull） */
   freshlyCloned?: boolean;
 }
+
+export const DEFAULT_GIT_TIMEOUT_MS = 30_000;
 
 function getSpawn(options?: GitModuleOptions): GitSpawnSync {
   return options?.spawnSync ?? spawnSync;
@@ -34,11 +39,19 @@ function spawnGit(
   options: GitModuleOptions | undefined,
 ): ReturnType<GitSpawnSync> {
   const sync = getSpawn(options);
+  const env = {
+    ...(options?.env ?? process.env),
+    GIT_TERMINAL_PROMPT: '0',
+    GCM_INTERACTIVE: 'Never',
+  };
   return sync('git', args, {
     cwd,
     encoding: 'utf8',
-    env: options?.env ?? process.env,
+    env,
     stdio: ['ignore', 'pipe', 'pipe'],
+    timeout: options?.timeoutMs ?? DEFAULT_GIT_TIMEOUT_MS,
+    killSignal: 'SIGTERM',
+    windowsHide: true,
   });
 }
 
@@ -91,10 +104,25 @@ function assertDestDirEmptyOrAbsent(destDir: string): void {
   }
 }
 
-function formatGitFailure(operation: string, result: ReturnType<GitSpawnSync>): string {
+function isTimeoutResult(result: ReturnType<GitSpawnSync>): boolean {
+  const error = result.error as (Error & { code?: string }) | undefined;
+  return error?.code === 'ETIMEDOUT' || result.signal === 'SIGTERM';
+}
+
+function formatGitFailure(
+  operation: string,
+  result: ReturnType<GitSpawnSync>,
+  options?: GitModuleOptions,
+): string {
   const stderr = (result.stderr ?? '').toString().trim();
   const stdout = (result.stdout ?? '').toString().trim();
   const hint = stderr || stdout || (result.error?.message ?? 'unknown error');
+  if (isTimeoutResult(result)) {
+    const seconds = Math.round(
+      (options?.timeoutMs ?? DEFAULT_GIT_TIMEOUT_MS) / 1000,
+    );
+    return `${operation} timed out after ${seconds}s. Please check the network or switch the source mirror. ${hint}`;
+  }
   return `${operation} failed: ${hint}`;
 }
 
@@ -123,13 +151,18 @@ export function cloneRepo(
 ): void {
   assertGitAvailable(options);
   assertValidRemoteUrl(url);
+  const canCleanDestAfterFailure =
+    !existsSync(destDir) || readdirSync(destDir).length === 0;
   assertDestDirEmptyOrAbsent(destDir);
 
   mkdirSync(dirname(destDir), { recursive: true });
 
   const result = spawnGit(['clone', url, destDir], undefined, options);
   if (result.status !== 0) {
-    throw new Error(formatGitFailure(`git clone (${url} -> ${destDir})`, result));
+    if (canCleanDestAfterFailure) {
+      rmSync(destDir, { recursive: true, force: true });
+    }
+    throw new Error(formatGitFailure(`git clone (${url} -> ${destDir})`, result, options));
   }
 }
 
@@ -145,13 +178,13 @@ export function pullRepo(
     return { ok: false, error: `不是有效的 git 工作区：${repoDir}` };
   }
 
-  const result = spawnGit(['pull'], repoDir, options);
+  const result = spawnGit(['pull', '--ff-only'], repoDir, options);
   if (result.status === 0) {
     return { ok: true };
   }
   return {
     ok: false,
-    error: formatGitFailure('git pull', result),
+    error: formatGitFailure('git pull', result, options),
   };
 }
 
@@ -168,13 +201,16 @@ export function cloneOrPullRepo(
   assertGitAvailable(options);
 
   if (!isGitWorkTree(cacheDir)) {
+    if (existsSync(cacheDir)) {
+      rmSync(cacheDir, { recursive: true, force: true });
+    }
     cloneRepo(url, cacheDir, options);
     return { path: cacheDir, freshlyCloned: true };
   }
 
   const pulled = pullRepo(cacheDir, options);
   if (!pulled.ok) {
-    return { path: cacheDir, warning: true };
+    return { path: cacheDir, warning: true, warningMessage: pulled.error };
   }
   return { path: cacheDir, freshlyCloned: false };
 }

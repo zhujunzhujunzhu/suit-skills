@@ -1,6 +1,8 @@
 import type { Config, SkillMeta, Source } from '../types/index.js';
 import type { CliContext } from './context.js';
 import { scanSkillsFromCache } from '../lib/skills.js';
+import { getEffectiveSourceUrl } from '../lib/config.js';
+import { warn } from '../utils/output.js';
 
 export function findSourceByName(config: Config, name: string): Source | null {
   return config.sources.find((s) => s.name === name) ?? null;
@@ -35,7 +37,11 @@ export function collectMetasFromSources(
     if (!src) {
       throw new Error('Source not found');
     }
-    const r = ctx.refreshForSource(src.url);
+    warn(`Refreshing source ${src.name} (${getEffectiveSourceUrl(src)})...`);
+    const r = ctx.refreshForSource(src);
+    if ('warning' in r) {
+      warn(r.warning);
+    }
     const metas = scanSkillsFromCache(r.path);
     for (const meta of metas) {
       if (seen.has(meta.name)) continue;

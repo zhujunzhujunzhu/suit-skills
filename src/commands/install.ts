@@ -6,6 +6,7 @@ import {
   getEffectiveInstallTargets,
   resolveDisplayPathForToken,
 } from '../lib/install-targets.js';
+import { getEffectiveSourceUrl } from '../lib/config.js';
 import { installSkillWithConflict } from '../lib/install.js';
 import { resolveInstallTargetsOrPrompt } from '../lib/prompt-install-targets.js';
 import { parseSkillIdentifier, validateSkillName } from '../utils/validate.js';
@@ -55,7 +56,11 @@ export function registerInstall(program: Command, ctx: CliContext): void {
         const config = ctx.loadConfig();
         const sourceName = opts.source ?? config.defaultSource;
         const src = assertSourceExists(config, sourceName);
-        const refresh = ctx.refreshForSource(src.url);
+        warn(`Refreshing source ${src.name} (${getEffectiveSourceUrl(src)})...`);
+        const refresh = ctx.refreshForSource(src);
+        if ('warning' in refresh) {
+          warn(refresh.warning);
+        }
         const cacheRoot = refresh.path;
 
         // 默认全局安装，--local 时安装到项目

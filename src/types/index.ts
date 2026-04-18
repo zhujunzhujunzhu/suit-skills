@@ -13,6 +13,10 @@ export interface Source {
   name: string;
   url: string;
   enabled: boolean;
+  domesticMirror?: {
+    url: string;
+    enabled: boolean;
+  };
 }
 
 /** 智能体目录映射 */

@@ -1,5 +1,5 @@
 import { homedir } from 'node:os';
-import type { Config } from '../types/index.js';
+import type { Config, Source } from '../types/index.js';
 import {
   loadConfig,
   saveConfig,
@@ -27,7 +27,7 @@ export interface CliContext {
   loadConfig(): Config;
   saveConfig(cfg: Config): void;
   refreshForSource(
-    sourceUrl: string,
+    sourceOrUrl: string | Source,
   ): ReturnType<typeof refreshCache>;
 }
 
@@ -41,8 +41,8 @@ export function createDefaultCliContext(): CliContext {
     configOptions,
     loadConfig: () => loadConfig(configOptions),
     saveConfig: (cfg) => saveConfig(cfg, configOptions),
-    refreshForSource: (url: string) =>
-      refreshCache(url, { ...configOptions }),
+    refreshForSource: (sourceOrUrl: string | Source) =>
+      refreshCache(sourceOrUrl, { ...configOptions }),
   };
 }
 
@@ -66,8 +66,8 @@ export function createCliContext(
     pickInstallTargetsWhenEmpty: opts.pickInstallTargetsWhenEmpty,
     loadConfig: () => loadConfig(configOptions),
     saveConfig: (cfg) => saveConfig(cfg, configOptions),
-    refreshForSource: (url: string) =>
-      refreshCache(url, {
+    refreshForSource: (sourceOrUrl: string | Source) =>
+      refreshCache(sourceOrUrl, {
         ...configOptions,
         ...(refreshExtra ?? {}),
       }),

@@ -18,7 +18,9 @@ import {
 } from '../../cli/helpers.js';
 import { toAbsoluteInstallRoot } from '../../cli/paths.js';
 import { getInstalledSkills } from '../agents.js';
+import { getSourceCacheDir } from '../cache.js';
 import {
+  getEffectiveSourceUrl,
   getBuiltinSourceInfo,
   restoreBuiltinSources,
   type BuiltinSourceCategory,
@@ -137,6 +139,9 @@ export interface WebAddSourceRequest {
 
 export interface WebUpdateSourceRequest {
   enabled?: boolean;
+  domesticMirror?: {
+    enabled?: boolean;
+  };
 }
 
 export interface WebSource extends Source {
@@ -144,11 +149,24 @@ export interface WebSource extends Source {
   label: string;
   category: BuiltinSourceCategory | 'custom';
   description: string;
+  effectiveUrl: string;
 }
 
 export interface WebSourcesResponse {
   defaultSource: string;
   sources: WebSource[];
+}
+
+export interface WebSourceWarning {
+  sourceName: string;
+  url: string;
+  message: string;
+  usingCache: boolean;
+}
+
+export interface WebSkillsResponse {
+  items: WebSkillSummary[];
+  warnings: WebSourceWarning[];
 }
 
 interface SkillSourceRow {
@@ -161,6 +179,36 @@ interface SkillSourceRow {
 }
 
 const sourceRowsCache = new WeakMap<CliContext, Map<string, SkillSourceRow[]>>();
+
+function toSourceWarning(
+  source: Source,
+  message: string,
+  usingCache: boolean,
+): WebSourceWarning {
+  return {
+    sourceName: source.name,
+    url: getEffectiveSourceUrl(source),
+    message,
+    usingCache,
+  };
+}
+
+function refreshSourceForWeb(
+  ctx: CliContext,
+  source: Source,
+): ReturnType<CliContext['refreshForSource']> {
+  try {
+    return ctx.refreshForSource(source);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new WebApiError(
+      'SOURCE_REFRESH_FAILED',
+      `Failed to refresh source "${source.name}" (${getEffectiveSourceUrl(source)}): ${message}`,
+      message.includes('timed out') ? 504 : 502,
+      toSourceWarning(source, message, false),
+    );
+  }
+}
 
 function getRowsCacheForContext(ctx: CliContext): Map<string, SkillSourceRow[]> {
   let cache = sourceRowsCache.get(ctx);
@@ -360,21 +408,81 @@ function scanSourceRows(
   return rows;
 }
 
+function sourceCacheFallbackPaths(ctx: CliContext, source: Source): string[] {
+  const urls = [
+    getEffectiveSourceUrl(source),
+    source.url,
+    source.domesticMirror?.url,
+  ].filter((url): url is string => typeof url === 'string' && url.trim() !== '');
+  const seen = new Set<string>();
+  const paths: string[] = [];
+  for (const url of urls) {
+    const cachePath = getSourceCacheDir(url, ctx.configOptions);
+    const key = process.platform === 'win32' ? cachePath.toLowerCase() : cachePath;
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    paths.push(cachePath);
+  }
+  return paths;
+}
+
+function findCachedRowsForSource(
+  ctx: CliContext,
+  source: Source,
+): { path: string; rows: SkillSourceRow[] } | null {
+  for (const cachePath of sourceCacheFallbackPaths(ctx, source)) {
+    const rows = scanSourceRows(cachePath, source.name);
+    if (rows.length > 0) {
+      return { path: cachePath, rows };
+    }
+  }
+  return null;
+}
+
 function rowsForSingleSource(
   ctx: CliContext,
   source: Source,
   forceRefresh = false,
-): SkillSourceRow[] {
+): { rows: SkillSourceRow[]; warnings: WebSourceWarning[] } {
   const cache = getRowsCacheForContext(ctx);
-  const cacheKey = `${source.name}\0${source.url}`;
+  const cacheKey = `${source.name}\0${getEffectiveSourceUrl(source)}`;
   const cached = cache.get(cacheKey);
   if (cached && !forceRefresh) {
-    return cached;
+    return { rows: cached, warnings: [] };
   }
-  const refresh = ctx.refreshForSource(source.url);
+  let refresh: ReturnType<CliContext['refreshForSource']>;
+  try {
+    refresh = refreshSourceForWeb(ctx, source);
+  } catch (error) {
+    if (error instanceof WebApiError) {
+      const fallback = findCachedRowsForSource(ctx, source);
+      if (fallback) {
+        cache.set(cacheKey, fallback.rows);
+        return {
+          rows: fallback.rows,
+          warnings: [
+            toSourceWarning(
+              source,
+              `${error.message} Using local cache at ${fallback.path}.`,
+              true,
+            ),
+          ],
+        };
+      }
+    }
+    throw error;
+  }
   const rows = scanSourceRows(refresh.path, source.name);
   cache.set(cacheKey, rows);
-  return rows;
+  return {
+    rows,
+    warnings:
+      'warning' in refresh && refresh.warning
+        ? [toSourceWarning(source, refresh.warning, true)]
+        : [],
+  };
 }
 
 function sourcesForFilter(config: Config, sourceFilter: string): Source[] {
@@ -389,21 +497,42 @@ function rowsForSource(
   config: Config,
   sourceFilter: string,
   forceRefresh = false,
-): SkillSourceRow[] {
+): { rows: SkillSourceRow[]; warnings: WebSourceWarning[] } {
   try {
     const sources = sourcesForFilter(config, sourceFilter);
     const rows: SkillSourceRow[] = [];
+    const warnings: WebSourceWarning[] = [];
     const seenNames = new Set<string>();
     for (const source of sources) {
-      for (const row of rowsForSingleSource(ctx, source, forceRefresh)) {
-        if (seenNames.has(row.meta.name)) {
+      try {
+        const result = rowsForSingleSource(ctx, source, forceRefresh);
+        warnings.push(...result.warnings);
+        for (const row of result.rows) {
+          if (seenNames.has(row.meta.name)) {
+            continue;
+          }
+          seenNames.add(row.meta.name);
+          rows.push(row);
+        }
+      } catch (error) {
+        if (
+          sourceFilter === 'all' &&
+          error instanceof WebApiError &&
+          error.code === 'SOURCE_REFRESH_FAILED'
+        ) {
+          warnings.push(
+            error.details &&
+              typeof error.details === 'object' &&
+              'sourceName' in error.details
+              ? (error.details as WebSourceWarning)
+              : toSourceWarning(source, error.message, false),
+          );
           continue;
         }
-        seenNames.add(row.meta.name);
-        rows.push(row);
+        throw error;
       }
     }
-    return rows;
+    return { rows, warnings };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     if (msg === 'Source not found') {
@@ -411,6 +540,15 @@ function rowsForSource(
     }
     throw e;
   }
+}
+
+function rowsOnlyForSource(
+  ctx: CliContext,
+  config: Config,
+  sourceFilter: string,
+  forceRefresh = false,
+): SkillSourceRow[] {
+  return rowsForSource(ctx, config, sourceFilter, forceRefresh).rows;
 }
 
 function findSkillRow(
@@ -426,7 +564,7 @@ function findSkillRow(
   markdown: string;
   metadataSource: MetadataSource;
 } | null {
-  for (const row of rowsForSource(ctx, config, sourceFilter)) {
+  for (const row of rowsOnlyForSource(ctx, config, sourceFilter)) {
     if (row.meta.name !== skillName) {
       continue;
     }
@@ -448,7 +586,7 @@ function sourceNameIndexForInstalledSkills(
 ): Map<string, string> {
   try {
     return new Map(
-      rowsForSource(ctx, config, 'all').map((row) => [
+      rowsOnlyForSource(ctx, config, 'all').map((row) => [
         row.meta.name,
         row.sourceName,
       ]),
@@ -482,10 +620,16 @@ function installedDedupeKey(root: string, name: string): string {
 export function listWebSkills(
   ctx: CliContext,
   options: { source?: string; q?: string; tag?: string; refresh?: boolean },
-): { items: WebSkillSummary[] } {
+): WebSkillsResponse {
   const config = ctx.loadConfig();
   const sourceFilter = options.source ?? 'all';
-  let rows = rowsForSource(ctx, config, sourceFilter, options.refresh === true);
+  const result = rowsForSource(
+    ctx,
+    config,
+    sourceFilter,
+    options.refresh === true,
+  );
+  let rows = result.rows;
 
   if (options.q?.trim()) {
     const found = new Set(
@@ -503,6 +647,7 @@ export function listWebSkills(
 
   const installedTargetsIndex = buildInstalledTargetsIndex(ctx, config);
   return {
+    warnings: result.warnings,
     items: rows.map((row) => {
       const { meta, sourceName } = row;
       const installedTargets = installedTargetsIndex.get(meta.name) ?? [];
@@ -600,6 +745,7 @@ function decorateWebSource(source: Source): WebSource {
       label: source.name,
       category: 'custom',
       description: 'User-defined skill source.',
+      effectiveUrl: getEffectiveSourceUrl(source),
     };
   }
   return {
@@ -608,6 +754,7 @@ function decorateWebSource(source: Source): WebSource {
     label: builtin.label,
     category: builtin.category,
     description: builtin.description,
+    effectiveUrl: getEffectiveSourceUrl(source),
   };
 }
 
@@ -739,6 +886,12 @@ export function updateWebSource(
     }
     source.enabled = request.enabled;
   }
+  if (
+    source.domesticMirror &&
+    typeof request.domesticMirror?.enabled === 'boolean'
+  ) {
+    source.domesticMirror.enabled = request.domesticMirror.enabled;
+  }
   ctx.saveConfig(config);
   getRowsCacheForContext(ctx).clear();
   return { ...sourcesResponse(config), source: decorateWebSource(source) };
@@ -804,7 +957,7 @@ export function installWebSkill(
     );
   }
 
-  const refresh = ctx.refreshForSource(source.url);
+  const refresh = refreshSourceForWeb(ctx, source);
   const isGlobal = request.global === true;
   const scope = isGlobal ? 'global' : 'project';
   const results: WebInstallResult[] = [];

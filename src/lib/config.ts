@@ -21,93 +21,65 @@ export interface BuiltinSourceInfo {
   label: string;
   category: BuiltinSourceCategory;
   description: string;
+  domesticMirrorUrl?: string;
 }
 
 export const DEFAULT_SOURCE_INFO: BuiltinSourceInfo = {
   name: 'default',
   url: DEFAULT_SOURCE_URL,
-  label: 'Suit Skills default',
+  label: 'Suit Skills 默认源',
   category: 'cn',
-  description: 'Default Suit Skills library, enabled for new installations.',
+  description: '数知建维护的默认技能库，新安装默认启用。',
 };
 
 export const BUILTIN_SOURCE_CATALOG: BuiltinSourceInfo[] = [
   {
     name: 'anthropics-skills',
     url: 'https://github.com/anthropics/skills.git',
-    label: 'Anthropic skills',
+    label: 'Anthropic 官方技能库',
     category: 'official',
-    description: 'Claude official skills library, useful as a baseline source.',
+    description: 'Claude 官方技能合集，适合作为基础技能来源。',
+    domesticMirrorUrl: 'https://gitee.com/zhujun12/skills.git',
   },
   {
     name: 'superpowers',
     url: 'https://github.com/obra/superpowers.git',
-    label: 'Superpowers',
+    label: 'Superpowers 工程技能库',
     category: 'engineering',
-    description: 'Engineering skills for complex development, TDD, debugging, and refactoring.',
+    description: '面向复杂开发、TDD、调试和重构的工程技能库。',
+    domesticMirrorUrl: 'https://gitee.com/zhujun12/superpowers.git',
   },
   {
     name: 'vercel-agent-skills',
     url: 'https://github.com/vercel-labs/agent-skills.git',
-    label: 'Vercel agent skills',
+    label: 'Vercel Agent 技能库',
     category: 'official',
-    description: 'Web, full-stack, Next.js, and deployment focused skills.',
+    description: '聚焦 Web、全栈、Next.js 和部署场景的技能库。',
+    domesticMirrorUrl: 'https://gitee.com/zhujun12/agent-skills.git',
   },
   {
     name: 'huggingface-skills',
     url: 'https://github.com/huggingface/skills.git',
-    label: 'Hugging Face skills',
+    label: 'Hugging Face 技能库',
     category: 'official',
-    description: 'Skills for Hugging Face and the open-source model ecosystem.',
-  },
-  {
-    name: 'claude-arsenal',
-    url: 'https://github.com/majiayu000/claude-arsenal.git',
-    label: 'Claude Arsenal',
-    category: 'cn',
-    description: 'Chinese-friendly engineering skill collection.',
-  },
-  {
-    name: 'daymade-claude-code-skills',
-    url: 'https://github.com/daymade/claude-code-skills.git',
-    label: 'Daymade Claude Code skills',
-    category: 'engineering',
-    description: 'Production development, security, and GitHub operation skills.',
-  },
-  {
-    name: 'remotion-skills',
-    url: 'https://github.com/remotion-dev/skills.git',
-    label: 'Remotion skills',
-    category: 'specialized',
-    description: 'Remotion video, animation, and data visualization skills.',
-  },
-  {
-    name: 'awesome-claude-skills',
-    url: 'https://github.com/ComposioHQ/awesome-claude-skills.git',
-    label: 'Awesome Claude skills',
-    category: 'collection',
-    description: 'Curated index of Claude skill resources.',
+    description: '面向 Hugging Face 与开源模型生态的技能库。',
+    domesticMirrorUrl: 'https://gitee.com/zhujun12/huggingface-skills.git',
   },
   {
     name: 'antigravity-awesome-skills',
     url: 'https://github.com/sickn33/antigravity-awesome-skills.git',
-    label: 'Antigravity awesome skills',
+    label: 'Antigravity 技能合集',
     category: 'collection',
-    description: 'Cross-platform AI skill collection.',
+    description: '跨平台 AI 技能资源合集。',
+    domesticMirrorUrl: 'https://gitee.com/zhujun12/antigravity-awesome-skills.git',
   },
   {
-    name: 'inbharatai-claude-skills',
-    url: 'https://github.com/inbharatai/claude-skills.git',
-    label: 'InbharatAI Claude skills',
+    name: 'awesome-claude-skills',
+    url: 'https://github.com/ComposioHQ/awesome-claude-skills.git',
+    label: 'Claude 技能资源索引',
     category: 'collection',
-    description: 'Multi-category production Claude skills collection.',
-  },
-  {
-    name: 'awesome-agent-skills',
-    url: 'https://github.com/mafichoni/awesome-agent-skills.git',
-    label: 'Awesome agent skills',
-    category: 'collection',
-    description: 'Cross-platform agent skill resource collection.',
+    description: 'Claude 技能资源的精选索引，适合发现更多来源。',
+    domesticMirrorUrl: 'https://gitee.com/zhujun12/awesome-claude-skills.git',
   },
 ];
 
@@ -115,6 +87,24 @@ const ALL_BUILTIN_SOURCE_INFOS = [
   DEFAULT_SOURCE_INFO,
   ...BUILTIN_SOURCE_CATALOG,
 ];
+
+function toConfiguredSource(
+  info: BuiltinSourceInfo,
+  enabled: boolean,
+): Source {
+  const source: Source = {
+    name: info.name,
+    url: info.url,
+    enabled,
+  };
+  if (info.domesticMirrorUrl) {
+    source.domesticMirror = {
+      url: info.domesticMirrorUrl,
+      enabled: true,
+    };
+  }
+  return source;
+}
 
 export interface ConfigLocationOptions {
   /** 覆盖用户主目录（测试用），在未设置 `SUIT_SKILLS_HOME` 时生效 */
@@ -138,16 +128,8 @@ export function getConfigPath(options?: ConfigLocationOptions): string {
 export function getDefaultConfig(): Config {
   return {
     sources: [
-      {
-        name: 'default',
-        url: DEFAULT_SOURCE_URL,
-        enabled: true,
-      },
-      ...BUILTIN_SOURCE_CATALOG.map(({ name, url }) => ({
-        name,
-        url,
-        enabled: false,
-      })),
+      toConfiguredSource(DEFAULT_SOURCE_INFO, true),
+      ...BUILTIN_SOURCE_CATALOG.map((info) => toConfiguredSource(info, false)),
     ],
     defaultSource: 'default',
     agents: {
@@ -221,39 +203,179 @@ function normalizeSourceUrl(url: string): string {
   return url.trim().replace(/\/+$/, '').replace(/\.git$/i, '');
 }
 
-export function getBuiltinSourceInfo(source: Source): BuiltinSourceInfo | null {
-  const sourceUrl = normalizeSourceUrl(source.url);
+function matchesUrl(url: string | undefined, target: string): boolean {
+  return typeof url === 'string' && normalizeSourceUrl(url) === target;
+}
+
+function builtinUrlKeys(info: BuiltinSourceInfo): string[] {
+  return [info.url, info.domesticMirrorUrl]
+    .filter((url): url is string => typeof url === 'string')
+    .map(normalizeSourceUrl);
+}
+
+function legacyMirrorNames(info: BuiltinSourceInfo): string[] {
+  return [`${info.name} cn`, `${info.name}-cn`, `${info.name}_cn`];
+}
+
+function findBuiltinInfoByLegacyName(name: string): BuiltinSourceInfo | null {
+  const normalized = name.trim().toLowerCase();
+  return (
+    ALL_BUILTIN_SOURCE_INFOS.find((info) =>
+      legacyMirrorNames(info).some((legacy) => legacy.toLowerCase() === normalized),
+    ) ?? null
+  );
+}
+
+function findBuiltinInfoForSource(source: Source): BuiltinSourceInfo | null {
+  const byName =
+    ALL_BUILTIN_SOURCE_INFOS.find((info) => info.name === source.name) ??
+    findBuiltinInfoByLegacyName(source.name);
+  if (byName) {
+    return byName;
+  }
+
   return (
     ALL_BUILTIN_SOURCE_INFOS.find((info) => {
-      const infoUrl = normalizeSourceUrl(info.url);
-      return sourceUrl === infoUrl;
+      const keys = builtinUrlKeys(info);
+      return (
+        keys.some((key) => matchesUrl(source.url, key)) ||
+        keys.some((key) => matchesUrl(source.domesticMirror?.url, key))
+      );
     }) ?? null
   );
+}
+
+function isLegacyMirrorSource(
+  source: Source,
+  info: BuiltinSourceInfo,
+): boolean {
+  return legacyMirrorNames(info).some(
+    (legacy) => legacy.toLowerCase() === source.name.trim().toLowerCase(),
+  );
+}
+
+function applyBuiltinInfoToSource(
+  source: Source,
+  info: BuiltinSourceInfo,
+): boolean {
+  let dirty = false;
+  if (source.name !== info.name) {
+    source.name = info.name;
+    dirty = true;
+  }
+  if (source.url !== info.url) {
+    source.url = info.url;
+    dirty = true;
+  }
+  if (info.domesticMirrorUrl) {
+    if (
+      source.domesticMirror?.url !== info.domesticMirrorUrl ||
+      typeof source.domesticMirror.enabled !== 'boolean'
+    ) {
+      const previousEnabled = source.domesticMirror?.enabled;
+      source.domesticMirror = {
+        url: info.domesticMirrorUrl,
+        enabled: previousEnabled ?? true,
+      };
+      dirty = true;
+    }
+  } else if (source.domesticMirror !== undefined) {
+    delete source.domesticMirror;
+    dirty = true;
+  }
+  return dirty;
+}
+
+function mergeSourceState(target: Source, incoming: Source): void {
+  target.enabled = target.enabled || incoming.enabled;
+  if (target.domesticMirror && incoming.domesticMirror) {
+    target.domesticMirror.enabled =
+      target.domesticMirror.enabled || incoming.domesticMirror.enabled;
+  }
+}
+
+function normalizeBuiltinSources(cfg: Config): boolean {
+  let dirty = false;
+  const normalizedSources: Source[] = [];
+  const builtinByName = new Map<string, Source>();
+
+  for (const source of cfg.sources) {
+    const info = findBuiltinInfoForSource(source);
+    if (!info) {
+      normalizedSources.push(source);
+      continue;
+    }
+
+    const existing = builtinByName.get(info.name);
+    if (existing) {
+      if (isLegacyMirrorSource(source, info) && existing.domesticMirror) {
+        existing.domesticMirror.enabled = true;
+      }
+      mergeSourceState(existing, source);
+      dirty = true;
+      continue;
+    }
+
+    if (isLegacyMirrorSource(source, info)) {
+      const replacement = toConfiguredSource(info, source.enabled);
+      normalizedSources.push(replacement);
+      builtinByName.set(info.name, replacement);
+      dirty = true;
+      continue;
+    }
+
+    if (applyBuiltinInfoToSource(source, info)) {
+      dirty = true;
+    }
+    normalizedSources.push(source);
+    builtinByName.set(info.name, source);
+  }
+
+  if (dirty) {
+    cfg.sources = normalizedSources;
+  }
+  return dirty;
+}
+
+export function getEffectiveSourceUrl(source: Source): string {
+  const mirror = source.domesticMirror;
+  if (mirror?.enabled && mirror.url.trim()) {
+    return mirror.url.trim();
+  }
+  return source.url.trim();
+}
+
+export function getBuiltinSourceInfo(source: Source): BuiltinSourceInfo | null {
+  return findBuiltinInfoForSource(source);
 }
 
 export function restoreBuiltinSources(config: Config): string[] {
   if (!Array.isArray(config.sources)) {
     config.sources = [];
   }
+  normalizeBuiltinSources(config);
 
   const names = new Set(config.sources.map((source) => source.name));
-  const urls = new Set(
-    config.sources.map((source) => normalizeSourceUrl(source.url)),
-  );
+  const urls = new Set<string>();
+  for (const source of config.sources) {
+    urls.add(normalizeSourceUrl(source.url));
+    if (source.domesticMirror?.url) {
+      urls.add(normalizeSourceUrl(source.domesticMirror.url));
+    }
+  }
   const added: string[] = [];
 
   for (const info of BUILTIN_SOURCE_CATALOG) {
-    const sourceUrl = normalizeSourceUrl(info.url);
-    if (names.has(info.name) || urls.has(sourceUrl)) {
+    const hasKnownUrl = builtinUrlKeys(info).some((url) => urls.has(url));
+    if (names.has(info.name) || hasKnownUrl) {
       continue;
     }
-    config.sources.push({
-      name: info.name,
-      url: info.url,
-      enabled: false,
-    });
+    const source = toConfiguredSource(info, false);
+    config.sources.push(source);
     names.add(info.name);
-    urls.add(sourceUrl);
+    for (const url of builtinUrlKeys(info)) {
+      urls.add(url);
+    }
     added.push(info.name);
   }
 
@@ -281,6 +403,7 @@ function normalizeConfigSources(cfg: Config): boolean {
     cfg.defaultSource = def.defaultSource;
     added = true;
   }
+  added = normalizeBuiltinSources(cfg) || added;
   return added;
 }
 

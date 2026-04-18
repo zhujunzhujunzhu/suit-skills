@@ -90,24 +90,22 @@ interface BuiltinSourceInfo {
   label: string;
   category: 'official' | 'engineering' | 'collection' | 'cn' | 'specialized';
   description: string;
+  domesticMirrorUrl?: string;
 }
 ```
 
 ## 6. 内置源清单
 
-| name | URL | category | description |
-| --- | --- | --- | --- |
-| `anthropics-skills` | `https://github.com/anthropics/skills.git` | official | Claude 官方技能库，适合作为基础源。 |
-| `superpowers` | `https://github.com/obra/superpowers.git` | engineering | 复杂开发任务、TDD、调试、代码重构技能。 |
-| `vercel-agent-skills` | `https://github.com/vercel-labs/agent-skills.git` | official | Web、全栈、Next.js 与部署相关技能。 |
-| `huggingface-skills` | `https://github.com/huggingface/skills.git` | official | Hugging Face 与开源模型生态相关技能。 |
-| `claude-arsenal` | `https://github.com/majiayu000/claude-arsenal.git` | cn | 中文友好的工程技能合集。 |
-| `daymade-claude-code-skills` | `https://github.com/daymade/claude-code-skills.git` | engineering | 生产级开发、安全与 GitHub 操作技能。 |
-| `remotion-skills` | `https://github.com/remotion-dev/skills.git` | specialized | Remotion 视频、动画与数据可视化技能。 |
-| `awesome-claude-skills` | `https://github.com/ComposioHQ/awesome-claude-skills.git` | collection | Claude 技能合集索引。 |
-| `antigravity-awesome-skills` | `https://github.com/sickn33/antigravity-awesome-skills.git` | collection | 多平台 AI 技能合集。 |
-| `inbharatai-claude-skills` | `https://github.com/inbharatai/claude-skills.git` | collection | 多类别生产级 Claude 技能合集。 |
-| `awesome-agent-skills` | `https://github.com/mafichoni/awesome-agent-skills.git` | collection | 多平台 Agent 技能资源合集。 |
+内置源采用“一个逻辑源 + 可选国内镜像”模型。`name` 保持稳定，国内镜像只影响实际拉取 URL，不产生 `xxx cn` 重复源。
+
+| name | 上游 URL | 国内镜像 URL | category | description |
+| --- | --- | --- | --- | --- |
+| `anthropics-skills` | `https://github.com/anthropics/skills.git` | `https://gitee.com/zhujun12/skills.git` | official | Claude 官方技能合集，适合作为基础技能来源。 |
+| `superpowers` | `https://github.com/obra/superpowers.git` | `https://gitee.com/zhujun12/superpowers.git` | engineering | 面向复杂开发、TDD、调试和重构的工程技能库。 |
+| `vercel-agent-skills` | `https://github.com/vercel-labs/agent-skills.git` | `https://gitee.com/zhujun12/agent-skills.git` | official | 聚焦 Web、全栈、Next.js 和部署场景的技能库。 |
+| `huggingface-skills` | `https://github.com/huggingface/skills.git` | `https://gitee.com/zhujun12/huggingface-skills.git` | official | 面向 Hugging Face 与开源模型生态的技能库。 |
+| `antigravity-awesome-skills` | `https://github.com/sickn33/antigravity-awesome-skills.git` | `https://gitee.com/zhujun12/antigravity-awesome-skills.git` | collection | 跨平台 AI 技能资源合集。 |
+| `awesome-claude-skills` | `https://github.com/ComposioHQ/awesome-claude-skills.git` | `https://gitee.com/zhujun12/awesome-claude-skills.git` | collection | Claude 技能资源的精选索引。 |
 
 ## 7. 配置行为
 
@@ -117,10 +115,12 @@ interface BuiltinSourceInfo {
 - 也包含所有内置推荐源。
 - 只有 `default` 为 `enabled: true`。
 - 其他内置推荐源均为 `enabled: false`。
+- 可镜像内置源默认 `domesticMirror.enabled: true`，启用 source 后实际使用国内镜像 URL。
 
 已有用户：
 
 - `loadConfig()` 不自动补齐被删除的内置推荐源。
+- `loadConfig()` 会把旧的 `xxx cn` 重复源合并为同一个逻辑源的 `domesticMirror`。
 - 用户删除内置源后，刷新页面不应自动出现。
 - 用户点击 `Add built-in sources` 后才补齐。
 
@@ -146,8 +146,9 @@ POST /api/sources/restore-builtins
 
 - 遍历内置源 catalog。
 - 当前配置中已有同名 source，跳过。
-- 当前配置中已有同 URL source，跳过。
+- 当前配置中已有上游 URL 或国内镜像 URL source，跳过。
 - 缺失的内置源以 `enabled: false` 添加。
+- 可镜像内置源添加时默认写入 `domesticMirror.enabled: true`。
 - 不修改已有 source。
 - 不修改 `defaultSource`。
 - 保存 config。

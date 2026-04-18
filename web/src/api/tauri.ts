@@ -43,10 +43,15 @@ export async function tauriGetSources(): Promise<{
     name: string;
     url: string;
     enabled: boolean;
+    domesticMirror?: {
+      url: string;
+      enabled: boolean;
+    };
     builtin?: boolean;
     label?: string;
     category?: string;
     description?: string;
+    effectiveUrl?: string;
   }>;
   defaultSource: string;
 }> {

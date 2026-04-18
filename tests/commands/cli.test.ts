@@ -659,6 +659,30 @@ describe('阶段 9 CLI', () => {
       await runCliUserArgs(prog, ['source', 'list']);
       const t = lines.join('\n');
       expect(t).toMatch(/enabled|disabled/);
+      expect(t).toMatch(/effective:/);
+      expect(t).toMatch(/mirror:on/);
+    });
+
+    it('mirror 可切换内置源国内镜像', async () => {
+      const prog = createProgramForTest(ctx());
+      await runCliUserArgs(prog, [
+        'source',
+        'mirror',
+        'anthropics-skills',
+        'off',
+      ]);
+      const cfg = JSON.parse(
+        readFileSync(join(suitHome, 'config.json'), 'utf8'),
+      ) as {
+        sources: {
+          name: string;
+          domesticMirror?: { enabled: boolean };
+        }[];
+      };
+      expect(
+        cfg.sources.find((s) => s.name === 'anthropics-skills')?.domesticMirror
+          ?.enabled,
+      ).toBe(false);
     });
 
     it('enable / disable', async () => {

@@ -4,6 +4,7 @@ import type { CliContext } from '../cli/context.js';
 import { findSourceByName } from '../cli/helpers.js';
 import {
   getBuiltinSourceInfo,
+  getEffectiveSourceUrl,
   restoreBuiltinSources,
   type BuiltinSourceCategory,
 } from '../lib/config.js';
@@ -11,7 +12,9 @@ import { success } from '../utils/output.js';
 
 function urlExists(config: { sources: Source[] }, url: string): boolean {
   const u = url.trim();
-  return config.sources.some((s) => s.url.trim() === u);
+  return config.sources.some(
+    (s) => s.url.trim() === u || s.domesticMirror?.url.trim() === u,
+  );
 }
 
 interface SourceListOptions {
@@ -23,6 +26,7 @@ interface SourceOutput extends Source {
   label: string;
   category: BuiltinSourceCategory | 'custom';
   description: string;
+  effectiveUrl: string;
 }
 
 function decorateSource(source: Source): SourceOutput {
@@ -34,6 +38,7 @@ function decorateSource(source: Source): SourceOutput {
       label: source.name,
       category: 'custom',
       description: 'User-defined skill source.',
+      effectiveUrl: getEffectiveSourceUrl(source),
     };
   }
   return {
@@ -42,6 +47,7 @@ function decorateSource(source: Source): SourceOutput {
     label: builtin.label,
     category: builtin.category,
     description: builtin.description,
+    effectiveUrl: getEffectiveSourceUrl(source),
   };
 }
 
@@ -59,7 +65,18 @@ function printSourceList(ctx: CliContext, opts: SourceListOptions): void {
     return;
   }
   for (const s of cfg.sources) {
-    console.log(`${s.name}\t${s.url}\t${s.enabled ? 'enabled' : 'disabled'}`);
+    const decorated = decorateSource(s);
+    const label = decorated.builtin
+      ? `${decorated.label} (${decorated.name})`
+      : decorated.name;
+    const mirrorStatus = decorated.domesticMirror
+      ? decorated.domesticMirror.enabled
+        ? 'mirror:on'
+        : 'mirror:off'
+      : 'mirror:none';
+    console.log(
+      `${label}\t${decorated.url}\teffective:${decorated.effectiveUrl}\t${decorated.enabled ? 'enabled' : 'disabled'}\t${mirrorStatus}`,
+    );
   }
 }
 
@@ -162,6 +179,31 @@ export function registerSource(program: Command, ctx: CliContext): void {
       }
       s.enabled = false;
       ctx.saveConfig(cfg);
+    });
+
+  src
+    .command('mirror')
+    .description('Enable or disable the domestic mirror for a built-in source')
+    .argument('<name>', 'source name')
+    .argument('<state>', 'on | off')
+    .action((name: string, state: string) => {
+      const cfg = ctx.loadConfig();
+      const s = findSourceByName(cfg, name);
+      if (!s) {
+        throw new Error('Source not found');
+      }
+      if (!s.domesticMirror) {
+        throw new Error('Source has no domestic mirror');
+      }
+      const normalized = state.trim().toLowerCase();
+      if (normalized !== 'on' && normalized !== 'off') {
+        throw new Error('Mirror state must be on or off');
+      }
+      s.domesticMirror.enabled = normalized === 'on';
+      ctx.saveConfig(cfg);
+      success(
+        `Domestic mirror ${s.domesticMirror.enabled ? 'enabled' : 'disabled'} for ${name}`,
+      );
     });
 
   src

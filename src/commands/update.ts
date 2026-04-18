@@ -8,6 +8,7 @@ import {
   getEffectiveInstallTargets,
   resolveDisplayPathForToken,
 } from '../lib/install-targets.js';
+import { getEffectiveSourceUrl } from '../lib/config.js';
 import { getInstalledSkills } from '../lib/agents.js';
 import { findSkillInCache, getSkillSourceDir } from '../lib/skills.js';
 import { copyDir, eq, gt } from '../utils/fs.js';
@@ -75,7 +76,11 @@ export function registerUpdate(program: Command, ctx: CliContext): void {
 
         const config = ctx.loadConfig();
         const src = assertSourceExists(config, config.defaultSource);
-        const refresh = ctx.refreshForSource(src.url);
+        warn(`Refreshing source ${src.name} (${getEffectiveSourceUrl(src)})...`);
+        const refresh = ctx.refreshForSource(src);
+        if ('warning' in refresh) {
+          warn(refresh.warning);
+        }
         const cacheRoot = refresh.path;
 
         const tokens = getEffectiveInstallTargets(

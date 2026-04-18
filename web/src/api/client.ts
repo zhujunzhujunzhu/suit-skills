@@ -11,10 +11,15 @@ export interface Source {
   name: string;
   url: string;
   enabled: boolean;
+  domesticMirror?: {
+    url: string;
+    enabled: boolean;
+  };
   builtin: boolean;
   label: string;
   category: SourceCategory;
   description: string;
+  effectiveUrl: string;
 }
 
 export interface SkillSummary {
@@ -50,6 +55,13 @@ export interface InstalledSkill {
 export interface SourcesResponse {
   defaultSource: string;
   sources: Source[];
+}
+
+export interface SourceWarning {
+  sourceName: string;
+  url: string;
+  message: string;
+  usingCache: boolean;
 }
 
 export interface InstallResult {
@@ -129,20 +141,27 @@ function withParams(
 
 function normalizeSource(
   source: Pick<Source, 'name' | 'url' | 'enabled'> & {
+    domesticMirror?: Source['domesticMirror'];
     builtin?: boolean;
     label?: string;
     category?: SourceCategory | string;
     description?: string;
+    effectiveUrl?: string;
   },
 ): Source {
+  const effectiveUrl =
+    source.effectiveUrl ??
+    (source.domesticMirror?.enabled ? source.domesticMirror.url : source.url);
   return {
     name: source.name,
     url: source.url,
     enabled: source.enabled,
+    domesticMirror: source.domesticMirror,
     builtin: source.builtin ?? false,
     label: source.label ?? source.name,
     category: (source.category as SourceCategory | undefined) ?? 'custom',
     description: source.description ?? 'User-defined skill source.',
+    effectiveUrl,
   };
 }
 
@@ -183,17 +202,27 @@ export async function addSource(requestBody: {
 
 export async function updateSource(
   name: string,
-  requestBody: { enabled: boolean },
+  requestBody: { enabled?: boolean; domesticMirror?: { enabled?: boolean } },
 ): Promise<SourcesResponse & { source: Source }> {
   const tauri = await getTauriApi();
   if (tauri) {
-    await tauri.tauriUpdateSource(name, requestBody.enabled);
+    if (requestBody.enabled !== undefined) {
+      await tauri.tauriUpdateSource(name, requestBody.enabled);
+    }
+    if (requestBody.domesticMirror?.enabled !== undefined) {
+      await tauri.tauriRunCommand([
+        'source',
+        'mirror',
+        name,
+        requestBody.domesticMirror.enabled ? 'on' : 'off',
+      ]);
+    }
     const result = await tauri.tauriGetSources();
     const updatedSource = result.sources.find((s) => s.name === name);
     return {
       defaultSource: result.defaultSource,
       sources: result.sources.map(normalizeSource),
-      source: normalizeSource(updatedSource ?? { name, url: '', enabled: requestBody.enabled }),
+      source: normalizeSource(updatedSource ?? { name, url: '', enabled: requestBody.enabled ?? true }),
     };
   }
   return request<SourcesResponse & { source: Source }>(
@@ -247,7 +276,7 @@ export async function fetchSkills(params: {
   q?: string;
   tag?: string;
   refresh?: boolean;
-}): Promise<{ items: SkillSummary[] }> {
+}): Promise<{ items: SkillSummary[]; warnings: SourceWarning[] }> {
   const tauri = await getTauriApi();
   if (tauri) {
     const result = await tauri.tauriGetSkillsList({
@@ -275,9 +304,12 @@ export async function fetchSkills(params: {
         installedTargets: installedMap.get(skill.name) ?? [],
         metadataSource: 'skill-md',
       })),
+      warnings: [],
     };
   }
-  return request<{ items: SkillSummary[] }>(withParams('/api/skills', params));
+  return request<{ items: SkillSummary[]; warnings: SourceWarning[] }>(
+    withParams('/api/skills', params),
+  );
 }
 
 export async function fetchSkillDetail(
