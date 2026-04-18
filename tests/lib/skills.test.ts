@@ -269,4 +269,23 @@ describe('searchSkills', () => {
   it('测试用例 4："zzzzz" → 返回空数组', () => {
     expect(searchSkills(metas, 'zzzzz')).toEqual([]);
   });
+
+  it('测试用例 5：description / tags 为非字符串时不抛错，且仍可按 name 命中', () => {
+    const dirty: SkillMeta[] = [
+      {
+        name: 'safe-skill',
+        version: '1.0.0',
+        description: { en: 'nested' } as unknown as string,
+        tags: [42, 'findme'] as unknown as string[],
+      },
+      {
+        name: 'other',
+        version: '1.0.0',
+        description: 'plain',
+      },
+    ];
+    expect(() => searchSkills(dirty, 'test')).not.toThrow();
+    const byTag = searchSkills(dirty, 'findme');
+    expect(byTag.map((m) => m.name)).toEqual(['safe-skill']);
+  });
 });

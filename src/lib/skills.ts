@@ -160,9 +160,10 @@ function metaFromFrontmatter(
     meta.tags = tags;
   }
   for (const [key, value] of Object.entries(frontmatter)) {
-    if (!(key in meta)) {
-      meta[key] = value;
-    }
+    if (key in meta) continue;
+    // 未通过校验的 description / tags 不再写入，避免搜索时对非字符串调用 toLowerCase
+    if (key === 'description' || key === 'tags') continue;
+    meta[key] = value;
   }
   return meta;
 }
@@ -313,10 +314,32 @@ export function findSkillInCache(
   return null;
 }
 
-function includesInsensitive(haystack: string, needle: string): boolean {
+/** 将任意值规整为可参与搜索的纯文本；无法规整时返回 null。 */
+function toSearchableText(value: unknown): string | null {
+  if (value == null) return null;
+  if (typeof value === 'string') {
+    return value;
+  }
+  if (value instanceof String) {
+    return value.valueOf();
+  }
+  if (
+    typeof value === 'number' ||
+    typeof value === 'boolean' ||
+    typeof value === 'bigint'
+  ) {
+    return String(value);
+  }
+  return null;
+}
+
+/** 大小写不敏感子串匹配；haystack 来自 meta / frontmatter，可能为非字符串。 */
+export function includesInsensitive(haystack: unknown, needle: string): boolean {
   const n = needle.toLowerCase();
-  // 关键字与待匹配串均做小写化；中文等不受影响，仍可被 includes 匹配
-  return haystack.toLowerCase().includes(n);
+  if (!n) return true;
+  const text = toSearchableText(haystack);
+  if (text == null) return false;
+  return text.toLowerCase().includes(n);
 }
 
 /**
@@ -324,12 +347,16 @@ function includesInsensitive(haystack: string, needle: string): boolean {
  * 有连字符时优先各段 includes；关键字含 `-` 时允许整包名 includes（如搜 commit-helper）；
  * 避免仅用整串 includes 使 react 命中 commit-helper。
  */
-function nameMatchesKeyword(name: string, keyword: string): boolean {
+function nameMatchesKeyword(name: unknown, keyword: string): boolean {
+  const nameStr = toSearchableText(name);
+  if (nameStr == null) {
+    return false;
+  }
   const k = keyword.toLowerCase();
-  const lower = name.toLowerCase();
+  const lower = nameStr.toLowerCase();
   if (!k) return true;
 
-  if (!name.includes('-')) {
+  if (!nameStr.includes('-')) {
     return lower.includes(k);
   }
 
@@ -351,7 +378,7 @@ export function searchSkills(metas: SkillMeta[], keyword: string): SkillMeta[] {
   }
   return metas.filter((meta) => {
     if (nameMatchesKeyword(meta.name, trimmed)) return true;
-    if (meta.description && includesInsensitive(meta.description, trimmed)) {
+    if (includesInsensitive(meta.description, trimmed)) {
       return true;
     }
     if (
