@@ -40,9 +40,24 @@ export const BUILTIN_SOURCE_CATALOG: BuiltinSourceInfo[] = [
     description: 'Claude official skills library, useful as a baseline source.',
   },
   {
+    name: 'anthropics-skills cn',
+    url: 'https://gitee.com/zhujun12/skills.git',
+    label: 'Anthropic skills 国内源',
+    category: 'official',
+    description: 'Claude official skills library, useful as a baseline source.',
+  },
+  {
     name: 'superpowers',
     url: 'https://github.com/obra/superpowers.git',
     label: 'Superpowers',
+    category: 'engineering',
+    description: 'Engineering skills for complex development, TDD, debugging, and refactoring.',
+  },
+  // https://gitee.com/zhujun12/superpowers.git
+  {
+    name: 'superpowers cn',
+    url: 'https://gitee.com/zhujun12/superpowers.git',
+    label: 'Superpowers 国内源',
     category: 'engineering',
     description: 'Engineering skills for complex development, TDD, debugging, and refactoring.',
   },
@@ -53,6 +68,14 @@ export const BUILTIN_SOURCE_CATALOG: BuiltinSourceInfo[] = [
     category: 'official',
     description: 'Web, full-stack, Next.js, and deployment focused skills.',
   },
+  // https://gitee.com/zhujun12/agent-skills.git
+   {
+    name: 'vercel-agent-skills cn',
+    url: 'https://github.com/vercel-labs/agent-skills.git',
+    label: 'Vercel agent skills 国内源',
+    category: 'official',
+    description: 'Web, full-stack, Next.js, and deployment focused skills.',
+  },
   {
     name: 'huggingface-skills',
     url: 'https://github.com/huggingface/skills.git',
@@ -60,33 +83,13 @@ export const BUILTIN_SOURCE_CATALOG: BuiltinSourceInfo[] = [
     category: 'official',
     description: 'Skills for Hugging Face and the open-source model ecosystem.',
   },
+  // https://gitee.com/zhujun12/huggingface-skills.git
   {
-    name: 'claude-arsenal',
-    url: 'https://github.com/majiayu000/claude-arsenal.git',
-    label: 'Claude Arsenal',
-    category: 'cn',
-    description: 'Chinese-friendly engineering skill collection.',
-  },
-  {
-    name: 'daymade-claude-code-skills',
-    url: 'https://github.com/daymade/claude-code-skills.git',
-    label: 'Daymade Claude Code skills',
-    category: 'engineering',
-    description: 'Production development, security, and GitHub operation skills.',
-  },
-  {
-    name: 'remotion-skills',
-    url: 'https://github.com/remotion-dev/skills.git',
-    label: 'Remotion skills',
-    category: 'specialized',
-    description: 'Remotion video, animation, and data visualization skills.',
-  },
-  {
-    name: 'awesome-claude-skills',
-    url: 'https://github.com/ComposioHQ/awesome-claude-skills.git',
-    label: 'Awesome Claude skills',
-    category: 'collection',
-    description: 'Curated index of Claude skill resources.',
+    name: 'huggingface-skills cn',
+    url: 'https://gitee.com/zhujun12/huggingface-skills.git',
+    label: 'Hugging Face skills 国内源',
+    category: 'official',
+    description: 'Skills for Hugging Face and the open-source model ecosystem.',
   },
   {
     name: 'antigravity-awesome-skills',
@@ -96,19 +99,27 @@ export const BUILTIN_SOURCE_CATALOG: BuiltinSourceInfo[] = [
     description: 'Cross-platform AI skill collection.',
   },
   {
-    name: 'inbharatai-claude-skills',
-    url: 'https://github.com/inbharatai/claude-skills.git',
-    label: 'InbharatAI Claude skills',
+    name: 'antigravity-awesome-skills cn',
+    url: 'https://gitee.com/zhujun12/antigravity-awesome-skills.git',
+    label: 'Antigravity awesome skills 国内源',
     category: 'collection',
-    description: 'Multi-category production Claude skills collection.',
+    description: 'Cross-platform AI skill collection.',
   },
   {
-    name: 'awesome-agent-skills',
-    url: 'https://github.com/mafichoni/awesome-agent-skills.git',
-    label: 'Awesome agent skills',
+    name: 'awesome-claude-skills',
+    url: 'https://github.com/ComposioHQ/awesome-claude-skills.git',
+    label: 'Awesome Claude skills',
     category: 'collection',
-    description: 'Cross-platform agent skill resource collection.',
+    description: 'Curated index of Claude skill resources.',
   },
+  // https://gitee.com/zhujun12/awesome-claude-skills.git
+  {
+    name: 'awesome-claude-skills cn',
+    url: 'https://github.com/ComposioHQ/awesome-claude-skills.git',
+    label: 'Awesome Claude skills 国内源',
+    category: 'collection',
+    description: 'Curated index of Claude skill resources.',
+  }
 ];
 
 const ALL_BUILTIN_SOURCE_INFOS = [
