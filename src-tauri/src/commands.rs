@@ -158,6 +158,9 @@ pub async fn get_installed_skills(
     if let Some(s) = scope {
         if s == "global" {
             args.push("--global".to_string());
+        } else if s == "all" || s == "project" {
+            args.push("--scope".to_string());
+            args.push(s);
         }
     }
     if let Some(t) = target {

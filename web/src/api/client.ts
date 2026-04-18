@@ -72,6 +72,12 @@ export interface InstallResult {
   message?: string;
 }
 
+export interface ExportResult {
+  status: 'exported' | 'cancelled';
+  fileName?: string;
+  path?: string;
+}
+
 // 动态检测运行环境并导入 Tauri API
 const getTauriApi = async () => {
   if (typeof window !== 'undefined' && '__TAURI__' in window) {
@@ -351,7 +357,7 @@ export async function fetchInstalled(params: {
   const tauri = await getTauriApi();
   if (tauri) {
     const result = await tauri.tauriGetInstalledSkills({
-      scope: params.scope === 'all' ? undefined : params.scope,
+      scope: params.scope,
       target: params.target,
     });
     return {
@@ -434,11 +440,28 @@ export async function removeInstalledSkill(
   });
 }
 
-export function copyInstalledSkillPackage(requestBody: {
+export async function copyInstalledSkillPackage(requestBody: {
   name: string;
   target: string;
   scope: 'project' | 'global';
 }): Promise<{ status: 'copied'; fileName: string; path: string }> {
+  const tauri = await getTauriApi();
+  if (tauri) {
+    const stdout = await tauri.tauriRunCommand([
+      'copy-package',
+      requestBody.name,
+      '--target',
+      requestBody.target,
+      '--scope',
+      requestBody.scope,
+      '--json',
+    ]);
+    return JSON.parse(stdout) as {
+      status: 'copied';
+      fileName: string;
+      path: string;
+    };
+  }
   return request<{ status: 'copied'; fileName: string; path: string }>(
     '/api/installed/copy-package',
     {
@@ -448,7 +471,7 @@ export function copyInstalledSkillPackage(requestBody: {
   );
 }
 
-export function linkInstalledSkillTargets(requestBody: {
+export async function linkInstalledSkillTargets(requestBody: {
   name: string;
   target: string;
   scope: 'project' | 'global';
@@ -462,6 +485,29 @@ export function linkInstalledSkillTargets(requestBody: {
     message?: string;
   }[];
 }> {
+  const tauri = await getTauriApi();
+  if (tauri) {
+    const stdout = await tauri.tauriRunCommand([
+      'link-targets',
+      requestBody.name,
+      '--target',
+      requestBody.target,
+      '--scope',
+      requestBody.scope,
+      '--targets',
+      requestBody.targets.join(','),
+      '--json',
+    ]);
+    return JSON.parse(stdout) as {
+      results: {
+        target: string;
+        scope: 'project' | 'global';
+        status: 'linked' | 'skipped';
+        path: string;
+        message?: string;
+      }[];
+    };
+  }
   return request('/api/installed/link-targets', {
     method: 'POST',
     body: JSON.stringify(requestBody),
@@ -472,15 +518,30 @@ export async function exportInstalledSkill(requestBody: {
   name: string;
   target: string;
   scope: 'project' | 'global';
-}): Promise<void> {
+}): Promise<ExportResult> {
   const tauri = await getTauriApi();
   if (tauri) {
-    await tauri.tauriExportSkill({
-      name: requestBody.name,
-      target: requestBody.target,
-      scope: requestBody.scope,
+    const { save } = await import('@tauri-apps/plugin-dialog');
+    const outputPath = await save({
+      title: `Export ${requestBody.name}`,
+      defaultPath: `${requestBody.name}.zip`,
+      filters: [{ name: 'Zip archive', extensions: ['zip'] }],
     });
-    return;
+    if (!outputPath) {
+      return { status: 'cancelled' };
+    }
+    const stdout = await tauri.tauriRunCommand([
+      'export',
+      requestBody.name,
+      '--target',
+      requestBody.target,
+      '--scope',
+      requestBody.scope,
+      '--out',
+      outputPath,
+      '--json',
+    ]);
+    return JSON.parse(stdout) as ExportResult;
   }
   const response = await fetch('/api/installed/export', {
     method: 'POST',
@@ -503,4 +564,5 @@ export async function exportInstalledSkill(requestBody: {
   link.click();
   link.remove();
   URL.revokeObjectURL(url);
+  return { status: 'exported', fileName };
 }

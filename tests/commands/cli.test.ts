@@ -482,6 +482,38 @@ describe('阶段 9 CLI', () => {
       expect(lines.some((l) => l.includes('\tb'))).toBe(true);
     });
 
+    it('scope all scans all known targets and locations', async () => {
+      const projectSkill = join(projectDir, '.cursor', 'skills', 'project-cursor');
+      const globalSkill = join(userHome, '.codex', 'skills', 'global-codex');
+      mkdirSync(projectSkill, { recursive: true });
+      mkdirSync(globalSkill, { recursive: true });
+      writeFileSync(
+        join(projectSkill, 'meta.json'),
+        '{"name":"project-cursor","version":"1.0.0"}',
+      );
+      writeFileSync(
+        join(globalSkill, 'meta.json'),
+        '{"name":"global-codex","version":"1.0.0"}',
+      );
+      const lines: string[] = [];
+      vi.mocked(console.log).mockImplementation((m: unknown) => {
+        lines.push(String(m));
+      });
+      const prog = createProgramForTest(ctx());
+      await runCliUserArgs(prog, ['installed', '--scope', 'all', '--json']);
+      const payload = JSON.parse(lines.join('\n')) as {
+        items: { name: string; target: string; scope: string }[];
+      };
+      expect(payload.items.map((item) => item.name)).toEqual([
+        'global-codex',
+        'project-cursor',
+      ]);
+      expect(payload.items.map((item) => `${item.target}:${item.scope}`)).toEqual([
+        'codex:global',
+        'cursor:project',
+      ]);
+    });
+
     it('无 skill → No skills installed', async () => {
       const lines: string[] = [];
       vi.mocked(console.log).mockImplementation((m: unknown) => {

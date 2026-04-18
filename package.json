@@ -72,6 +72,7 @@
     "@inquirer/core": "^11.1.8",
     "@inquirer/prompts": "^8.4.1",
     "@tauri-apps/api": "^2.10.1",
+    "@tauri-apps/plugin-dialog": "^2.7.0",
     "commander": "^14.0.3",
     "react": "^19.2.3",
     "react-dom": "^19.2.3"

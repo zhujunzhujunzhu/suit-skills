@@ -588,12 +588,16 @@ export default function App() {
 
   async function exportSkill(item: InstalledSkill) {
     try {
-      await exportInstalledSkill({
+      const result = await exportInstalledSkill({
         name: item.name,
         target: item.target,
         scope: item.scope,
       });
-      notify('Export started');
+      if (result.status === 'cancelled') {
+        notify('Export cancelled');
+        return;
+      }
+      notify(result.path ? `Exported to ${result.path}` : 'Exported');
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
