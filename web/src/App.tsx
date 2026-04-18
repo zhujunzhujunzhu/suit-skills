@@ -17,9 +17,10 @@ import {
   type SkillDetail,
   type SkillSummary,
   type Source,
+  type SourceWarning,
 } from './api/client';
 
-type View = 'library' | 'installed' | 'sources' | 'tags';
+type View = 'library' | 'installed' | 'sources';
 type LocationScope = 'project' | 'global';
 type ScopeFilter = 'all' | LocationScope;
 type InstallStrategy = 'overwrite' | 'skip' | 'rename';
@@ -45,12 +46,6 @@ const icons = {
     <>
       <circle cx="12" cy="12" r="9" />
       <path d="m7.5 12 3 3L17 8" />
-    </>
-  ),
-  tag: (
-    <>
-      <path d="M20 13 13 20 4 11V4h7l9 9z" />
-      <path d="M8 8h.01" />
     </>
   ),
   search: (
@@ -230,6 +225,33 @@ function ErrorState({ message }: { message: string }) {
   return <div className="state error">{message}</div>;
 }
 
+function SourceWarnings({ warnings }: { warnings: SourceWarning[] }) {
+  if (warnings.length === 0) return null;
+  return (
+    <div className="source-warnings" role="status">
+      <strong>
+        {warnings.some((warning) => !warning.usingCache)
+          ? 'Some enabled sources could not refresh.'
+          : 'Using local cache for one or more sources.'}
+      </strong>
+      <span>
+        Available skills are still shown. Enable domestic mirrors or disable
+        unreachable sources from Sources if this keeps happening.
+      </span>
+      <ul>
+        {warnings.map((warning) => (
+          <li key={`${warning.sourceName}:${warning.url}:${warning.message}`}>
+            <b>{warning.sourceName}</b>
+            <code>{warning.url}</code>
+            <em>{warning.usingCache ? 'local cache' : 'unreachable'}</em>
+            <span>{warning.message}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function installedSkillMatches(item: InstalledSkill, query: string): boolean {
   const needle = query.trim().toLowerCase();
   if (!needle) return true;
@@ -288,7 +310,6 @@ const VIEW_KEYS: Record<View, string> = {
   library: 'skills',
   installed: 'installed',
   sources: 'sources',
-  tags: 'tags',
 };
 
 function viewFromHash(): View {
@@ -318,6 +339,7 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [installedLoading, setInstalledLoading] = useState(false);
   const [error, setError] = useState('');
+  const [sourceWarnings, setSourceWarnings] = useState<SourceWarning[]>([]);
   const [toast, setToast] = useState('');
   const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
   const [sourceName, setSourceName] = useState('');
@@ -341,6 +363,7 @@ export default function App() {
     skillRequestId.current = requestId;
     setLoading(true);
     setError('');
+    setSourceWarnings([]);
     try {
       const data = await fetchSkills({
         source: nextSource,
@@ -350,6 +373,7 @@ export default function App() {
       });
       if (skillRequestId.current === requestId) {
         setSkills(data.items);
+        setSourceWarnings(data.warnings ?? []);
         setSelected((current) =>
           current && data.items.some((item) => item.name === current)
             ? current
@@ -359,6 +383,7 @@ export default function App() {
     } catch (err) {
       if (skillRequestId.current === requestId) {
         setError(err instanceof Error ? err.message : String(err));
+        setSourceWarnings([]);
       }
     } finally {
       if (skillRequestId.current === requestId) {
@@ -625,6 +650,58 @@ export default function App() {
     }
   }
 
+  async function toggleSourceMirror(item: Source) {
+    if (!item.domesticMirror) {
+      return;
+    }
+    try {
+      const result = await updateSource(item.name, {
+        domesticMirror: { enabled: !item.domesticMirror.enabled },
+      });
+      setSources(result.sources);
+      setDefaultSource(result.defaultSource);
+      notify(
+        item.domesticMirror.enabled
+          ? 'Domestic mirror disabled'
+          : 'Domestic mirror enabled',
+      );
+      await loadSkills(source);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  async function toggleAllSourceMirrors() {
+    const mirrorSources = sources.filter((item) => item.domesticMirror);
+    if (mirrorSources.length === 0) {
+      notify('No domestic mirrors available');
+      return;
+    }
+    const nextEnabled = !mirrorSources.every(
+      (item) => item.domesticMirror?.enabled,
+    );
+    try {
+      let nextSources = sources;
+      let nextDefaultSource = defaultSource;
+      for (const item of mirrorSources) {
+        if (item.domesticMirror?.enabled === nextEnabled) {
+          continue;
+        }
+        const result = await updateSource(item.name, {
+          domesticMirror: { enabled: nextEnabled },
+        });
+        nextSources = result.sources;
+        nextDefaultSource = result.defaultSource;
+      }
+      setSources(nextSources);
+      setDefaultSource(nextDefaultSource);
+      notify(nextEnabled ? 'Domestic mirrors enabled' : 'Domestic mirrors disabled');
+      await loadSkills(source);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
   async function deleteSource(name: string) {
     try {
       const result = await removeSource(name);
@@ -671,7 +748,6 @@ export default function App() {
           <NavButton active={view === 'library'} onClick={() => setView('library')} icon="database" label="Skills" />
           <NavButton active={view === 'installed'} onClick={() => setView('installed')} icon="check" label="Installed" />
           <NavButton active={view === 'sources'} onClick={() => setView('sources')} icon="terminal" label="Sources" />
-          <NavButton active={view === 'tags'} onClick={() => setView('tags')} icon="tag" label="Tags" />
         </nav>
         <div className="rail-status">
           <span>local index</span>
@@ -703,6 +779,7 @@ export default function App() {
             selectedSummary={selectedSummary}
             skills={skills}
             source={source}
+            sourceWarnings={sourceWarnings}
             sources={enabledSources}
             tag={tag}
             tags={tags}
@@ -736,16 +813,15 @@ export default function App() {
             onDelete={deleteSource}
             onNameChange={setSourceName}
             onRestore={restoreBuiltinsFromCatalog}
+            onToggleAllMirrors={toggleAllSourceMirrors}
+            onToggleMirror={toggleSourceMirror}
             onToggle={toggleSource}
             onUrlChange={setSourceUrl}
+            refreshing={loading}
             sources={sources}
             url={sourceUrl}
           />
         ) : null}
-        {view === 'tags' ? <TagsView tags={tags} onSelectTag={(next) => {
-          setTag(next);
-          setView('library');
-        }} /> : null}
       </main>
 
       {toast ? <div className="toast">{toast}</div> : null}
@@ -793,6 +869,7 @@ function LibraryView(props: {
   selectedSummary: SkillSummary | null;
   skills: SkillSummary[];
   source: string;
+  sourceWarnings: SourceWarning[];
   sources: Source[];
   tag: string;
   tags: string[];
@@ -828,12 +905,19 @@ function LibraryView(props: {
         </div>
 
         <div className="library-scroll">
-          {props.loading ? <EmptyState>Scanning source cache...</EmptyState> : null}
+          <SourceWarnings warnings={props.sourceWarnings} />
+          {props.loading ? (
+            <EmptyState>
+              Refreshing source cache. Network checks time out after 30 seconds.
+            </EmptyState>
+          ) : null}
           {!props.loading && props.skills.length === 0 ? (
             <EmptyState>
               {props.sources.length === 0
                 ? 'No enabled sources.'
-                : 'No matching skills.'}
+                : props.sourceWarnings.length > 0
+                  ? 'No skills from reachable enabled sources. Check Sources or enable domestic mirrors.'
+                  : 'No matching skills.'}
             </EmptyState>
           ) : null}
 
@@ -952,16 +1036,54 @@ function TagRow({
   tags: string[];
   onChange: (value: string) => void;
 }) {
+  const orderedTags =
+    active && tags.includes(active)
+      ? [active, ...tags.filter((item) => item !== active)]
+      : tags;
+  const visibleLimit = 4;
+  const visibleTags = orderedTags.slice(0, visibleLimit);
+  const overflowTags = orderedTags.slice(visibleLimit);
+  const isCollapsible = overflowTags.length > 0;
+
   return (
-    <div className="tag-row">
-      <button className={active === '' ? 'active' : ''} onClick={() => onChange('')}>
-        all
-      </button>
-      {tags.map((item) => (
-        <button className={active === item ? 'active' : ''} key={item} onClick={() => onChange(item)}>
-          {item}
+    <div className={`tag-row-frame ${isCollapsible ? 'is-collapsible' : ''}`}>
+      <div className="tag-row">
+        <button className={active === '' ? 'active' : ''} onClick={() => onChange('')}>
+          all
         </button>
-      ))}
+        {visibleTags.map((item) => (
+          <button
+            className={active === item ? 'active' : ''}
+            key={item}
+            onClick={() => onChange(item)}
+          >
+            {item}
+          </button>
+        ))}
+        {isCollapsible ? (
+          <button
+            aria-haspopup="true"
+            aria-label={`Show ${overflowTags.length} more tags`}
+            className="tag-overflow-trigger"
+            type="button"
+          >
+            +{overflowTags.length}
+          </button>
+        ) : null}
+      </div>
+      {isCollapsible ? (
+        <div className="tag-overflow-panel">
+          {overflowTags.map((item) => (
+            <button
+              className={active === item ? 'active' : ''}
+              key={item}
+              onClick={() => onChange(item)}
+            >
+              {item}
+            </button>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -1158,7 +1280,10 @@ function SourcesView({
   onNameChange,
   onRestore,
   onToggle,
+  onToggleAllMirrors,
+  onToggleMirror,
   onUrlChange,
+  refreshing,
   sources,
   url,
 }: {
@@ -1169,7 +1294,10 @@ function SourcesView({
   onNameChange: (value: string) => void;
   onRestore: () => void;
   onToggle: (source: Source) => void;
+  onToggleAllMirrors: () => void;
+  onToggleMirror: (source: Source) => void;
   onUrlChange: (value: string) => void;
+  refreshing: boolean;
   sources: Source[];
   url: string;
 }) {
@@ -1177,15 +1305,35 @@ function SourcesView({
     null,
   );
   const enabledCount = sources.filter((source) => source.enabled).length;
+  const mirrorSources = sources.filter((source) => source.domesticMirror);
+  const allMirrorsEnabled =
+    mirrorSources.length > 0 &&
+    mirrorSources.every((source) => source.domesticMirror?.enabled);
 
   return (
     <section className="installed-page">
       <div className="page-head">
         <h1>Sources</h1>
-        <button className="button" onClick={onRestore}>
-          <Icon name="database" />
-          Add built-in sources
-        </button>
+        <div className="source-head-actions">
+          <button
+            className={allMirrorsEnabled ? 'button source-mirror-global active' : 'button source-mirror-global'}
+            disabled={refreshing || mirrorSources.length === 0}
+            onClick={onToggleAllMirrors}
+            title={
+              mirrorSources.length === 0
+                ? '当前没有可切换的国内镜像'
+                : allMirrorsEnabled
+                  ? '切换所有内置源为上游 URL'
+                  : '切换所有内置源为国内镜像 URL'
+            }
+          >
+            使用国内源
+          </button>
+          <button className="button" disabled={refreshing} onClick={onRestore}>
+            <Icon name="database" />
+            Add built-in sources
+          </button>
+        </div>
       </div>
       <div className="source-form">
         <label>
@@ -1204,11 +1352,11 @@ function SourcesView({
             placeholder="https://github.com/acme/skills.git"
           />
         </label>
-        <button className="button primary" onClick={onAdd}>
+        <button className="button primary" disabled={refreshing} onClick={onAdd}>
           Add source
         </button>
       </div>
-      <div className="source-list">
+      <div className="source-list" aria-busy={refreshing}>
         {sources.map((source) => {
           const isLastEnabledSource = source.enabled && enabledCount <= 1;
           const cannotDelete =
@@ -1226,17 +1374,32 @@ function SourcesView({
             <article key={source.name}>
               <div className="source-main">
                 <strong>
-                  <span>{source.name}</span>
+                  <span>{source.label}</span>
                   <span className="source-tags">
                     {source.name === defaultSource ? <i>default</i> : null}
                     <i>{source.builtin ? 'builtin' : 'custom'}</i>
                     <i>{source.category}</i>
+                    {source.domesticMirror ? (
+                      <i>
+                        {source.domesticMirror.enabled
+                          ? '国内镜像'
+                          : '上游'}
+                      </i>
+                    ) : null}
                   </span>
                 </strong>
                 <span className="source-description">
                   {source.description}
                 </span>
-                <code>{source.url}</code>
+                <span className="source-url-row">
+                  <b>上游</b>
+                  <code>{source.url}</code>
+                </span>
+                <span className="source-url-row">
+                  <b>当前</b>
+                  <code>{source.effectiveUrl}</code>
+                </span>
+                <span className="source-key">{source.name}</span>
               </div>
               <span className={source.enabled ? 'source-status on' : 'source-status'}>
                 {source.enabled ? 'enabled' : 'disabled'}
@@ -1244,7 +1407,7 @@ function SourcesView({
               <div className="source-actions">
                 <button
                   className="button"
-                  disabled={isLastEnabledSource}
+                  disabled={refreshing || isLastEnabledSource}
                   onClick={() => onToggle(source)}
                   title={
                     isLastEnabledSource
@@ -1254,9 +1417,23 @@ function SourcesView({
                 >
                   {source.enabled ? 'Disable' : 'Enable'}
                 </button>
+                {source.domesticMirror ? (
+                  <button
+                    className="button"
+                    disabled={refreshing}
+                    onClick={() => onToggleMirror(source)}
+                    title={
+                      source.domesticMirror.enabled
+                        ? '切换为上游 GitHub URL'
+                        : '切换为国内镜像 URL'
+                    }
+                  >
+                    {source.domesticMirror.enabled ? '国内镜像 开' : '国内镜像 关'}
+                  </button>
+                ) : null}
                 <button
                   className="button danger"
-                  disabled={cannotDelete}
+                  disabled={refreshing || cannotDelete}
                   onClick={() =>
                     setConfirmDeleteSource(confirming ? null : source.name)
                   }
@@ -1292,30 +1469,13 @@ function SourcesView({
           );
         })}
       </div>
-    </section>
-  );
-}
-
-function TagsView({
-  tags,
-  onSelectTag,
-}: {
-  tags: string[];
-  onSelectTag: (value: string) => void;
-}) {
-  return (
-    <section className="installed-page">
-      <div className="page-head">
-        <h1>Tags</h1>
-      </div>
-      <div className="tag-cloud">
-        {tags.map((tag) => (
-          <button key={tag} onClick={() => onSelectTag(tag)}>
-            {tag}
-          </button>
-        ))}
-        {tags.length === 0 ? <EmptyState>No tags in the current result set.</EmptyState> : null}
-      </div>
+      {refreshing ? (
+        <div className="source-sync-status" role="status" aria-live="polite">
+          <span className="source-sync-spinner" />
+          <strong>Refreshing source cache</strong>
+          <em>Network checks time out after 30s</em>
+        </div>
+      ) : null}
     </section>
   );
 }

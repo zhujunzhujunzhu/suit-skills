@@ -2,7 +2,10 @@ import { homedir as nodeHomedir } from 'node:os';
 import { join } from 'node:path';
 import type { Source } from '../types/index.js';
 import { urlToCacheDirName } from '../utils/path.js';
-import type { ConfigLocationOptions } from './config.js';
+import {
+  getEffectiveSourceUrl,
+  type ConfigLocationOptions,
+} from './config.js';
 import {
   cloneOrPullRepo,
   type GitModuleOptions,
@@ -46,16 +49,25 @@ export function refreshCache(
   const url =
     typeof sourceOrUrl === 'string'
       ? sourceOrUrl.trim()
-      : sourceOrUrl.url.trim();
+      : getEffectiveSourceUrl(sourceOrUrl);
   const path = getSourceCacheDir(url, options);
   const impl = options?.cloneOrPullRepo ?? cloneOrPullRepo;
   const gitOptions: GitModuleOptions | undefined =
     options === undefined
       ? undefined
-      : { env: options.env, spawnSync: options.spawnSync };
+      : {
+          env: options.env,
+          spawnSync: options.spawnSync,
+          timeoutMs: options.timeoutMs,
+        };
   const raw = impl(url, path, gitOptions);
   if (raw.warning) {
-    return { path: raw.path, warning: REFRESH_CACHE_LOCAL_WARNING };
+    return {
+      path: raw.path,
+      warning: raw.warningMessage
+        ? `${REFRESH_CACHE_LOCAL_WARNING} ${raw.warningMessage}`
+        : REFRESH_CACHE_LOCAL_WARNING,
+    };
   }
   return {
     path: raw.path,

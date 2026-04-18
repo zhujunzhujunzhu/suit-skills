@@ -11,10 +11,15 @@ export interface Source {
   name: string;
   url: string;
   enabled: boolean;
+  domesticMirror?: {
+    url: string;
+    enabled: boolean;
+  };
   builtin: boolean;
   label: string;
   category: SourceCategory;
   description: string;
+  effectiveUrl: string;
 }
 
 export interface SkillSummary {
@@ -50,6 +55,13 @@ export interface InstalledSkill {
 export interface SourcesResponse {
   defaultSource: string;
   sources: Source[];
+}
+
+export interface SourceWarning {
+  sourceName: string;
+  url: string;
+  message: string;
+  usingCache: boolean;
 }
 
 export interface InstallResult {
@@ -135,7 +147,7 @@ export function addSource(requestBody: {
 
 export function updateSource(
   name: string,
-  requestBody: { enabled: boolean },
+  requestBody: { enabled?: boolean; domesticMirror?: { enabled?: boolean } },
 ): Promise<SourcesResponse & { source: Source }> {
   return request<SourcesResponse & { source: Source }>(
     `/api/sources/${encodeURIComponent(name)}`,
@@ -169,8 +181,10 @@ export function fetchSkills(params: {
   q?: string;
   tag?: string;
   refresh?: boolean;
-}): Promise<{ items: SkillSummary[] }> {
-  return request<{ items: SkillSummary[] }>(withParams('/api/skills', params));
+}): Promise<{ items: SkillSummary[]; warnings: SourceWarning[] }> {
+  return request<{ items: SkillSummary[]; warnings: SourceWarning[] }>(
+    withParams('/api/skills', params),
+  );
 }
 
 export function fetchSkillDetail(

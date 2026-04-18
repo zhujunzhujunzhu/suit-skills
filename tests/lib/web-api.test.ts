@@ -138,6 +138,21 @@ describe('web api', () => {
     expect(result.sources[0]).toMatchObject({
       builtin: true,
       category: 'cn',
+      label: 'Suit Skills 默认源',
+      description: '数知建维护的默认技能库，新安装默认启用。',
+      effectiveUrl: 'https://gitee.com/digital-construction-center_1/suit-skills-lib.git',
+    });
+    const anthropics = result.sources.find(
+      (source) => source.name === 'anthropics-skills',
+    );
+    expect(anthropics).toMatchObject({
+      label: 'Anthropic 官方技能库',
+      description: 'Claude 官方技能合集，适合作为基础技能来源。',
+      domesticMirror: {
+        url: 'https://gitee.com/zhujun12/skills.git',
+        enabled: true,
+      },
+      effectiveUrl: 'https://gitee.com/zhujun12/skills.git',
     });
   });
 
@@ -201,6 +216,26 @@ describe('web api', () => {
     expect(removed.sources.some((source) => source.name === 'team')).toBe(false);
   });
 
+  it('toggles a built-in domestic mirror without changing the source name', () => {
+    const disabled = updateWebSource(ctx(), 'anthropics-skills', {
+      domesticMirror: { enabled: false },
+    });
+    expect(disabled.source).toMatchObject({
+      name: 'anthropics-skills',
+      url: 'https://github.com/anthropics/skills.git',
+      effectiveUrl: 'https://github.com/anthropics/skills.git',
+      domesticMirror: {
+        url: 'https://gitee.com/zhujun12/skills.git',
+        enabled: false,
+      },
+    });
+
+    const enabled = updateWebSource(ctx(), 'anthropics-skills', {
+      domesticMirror: { enabled: true },
+    });
+    expect(enabled.source.effectiveUrl).toBe('https://gitee.com/zhujun12/skills.git');
+  });
+
   it('does not disable the last enabled source', () => {
     expect(() => updateWebSource(ctx(), 'default', { enabled: false })).toThrow(
       'Cannot disable the last enabled source',
@@ -237,6 +272,140 @@ describe('web api', () => {
 
     const filtered = listWebSkills(ctx(), { q: 'react', tag: 'frontend' });
     expect(filtered.items.map((item) => item.name)).toEqual(['react-helper']);
+  });
+
+  it('reports source refresh failures with the source name and URL', () => {
+    const config = getDefaultConfig();
+    config.sources.push({
+      name: 'no-cache',
+      url: 'https://github.com/acme/no-cache.git',
+      enabled: true,
+    });
+    writeFileSync(
+      join(suitHome, 'config.json'),
+      `${JSON.stringify(config, null, 2)}\n`,
+    );
+
+    const failingCtx = createCliContext({
+      cwd: projectDir,
+      userHome,
+      refreshExtra: {
+        cloneOrPullRepo: (url) => {
+          throw new Error(`git clone (${url}) timed out after 30s`);
+        },
+      },
+    });
+
+    expect(() => listWebSkills(failingCtx, { source: 'no-cache' })).toThrow(
+      /Failed to refresh source "no-cache".*timed out after 30s/,
+    );
+  });
+
+  it('keeps all enabled skills usable when one source cannot refresh', () => {
+    const config = getDefaultConfig();
+    config.sources.push({
+      name: 'github-only',
+      url: 'https://github.com/acme/skills.git',
+      enabled: true,
+    });
+    writeFileSync(
+      join(suitHome, 'config.json'),
+      `${JSON.stringify(config, null, 2)}\n`,
+    );
+
+    const partialCtx = createCliContext({
+      cwd: projectDir,
+      userHome,
+      refreshExtra: {
+        cloneOrPullRepo: (url, path) => {
+          if (url.includes('github.com/acme')) {
+            throw new Error(`git clone (${url}) timed out after 30s`);
+          }
+          return { path, freshlyCloned: false };
+        },
+      },
+    });
+
+    const result = listWebSkills(partialCtx, { source: 'all' });
+    expect(result.items.map((item) => item.name)).toContain('code-review');
+    expect(result.warnings).toEqual([
+      expect.objectContaining({
+        sourceName: 'github-only',
+        url: 'https://github.com/acme/skills.git',
+        usingCache: false,
+      }),
+    ]);
+    expect(result.warnings[0]?.message).toContain('timed out after 30s');
+  });
+
+  it('reports local cache warnings without hiding cached skills', () => {
+    const cachedCtx = createCliContext({
+      cwd: projectDir,
+      userHome,
+      refreshExtra: {
+        cloneOrPullRepo: (_url, path) => ({
+          path,
+          warning: true,
+          warningMessage: 'git pull timed out after 30s',
+        }),
+      },
+    });
+
+    const result = listWebSkills(cachedCtx, { source: 'default' });
+    expect(result.items.map((item) => item.name)).toContain('code-review');
+    expect(result.warnings).toEqual([
+      expect.objectContaining({
+        sourceName: 'default',
+        usingCache: true,
+      }),
+    ]);
+    expect(result.warnings[0]?.message).toContain('Using local cache');
+  });
+
+  it('falls back to a domestic mirror cache when the upstream source is unreachable', () => {
+    const config = getDefaultConfig();
+    const anthropics = config.sources.find(
+      (source) => source.name === 'anthropics-skills',
+    )!;
+    anthropics.enabled = true;
+    anthropics.domesticMirror!.enabled = false;
+    writeFileSync(
+      join(suitHome, 'config.json'),
+      `${JSON.stringify(config, null, 2)}\n`,
+    );
+
+    const mirrorCacheRoot = getSourceCacheDir(anthropics.domesticMirror!.url);
+    writeSkill(mirrorCacheRoot, 'mirror-cached-skill', {
+      description: 'Cached from the domestic mirror',
+      tags: ['mirror'],
+    });
+
+    const upstreamFailingCtx = createCliContext({
+      cwd: projectDir,
+      userHome,
+      refreshExtra: {
+        cloneOrPullRepo: (url, path) => {
+          if (url.includes('github.com/anthropics')) {
+            throw new Error(`git clone (${url}) timed out after 30s`);
+          }
+          return { path, freshlyCloned: false };
+        },
+      },
+    });
+
+    const result = listWebSkills(upstreamFailingCtx, {
+      source: 'anthropics-skills',
+    });
+    expect(result.items.map((item) => item.name)).toContain(
+      'mirror-cached-skill',
+    );
+    expect(result.warnings).toEqual([
+      expect.objectContaining({
+        sourceName: 'anthropics-skills',
+        usingCache: true,
+      }),
+    ]);
+    expect(result.warnings[0]?.message).toContain('Using local cache');
   });
 
   it('returns no skills from all when no sources are enabled', () => {

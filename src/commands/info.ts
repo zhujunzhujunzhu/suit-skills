@@ -2,7 +2,9 @@ import type { Command } from 'commander';
 import type { Config, SkillMeta } from '../types/index.js';
 import type { CliContext } from '../cli/context.js';
 import { assertSourceExists } from '../cli/helpers.js';
+import { getEffectiveSourceUrl } from '../lib/config.js';
 import { findSkillInCache } from '../lib/skills.js';
+import { warn } from '../utils/output.js';
 
 function findSkillAcrossSources(
   ctx: CliContext,
@@ -17,7 +19,11 @@ function findSkillAcrossSources(
 
   for (const n of names) {
     const src = assertSourceExists(config, n);
-    const r = ctx.refreshForSource(src.url);
+    warn(`Refreshing source ${src.name} (${getEffectiveSourceUrl(src)})...`);
+    const r = ctx.refreshForSource(src);
+    if ('warning' in r) {
+      warn(r.warning);
+    }
     const meta = findSkillInCache(r.path, identifier);
     if (meta) {
       return { meta, sourceName: src.name };

@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import {
+  DEFAULT_GIT_TIMEOUT_MS,
   isGitAvailable,
   cloneRepo,
   pullRepo,
@@ -123,6 +124,65 @@ describe('cloneRepo', () => {
     mkdirSync(dest, { recursive: true });
     writeFileSync(join(dest, 'x.txt'), '1', 'utf8');
     expect(() => cloneRepo(url, dest)).toThrow(/非空/);
+  });
+
+  it('git clone 超时时抛出明确错误并禁用交互式提示', () => {
+    const work = mkdtempSync(join(tmpdir(), 'skills-cli-git-timeout-'));
+    const calls: {
+      args: string[];
+      timeout?: number;
+      prompt?: string;
+      credentialPrompt?: string;
+    }[] = [];
+    const fakeSpawn: GitSpawnSync = ((_cmd, args, opts) => {
+      const gitArgs = (args ?? []) as string[];
+      const spawnOptions = opts as {
+        timeout?: number;
+        env?: NodeJS.ProcessEnv;
+      };
+      calls.push({
+        args: gitArgs,
+        timeout: spawnOptions.timeout,
+        prompt: spawnOptions.env?.GIT_TERMINAL_PROMPT,
+        credentialPrompt: spawnOptions.env?.GCM_INTERACTIVE,
+      });
+      if (gitArgs[0] === '--version') {
+        return {
+          status: 0,
+          signal: null,
+          error: undefined,
+          output: [null, 'git version test', ''],
+          pid: 0,
+          stdout: 'git version test',
+          stderr: '',
+        } as ReturnType<typeof spawnSync>;
+      }
+      return {
+        status: null,
+        signal: 'SIGTERM',
+        error: Object.assign(new Error('spawnSync git ETIMEDOUT'), {
+          code: 'ETIMEDOUT',
+        }),
+        output: [null, '', ''],
+        pid: 0,
+        stdout: '',
+        stderr: '',
+      } as ReturnType<typeof spawnSync>;
+    }) as GitSpawnSync;
+
+    try {
+      expect(() =>
+        cloneRepo('https://example.com/repo.git', join(work, 'repo'), {
+          spawnSync: fakeSpawn,
+          timeoutMs: 1000,
+        }),
+      ).toThrow(/timed out after 1s/);
+      expect(calls.every((call) => call.prompt === '0')).toBe(true);
+      expect(calls.every((call) => call.credentialPrompt === 'Never')).toBe(true);
+      expect(calls.map((call) => call.timeout)).toEqual([1000, 1000]);
+    } finally {
+      rmSync(work, { recursive: true, force: true });
+    }
   });
 });
 
@@ -260,5 +320,49 @@ describe('cloneOrPullRepo', () => {
         spawnSync: fakeSpawn,
       }),
     ).toThrow(/未检测到可用的 git 命令/);
+  });
+
+  it('缓存目录存在但不是 git 仓库时先清理半截缓存再 clone', () => {
+    const root = mkdtempSync(join(tmpdir(), 'skills-cli-partial-cache-'));
+    const cacheDir = join(root, 'cache');
+    const staleFile = join(cacheDir, 'partial.txt');
+    mkdirSync(cacheDir, { recursive: true });
+    writeFileSync(staleFile, 'stale', 'utf8');
+    const fakeSpawn: GitSpawnSync = ((_cmd, args, opts) => {
+      const gitArgs = (args ?? []) as string[];
+      if (gitArgs[0] === '--version') {
+        return {
+          status: 0,
+          signal: null,
+          error: undefined,
+          output: [null, 'git version test', ''],
+          pid: 0,
+          stdout: 'git version test',
+          stderr: '',
+        } as ReturnType<typeof spawnSync>;
+      }
+      expect(gitArgs[0]).toBe('clone');
+      expect(existsSync(staleFile)).toBe(false);
+      expect((opts as { timeout?: number }).timeout).toBe(DEFAULT_GIT_TIMEOUT_MS);
+      mkdirSync(join(cacheDir, '.git'), { recursive: true });
+      return {
+        status: 0,
+        signal: null,
+        error: undefined,
+        output: [null, '', ''],
+        pid: 0,
+        stdout: '',
+        stderr: '',
+      } as ReturnType<typeof spawnSync>;
+    }) as GitSpawnSync;
+
+    try {
+      const res = cloneOrPullRepo('https://example.com/repo.git', cacheDir, {
+        spawnSync: fakeSpawn,
+      });
+      expect(res).toEqual({ path: cacheDir, freshlyCloned: true });
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });

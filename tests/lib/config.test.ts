@@ -9,6 +9,7 @@ import {
   loadConfig,
   saveConfig,
   getConfigValue,
+  getEffectiveSourceUrl,
   restoreBuiltinSources,
   setConfigValue,
   getConfigPath,
@@ -61,12 +62,21 @@ describe('getDefaultConfig', () => {
       cfg.sources.filter((source) => source.enabled).map((source) => source.name),
     ).toEqual(['default']);
     for (const builtin of BUILTIN_SOURCE_CATALOG) {
-      expect(cfg.sources).toContainEqual({
+      const source = cfg.sources.find((item) => item.name === builtin.name);
+      expect(source).toMatchObject({
         name: builtin.name,
         url: builtin.url,
         enabled: false,
       });
+      if (builtin.domesticMirrorUrl) {
+        expect(source?.domesticMirror).toEqual({
+          url: builtin.domesticMirrorUrl,
+          enabled: true,
+        });
+        expect(getEffectiveSourceUrl(source!)).toBe(builtin.domesticMirrorUrl);
+      }
     }
+    expect(cfg.sources.some((source) => source.name.endsWith(' cn'))).toBe(false);
   });
 });
 
@@ -176,6 +186,45 @@ describe('loadConfig', () => {
     expect(disk.sources.map((source) => source.name)).toEqual(['default']);
   });
 
+  it('迁移旧的 cn 重复源为同一个内置源的国内镜像', () => {
+    const onDisk = {
+      sources: [
+        {
+          name: 'default',
+          url: 'https://gitee.com/digital-construction-center_1/suit-skills-lib.git',
+          enabled: true,
+        },
+        {
+          name: 'anthropics-skills',
+          url: 'https://github.com/anthropics/skills.git',
+          enabled: false,
+        },
+        {
+          name: 'anthropics-skills cn',
+          url: 'https://gitee.com/zhujun12/skills.git',
+          enabled: true,
+        },
+      ],
+      defaultSource: 'default',
+      agents: getDefaultConfig().agents,
+      installTargets: [],
+    };
+    writeFileSync(getConfigPath(), JSON.stringify(onDisk), 'utf8');
+    const cfg = loadConfig();
+    const anthropics = cfg.sources.filter(
+      (source) => source.name === 'anthropics-skills',
+    );
+    expect(anthropics).toHaveLength(1);
+    expect(anthropics[0]).toMatchObject({
+      enabled: true,
+      domesticMirror: {
+        url: 'https://gitee.com/zhujun12/skills.git',
+        enabled: true,
+      },
+    });
+    expect(cfg.sources.some((source) => source.name.includes(' cn'))).toBe(false);
+  });
+
   it('installTargetsAuto 为 false 且仅有 skills 时不迁移', () => {
     const onDisk = {
       sources: getDefaultConfig().sources,
@@ -240,7 +289,7 @@ describe('restoreBuiltinSources', () => {
 
     expect(added).not.toContain('superpowers');
     expect(added).not.toContain('anthropics-skills');
-    expect(added).toContain('claude-arsenal');
+    expect(added).toContain('vercel-agent-skills');
     expect(cfg.defaultSource).toBe('team');
     expect(cfg.sources).toEqual(
       expect.arrayContaining([
@@ -250,8 +299,12 @@ describe('restoreBuiltinSources', () => {
           enabled: true,
         }),
         expect.objectContaining({
-          name: 'claude-arsenal',
+          name: 'vercel-agent-skills',
           enabled: false,
+          domesticMirror: {
+            url: 'https://gitee.com/zhujun12/agent-skills.git',
+            enabled: true,
+          },
         }),
       ]),
     );

@@ -149,4 +149,29 @@ describe('refreshCache', () => {
       freshlyCloned: true,
     });
   });
+
+  it('Source 开启国内镜像时使用镜像 URL 和镜像缓存目录', () => {
+    const source: Source = {
+      name: 's',
+      url: 'https://github.com/org/skills.git',
+      enabled: true,
+      domesticMirror: {
+        url: 'https://gitee.com/org/skills.git',
+        enabled: true,
+      },
+    };
+    const path = getSourceCacheDir(source.domesticMirror!.url);
+    const mock = (
+      u: string,
+      p: string,
+    ): CloneOrPullRepoResult => {
+      expect(u).toBe(source.domesticMirror!.url);
+      expect(p).toBe(path);
+      return { path: p, freshlyCloned: true };
+    };
+    expect(refreshCache(source, { cloneOrPullRepo: mock })).toEqual({
+      path,
+      freshlyCloned: true,
+    });
+  });
 });
