@@ -998,16 +998,54 @@ function TagRow({
   tags: string[];
   onChange: (value: string) => void;
 }) {
+  const orderedTags =
+    active && tags.includes(active)
+      ? [active, ...tags.filter((item) => item !== active)]
+      : tags;
+  const visibleLimit = 4;
+  const visibleTags = orderedTags.slice(0, visibleLimit);
+  const overflowTags = orderedTags.slice(visibleLimit);
+  const isCollapsible = overflowTags.length > 0;
+
   return (
-    <div className="tag-row">
-      <button className={active === '' ? 'active' : ''} onClick={() => onChange('')}>
-        all
-      </button>
-      {tags.map((item) => (
-        <button className={active === item ? 'active' : ''} key={item} onClick={() => onChange(item)}>
-          {item}
+    <div className={`tag-row-frame ${isCollapsible ? 'is-collapsible' : ''}`}>
+      <div className="tag-row">
+        <button className={active === '' ? 'active' : ''} onClick={() => onChange('')}>
+          all
         </button>
-      ))}
+        {visibleTags.map((item) => (
+          <button
+            className={active === item ? 'active' : ''}
+            key={item}
+            onClick={() => onChange(item)}
+          >
+            {item}
+          </button>
+        ))}
+        {isCollapsible ? (
+          <button
+            aria-haspopup="true"
+            aria-label={`Show ${overflowTags.length} more tags`}
+            className="tag-overflow-trigger"
+            type="button"
+          >
+            +{overflowTags.length}
+          </button>
+        ) : null}
+      </div>
+      {isCollapsible ? (
+        <div className="tag-overflow-panel">
+          {overflowTags.map((item) => (
+            <button
+              className={active === item ? 'active' : ''}
+              key={item}
+              onClick={() => onChange(item)}
+            >
+              {item}
+            </button>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }
