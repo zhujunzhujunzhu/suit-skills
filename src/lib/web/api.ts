@@ -9,7 +9,7 @@ import {
 } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
-import { isAbsolute, join, relative, resolve } from 'node:path';
+import { basename, isAbsolute, join, relative, resolve } from 'node:path';
 import type { CliContext } from '../../cli/context.js';
 import {
   assertSourceExists,
@@ -26,9 +26,12 @@ import {
   type BuiltinSourceCategory,
 } from '../config.js';
 import {
+  BUILTIN_INSTALL_TARGET_IDS,
+  labelForUiInstallTarget,
   parseInstallTargetsCsv,
   resolveDisplayPathForToken,
   SKILLS_TARGET_TOKEN,
+  UI_HIDDEN_INSTALL_TARGET_IDS,
 } from '../install-targets.js';
 import { createSymlink } from '../../utils/fs.js';
 import {
@@ -40,11 +43,14 @@ import {
   searchSkills,
 } from '../skills.js';
 import type {
+  AgentMapping,
   Config,
   MetadataSource,
   SkillMeta,
   Source,
   WebInstalledSkill,
+  WebInstallTarget,
+  WebSkillLibraryTarget,
   WebSkillDetail,
   WebSkillSummary,
 } from '../../types/index.js';
@@ -179,6 +185,11 @@ interface SkillSourceRow {
 }
 
 const sourceRowsCache = new WeakMap<CliContext, Map<string, SkillSourceRow[]>>();
+const installedTargetsIndexCache = new WeakMap<
+  CliContext,
+  { expiresAt: number; value: Map<string, string[]> }
+>();
+const INSTALLED_TARGETS_INDEX_TTL_MS = 1_000;
 
 function toSourceWarning(
   source: Source,
@@ -221,6 +232,62 @@ function getRowsCacheForContext(ctx: CliContext): Map<string, SkillSourceRow[]> 
 
 function listKnownInstallTargets(config: Config): string[] {
   return [SKILLS_TARGET_TOKEN, ...Object.keys(config.agents)];
+}
+
+function clearInstalledTargetsIndex(ctx: CliContext): void {
+  installedTargetsIndexCache.delete(ctx);
+}
+
+function metadataText(value: unknown): string | undefined {
+  if (typeof value === 'string') return value;
+  if (
+    typeof value === 'number' ||
+    typeof value === 'boolean' ||
+    typeof value === 'bigint'
+  ) {
+    return String(value);
+  }
+  return undefined;
+}
+
+function normalizeWebTags(value: unknown): string[] | undefined {
+  if (Array.isArray(value)) {
+    const tags = value
+      .map(metadataText)
+      .filter((item): item is string => typeof item === 'string')
+      .map((item) => item.trim())
+      .filter(Boolean);
+    return tags.length > 0 ? tags : undefined;
+  }
+  const tag = metadataText(value)?.trim();
+  return tag ? [tag] : undefined;
+}
+
+function normalizeWebMeta(meta: SkillMeta): SkillMeta {
+  const normalized: SkillMeta = {
+    ...meta,
+    name: metadataText(meta.name) ?? '',
+    version: metadataText(meta.version) ?? 'unknown',
+  };
+  const description = metadataText(meta.description)?.trim();
+  if (description) {
+    normalized.description = description;
+  } else {
+    delete normalized.description;
+  }
+  const author = metadataText(meta.author)?.trim();
+  if (author) {
+    normalized.author = author;
+  } else {
+    delete normalized.author;
+  }
+  const tags = normalizeWebTags(meta.tags);
+  if (tags) {
+    normalized.tags = tags;
+  } else {
+    delete normalized.tags;
+  }
+  return normalized;
 }
 
 type InstalledScope = 'project' | 'global';
@@ -307,17 +374,7 @@ function getInstalledTargetsForSkill(
   config: Config,
   skillName: string,
 ): string[] {
-  const installed: string[] = [];
-  for (const scope of [false, true]) {
-    for (const target of listKnownInstallTargets(config)) {
-      const root = getTargetRoot(ctx, config, target, scope);
-      const dir = join(root, skillName);
-      if (existsSync(dir) && statSync(dir).isDirectory()) {
-        installed.push(scope ? `${target}:global` : target);
-      }
-    }
-  }
-  return installed;
+  return [...(getInstalledTargetsIndex(ctx, config).get(skillName) ?? [])];
 }
 
 function addInstalledTarget(
@@ -348,6 +405,23 @@ function buildInstalledTargetsIndex(
     }
   }
   return installed;
+}
+
+function getInstalledTargetsIndex(
+  ctx: CliContext,
+  config: Config,
+): Map<string, string[]> {
+  const now = Date.now();
+  const cached = installedTargetsIndexCache.get(ctx);
+  if (cached && cached.expiresAt > now) {
+    return cached.value;
+  }
+  const value = buildInstalledTargetsIndex(ctx, config);
+  installedTargetsIndexCache.set(ctx, {
+    expiresAt: now + INSTALLED_TARGETS_INDEX_TTL_MS,
+    value,
+  });
+  return value;
 }
 
 function hasSkillEntry(skillDir: string): boolean {
@@ -645,14 +719,18 @@ export function listWebSkills(
     rows = rows.filter((row) => tagMatches(row.meta, options.tag!));
   }
 
-  const installedTargetsIndex = buildInstalledTargetsIndex(ctx, config);
+  const installedTargetsIndex = getInstalledTargetsIndex(ctx, config);
   return {
     warnings: result.warnings,
     items: rows.map((row) => {
-      const { meta, sourceName } = row;
-      const installedTargets = installedTargetsIndex.get(meta.name) ?? [];
+      const skillKey = basename(row.skillDir);
+      const meta = normalizeWebMeta(row.meta);
+      const displayName = meta.name.trim() !== '' ? meta.name : skillKey;
+      const { sourceName } = row;
+      const installedTargets = installedTargetsIndex.get(skillKey) ?? [];
       return {
         ...meta,
+        name: displayName,
         sourceName,
         installed: installedTargets.length > 0,
         installedTargets,
@@ -677,14 +755,18 @@ export function getWebSkillDetail(
   if (!hit) {
     throw new WebApiError('SKILL_NOT_FOUND', 'Skill not found', 404);
   }
+  const meta = normalizeWebMeta(hit.meta);
+  const skillKey = basename(hit.skillDir);
+  const displayName = meta.name.trim() !== '' ? meta.name : skillKey;
 
   return {
-    ...hit.meta,
+    ...meta,
+    name: displayName,
     sourceName: hit.sourceName,
     skillDir: hit.skillDir,
     markdown: hit.markdown,
     frontmatter: hit.frontmatter,
-    installedTargets: getInstalledTargetsForSkill(ctx, config, skillName),
+    installedTargets: getInstalledTargetsForSkill(ctx, config, skillKey),
     metadataSource: hit.metadataSource,
   };
 }
@@ -715,14 +797,15 @@ export function listWebInstalledSkills(
         const skillPath = join(root, name);
         assertInstalledSkillPathAllowed(root, skillPath);
         const metadata = readSkillMarkdownMetadata(skillPath);
+        const meta = normalizeWebMeta(metadata.meta);
         const item: WebInstalledSkill = {
-          ...metadata.meta,
-          name: metadata.meta.name || name,
+          ...meta,
+          name: meta.name || name,
           target,
           scope,
           path: skillPath,
           sourceName:
-            sourceNameBySkill.get(metadata.meta.name) ??
+            sourceNameBySkill.get(meta.name) ??
             sourceNameBySkill.get(name),
           metadataSource: metadata.metadataSource,
         };
@@ -1031,6 +1114,7 @@ export function installWebSkill(
       });
     }
   }
+  clearInstalledTargetsIndex(ctx);
   return { results };
 }
 
@@ -1056,6 +1140,7 @@ export function removeWebInstalledSkill(
     throw new WebApiError('SKILL_NOT_FOUND', 'Skill not installed', 404);
   }
   rmSync(skillPath, { recursive: true, force: true });
+  clearInstalledTargetsIndex(ctx);
   return {
     status: 'removed',
     name,
@@ -1240,7 +1325,219 @@ export function linkWebInstalledSkillToTargets(
       });
     }
   }
+  clearInstalledTargetsIndex(ctx);
   return { results };
+}
+
+const RESERVED_CUSTOM_TARGET_IDS = new Set<string>([
+  ...UI_HIDDEN_INSTALL_TARGET_IDS,
+  SKILLS_TARGET_TOKEN,
+]);
+
+function targetExists(ctx: CliContext, config: Config, target: string, isGlobal: boolean): boolean {
+  try {
+    return existsSync(getTargetRoot(ctx, config, target, isGlobal));
+  } catch {
+    return false;
+  }
+}
+
+function buildSkillLibraryTarget(
+  ctx: CliContext,
+  config: Config,
+): WebSkillLibraryTarget {
+  const mapping = config.agents[SKILLS_TARGET_TOKEN] ?? {
+    globalDir: '~/.agents/skills',
+    projectDir: './.agents/skills',
+  };
+  return {
+    id: SKILLS_TARGET_TOKEN,
+    label: 'Skill Library',
+    globalDir: mapping.globalDir,
+    projectDir: mapping.projectDir,
+    globalPath: getTargetRoot(ctx, config, SKILLS_TARGET_TOKEN, true),
+    projectPath: getTargetRoot(ctx, config, SKILLS_TARGET_TOKEN, false),
+    globalExists: targetExists(ctx, config, SKILLS_TARGET_TOKEN, true),
+    projectExists: targetExists(ctx, config, SKILLS_TARGET_TOKEN, false),
+  };
+}
+
+function buildInstallTargetRow(
+  ctx: CliContext,
+  config: Config,
+  id: string,
+): WebInstallTarget {
+  const mapping = config.agents[id] ?? { globalDir: '', projectDir: '' };
+  const hidden = UI_HIDDEN_INSTALL_TARGET_IDS.has(id);
+  const builtin = BUILTIN_INSTALL_TARGET_IDS.has(id);
+  return {
+    id,
+    label: labelForUiInstallTarget(id),
+    globalDir: mapping.globalDir,
+    projectDir: mapping.projectDir,
+    globalPath: getTargetRoot(ctx, config, id, true),
+    projectPath: getTargetRoot(ctx, config, id, false),
+    globalExists: targetExists(ctx, config, id, true),
+    projectExists: targetExists(ctx, config, id, false),
+    builtin,
+    hidden,
+    editable: id !== SKILLS_TARGET_TOKEN,
+    removable: !builtin && !hidden,
+  };
+}
+
+function normalizeCustomTargetId(raw: string): string {
+  return raw
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+function isValidAgentPathToken(s: string): boolean {
+  const t = s.trim();
+  if (!t || t.includes('..')) {
+    return false;
+  }
+  return (
+    t.startsWith('~/') ||
+    t.startsWith('./') ||
+    t.startsWith('.\\') ||
+    t.startsWith('~\\')
+  );
+}
+
+export function listWebInstallTargets(ctx: CliContext): {
+  library: WebSkillLibraryTarget;
+  targets: WebInstallTarget[];
+} {
+  const config = ctx.loadConfig();
+  const targetIds = Object.keys(config.agents)
+    .filter((id) => id !== SKILLS_TARGET_TOKEN)
+    .sort((a, b) => a.localeCompare(b));
+  return {
+    library: buildSkillLibraryTarget(ctx, config),
+    targets: targetIds.map((id) => buildInstallTargetRow(ctx, config, id)),
+  };
+}
+
+export function addWebInstallTarget(
+  ctx: CliContext,
+  body: {
+    id?: string;
+    globalDir?: string;
+    projectDir?: string;
+  },
+): { library: WebSkillLibraryTarget; targets: WebInstallTarget[] } {
+  const id = normalizeCustomTargetId(body.id ?? '');
+  if (id.length < 2 || id.length > 48) {
+    throw new WebApiError(
+      'INVALID_TARGET_ID',
+      'Install target id must be 2–48 chars (letters, digits, hyphen)',
+      400,
+    );
+  }
+  if (!/^[a-z][a-z0-9-]*$/.test(id)) {
+    throw new WebApiError(
+      'INVALID_TARGET_ID',
+      'Install target id must start with a letter',
+      400,
+    );
+  }
+  if (RESERVED_CUSTOM_TARGET_IDS.has(id)) {
+    throw new WebApiError(
+      'INVALID_TARGET_ID',
+      `Reserved install target id: ${id}`,
+      400,
+    );
+  }
+  const globalDir =
+    typeof body.globalDir === 'string' ? body.globalDir.trim() : '';
+  const projectDir =
+    typeof body.projectDir === 'string' ? body.projectDir.trim() : '';
+  if (!isValidAgentPathToken(globalDir) || !isValidAgentPathToken(projectDir)) {
+    throw new WebApiError(
+      'INVALID_PATH',
+      'globalDir and projectDir must start with ~/ or ./ and must not contain ..',
+      400,
+    );
+  }
+  const config = ctx.loadConfig();
+  if (config.agents[id]) {
+    throw new WebApiError(
+      'TARGET_EXISTS',
+      `Install target already exists: ${id}`,
+      409,
+    );
+  }
+  const mapping: AgentMapping = { globalDir, projectDir };
+  config.agents[id] = mapping;
+  ctx.saveConfig(config);
+  return listWebInstallTargets(ctx);
+}
+
+export function updateWebInstallTarget(
+  ctx: CliContext,
+  id: string,
+  body: {
+    globalDir?: string;
+    projectDir?: string;
+  },
+): { library: WebSkillLibraryTarget; targets: WebInstallTarget[] } {
+  const target = normalizeCustomTargetId(id);
+  const config = ctx.loadConfig();
+  if (!target || target === SKILLS_TARGET_TOKEN || !config.agents[target]) {
+    throw new WebApiError(
+      'INVALID_TARGET',
+      `Unknown install target: ${target || id}`,
+      404,
+    );
+  }
+  const globalDir =
+    typeof body.globalDir === 'string'
+      ? body.globalDir.trim()
+      : config.agents[target]!.globalDir;
+  const projectDir =
+    typeof body.projectDir === 'string'
+      ? body.projectDir.trim()
+      : config.agents[target]!.projectDir;
+  if (!isValidAgentPathToken(globalDir) || !isValidAgentPathToken(projectDir)) {
+    throw new WebApiError(
+      'INVALID_PATH',
+      'globalDir and projectDir must start with ~/ or ./ and must not contain ..',
+      400,
+    );
+  }
+  config.agents[target] = { globalDir, projectDir };
+  ctx.saveConfig(config);
+  clearInstalledTargetsIndex(ctx);
+  return listWebInstallTargets(ctx);
+}
+
+export function removeWebInstallTarget(
+  ctx: CliContext,
+  id: string,
+): { library: WebSkillLibraryTarget; targets: WebInstallTarget[] } {
+  const target = normalizeCustomTargetId(id);
+  const config = ctx.loadConfig();
+  if (!target || !config.agents[target]) {
+    throw new WebApiError(
+      'INVALID_TARGET',
+      `Unknown install target: ${target || id}`,
+      404,
+    );
+  }
+  if (BUILTIN_INSTALL_TARGET_IDS.has(target) || UI_HIDDEN_INSTALL_TARGET_IDS.has(target)) {
+    throw new WebApiError(
+      'CANNOT_REMOVE_BUILTIN_TARGET',
+      `Cannot remove built-in install target: ${target}`,
+      400,
+    );
+  }
+  delete config.agents[target];
+  ctx.saveConfig(config);
+  clearInstalledTargetsIndex(ctx);
+  return listWebInstallTargets(ctx);
 }
 
 export function toApiErrorPayload(error: unknown): {

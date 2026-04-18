@@ -46,6 +46,9 @@ export function detectGlobalEnvironmentHints(userHome: string): string[] {
     { dir: '.agents', key: 'agents' },
     { dir: '.copilot', key: 'copilot' },
     { dir: '.codex', key: 'codex' },
+    { dir: '.gemini', key: 'gemini' },
+    { dir: '.opencode', key: 'opencode' },
+    { dir: '.openclaw', key: 'openclaw' },
   ];
   const out: string[] = [];
   for (const { dir, key } of pairs) {
@@ -145,4 +148,40 @@ export function resolveDisplayPathForToken(
     return resolveTargetPath(config, { global: isGlobal });
   }
   return resolveTargetPath(config, { global: isGlobal, agent: token });
+}
+
+/** 不在安装勾选 UI 中展示（中央仓或暂不支持勾选的产品） */
+export const UI_HIDDEN_INSTALL_TARGET_IDS = new Set([
+  'agents',
+  'copilot',
+]);
+
+export const BUILTIN_INSTALL_TARGET_IDS = new Set([
+  'agents',
+  'claude',
+  'cursor',
+  'copilot',
+  'codex',
+  'gemini',
+  'opencode',
+  'openclaw',
+]);
+
+export function labelForUiInstallTarget(id: string): string {
+  const map: Record<string, string> = {
+    claude: 'Claude Code',
+    cursor: 'Cursor',
+    codex: 'OpenAI Codex',
+    gemini: 'Gemini CLI',
+    opencode: 'OpenCode',
+    openclaw: 'OpenClaw',
+  };
+  return map[id] ?? id;
+}
+
+export function listUiInstallTargets(config: Config): { id: string; label: string }[] {
+  return Object.keys(config.agents)
+    .filter((id) => !UI_HIDDEN_INSTALL_TARGET_IDS.has(id))
+    .sort((a, b) => a.localeCompare(b))
+    .map((id) => ({ id, label: labelForUiInstallTarget(id) }));
 }

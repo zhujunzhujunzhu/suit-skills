@@ -9,6 +9,7 @@ src-tauri/binaries/
 src-tauri/gen/
 src-tauri/target/
 .agents/
+.codex/
 .claude/
 .skills/
 .cursor/

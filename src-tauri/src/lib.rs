@@ -26,6 +26,8 @@ pub fn run() {
             commands::update_source,
             commands::get_skill_detail,
             commands::export_skill,
+            commands::get_install_targets,
+            commands::add_install_target,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

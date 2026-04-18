@@ -27,6 +27,12 @@ const EXACT_KEY: Record<string, string> = {
   'Request body too large': 'apiErrors.payloadTooLarge',
   'Copying a file to the clipboard is currently supported on Windows only':
     'apiErrors.clipboardWindowsOnly',
+  'Install target id must be 2–48 chars (letters, digits, hyphen)':
+    'apiErrors.installTargetIdLength',
+  'Install target id must start with a letter': 'apiErrors.installTargetIdLetter',
+  'globalDir and projectDir must start with ~/ or ./ and must not contain ..':
+    'apiErrors.installTargetPath',
+  'Cannot remove built-in install target': 'apiErrors.cannotRemoveBuiltinTarget',
 };
 
 export function translateApiError(t: TFunction, message: string): string {
@@ -60,6 +66,19 @@ export function translateApiError(t: TFunction, message: string): string {
   }
   if (message.startsWith('Linked to ')) {
     return t('apiErrors.linkedTo', { path: message.slice('Linked to '.length) });
+  }
+  if (message.startsWith('Reserved install target id: ')) {
+    return t('apiErrors.installTargetReserved', {
+      id: message.slice('Reserved install target id: '.length).trim(),
+    });
+  }
+  if (message.startsWith('Install target already exists: ')) {
+    return t('apiErrors.installTargetExists', {
+      id: message.slice('Install target already exists: '.length).trim(),
+    });
+  }
+  if (message.startsWith('Cannot remove built-in install target: ')) {
+    return t('apiErrors.cannotRemoveBuiltinTarget');
   }
 
   return message;

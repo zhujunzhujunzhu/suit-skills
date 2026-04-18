@@ -25,6 +25,34 @@ export interface AgentMapping {
   projectDir: string;
 }
 
+/** Web UI 中展示和管理的 AI coding agent 配置 */
+export interface WebInstallTarget {
+  id: string;
+  label: string;
+  globalDir: string;
+  projectDir: string;
+  globalPath: string;
+  projectPath: string;
+  globalExists: boolean;
+  projectExists: boolean;
+  builtin: boolean;
+  hidden: boolean;
+  editable: boolean;
+  removable: boolean;
+}
+
+/** 中央技能库位置，实际安装目录；其它 agent 通过链接启用 */
+export interface WebSkillLibraryTarget {
+  id: string;
+  label: string;
+  globalDir: string;
+  projectDir: string;
+  globalPath: string;
+  projectPath: string;
+  globalExists: boolean;
+  projectExists: boolean;
+}
+
 /** 全局配置 */
 export interface Config {
   sources: Source[];

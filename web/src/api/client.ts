@@ -72,6 +72,32 @@ export interface InstallResult {
   message?: string;
 }
 
+export interface InstallTargetOption {
+  id: string;
+  label: string;
+  globalDir?: string;
+  projectDir?: string;
+  globalPath?: string;
+  projectPath?: string;
+  globalExists?: boolean;
+  projectExists?: boolean;
+  builtin?: boolean;
+  hidden?: boolean;
+  editable?: boolean;
+  removable?: boolean;
+}
+
+export interface SkillLibraryTarget {
+  id: string;
+  label: string;
+  globalDir: string;
+  projectDir: string;
+  globalPath: string;
+  projectPath: string;
+  globalExists: boolean;
+  projectExists: boolean;
+}
+
 export interface ExportResult {
   status: 'exported' | 'cancelled';
   fileName?: string;
@@ -169,6 +195,146 @@ function normalizeSource(
     description: source.description ?? 'User-defined skill source.',
     effectiveUrl,
   };
+}
+
+function textField(value: unknown): string | undefined {
+  if (typeof value === 'string') return value;
+  if (
+    typeof value === 'number' ||
+    typeof value === 'boolean' ||
+    typeof value === 'bigint'
+  ) {
+    return String(value);
+  }
+  return undefined;
+}
+
+function normalizeTags(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map(textField)
+    .filter((item): item is string => typeof item === 'string')
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function normalizeSkillSummary(
+  skill: Partial<SkillSummary> & { name?: unknown; version?: unknown },
+): SkillSummary {
+  return {
+    name: textField(skill.name) ?? '',
+    version: textField(skill.version),
+    description: textField(skill.description),
+    author: textField(skill.author),
+    tags: normalizeTags(skill.tags),
+    sourceName: textField(skill.sourceName) ?? '',
+    installed: skill.installed === true,
+    installedTargets: normalizeTags(skill.installedTargets),
+    metadataSource:
+      skill.metadataSource === 'meta-json-fallback' ||
+      skill.metadataSource === 'unknown'
+        ? skill.metadataSource
+        : 'skill-md',
+  };
+}
+
+function normalizeInstalledSkill(
+  skill: Partial<InstalledSkill> & { name?: unknown },
+): InstalledSkill {
+  return {
+    name: textField(skill.name) ?? '',
+    version: textField(skill.version),
+    description: textField(skill.description),
+    tags: normalizeTags(skill.tags),
+    target: textField(skill.target) ?? '',
+    scope: skill.scope === 'global' ? 'global' : 'project',
+    path: textField(skill.path) ?? '',
+    sourceName: textField(skill.sourceName),
+    metadataSource:
+      skill.metadataSource === 'meta-json-fallback' ||
+      skill.metadataSource === 'unknown'
+        ? skill.metadataSource
+        : 'skill-md',
+  };
+}
+
+export async function fetchInstallTargets(): Promise<{
+  library?: SkillLibraryTarget;
+  targets: InstallTargetOption[];
+}> {
+  const tauri = await getTauriApi();
+  if (tauri) {
+    return tauri.tauriGetInstallTargets();
+  }
+  return request<{ library?: SkillLibraryTarget; targets: InstallTargetOption[] }>(
+    '/api/install-targets',
+  );
+}
+
+export async function addInstallTarget(requestBody: {
+  id: string;
+  globalDir: string;
+  projectDir: string;
+}): Promise<{ library?: SkillLibraryTarget; targets: InstallTargetOption[] }> {
+  const tauri = await getTauriApi();
+  if (tauri) {
+    await tauri.tauriAddInstallTarget({
+      id: requestBody.id,
+      globalDir: requestBody.globalDir,
+      projectDir: requestBody.projectDir,
+    });
+    return tauri.tauriGetInstallTargets();
+  }
+  return request<{ library?: SkillLibraryTarget; targets: InstallTargetOption[] }>(
+    '/api/install-targets',
+    {
+      method: 'POST',
+      body: JSON.stringify(requestBody),
+    },
+  );
+}
+
+export async function updateInstallTarget(
+  id: string,
+  requestBody: {
+    globalDir: string;
+    projectDir: string;
+  },
+): Promise<{ library?: SkillLibraryTarget; targets: InstallTargetOption[] }> {
+  const tauri = await getTauriApi();
+  if (tauri) {
+    await tauri.tauriRunCommand([
+      'targets',
+      'edit',
+      id,
+      '--global-dir',
+      requestBody.globalDir,
+      '--project-dir',
+      requestBody.projectDir,
+    ]);
+    return tauri.tauriGetInstallTargets();
+  }
+  return request<{ library?: SkillLibraryTarget; targets: InstallTargetOption[] }>(
+    `/api/install-targets/${encodeURIComponent(id)}`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify(requestBody),
+    },
+  );
+}
+
+export async function removeInstallTarget(
+  id: string,
+): Promise<{ library?: SkillLibraryTarget; targets: InstallTargetOption[] }> {
+  const tauri = await getTauriApi();
+  if (tauri) {
+    await tauri.tauriRunCommand(['targets', 'remove', id]);
+    return tauri.tauriGetInstallTargets();
+  }
+  return request<{ library?: SkillLibraryTarget; targets: InstallTargetOption[] }>(
+    `/api/install-targets/${encodeURIComponent(id)}`,
+    { method: 'DELETE' },
+  );
 }
 
 export async function fetchSources(): Promise<SourcesResponse> {
@@ -290,8 +456,8 @@ export async function fetchSkills(params: {
       query: params.q,
       tag: params.tag,
     });
-    // 获取已安装状态
-    const installed = await tauri.tauriGetInstalledSkills();
+    // 与已安装页默认「全部范围」一致，否则全局安装的技能在库里会一直显示未安装
+    const installed = await tauri.tauriGetInstalledSkills({ scope: 'all' });
     const installedMap = new Map<string, string[]>();
     for (const item of installed.items) {
       const targets = installedMap.get(item.name) ?? [];
@@ -300,22 +466,20 @@ export async function fetchSkills(params: {
     }
     return {
       items: result.items.map((skill) => ({
-        name: skill.name,
-        version: skill.version,
-        description: skill.description,
-        author: skill.author,
-        tags: skill.tags ?? [],
-        sourceName: skill.sourceName,
+        ...normalizeSkillSummary(skill),
         installed: installedMap.has(skill.name),
         installedTargets: installedMap.get(skill.name) ?? [],
-        metadataSource: 'skill-md',
       })),
       warnings: [],
     };
   }
-  return request<{ items: SkillSummary[]; warnings: SourceWarning[] }>(
+  const result = await request<{ items: SkillSummary[]; warnings: SourceWarning[] }>(
     withParams('/api/skills', params),
   );
+  return {
+    ...result,
+    items: result.items.map(normalizeSkillSummary),
+  };
 }
 
 export async function fetchSkillDetail(
@@ -325,28 +489,36 @@ export async function fetchSkillDetail(
   const tauri = await getTauriApi();
   if (tauri) {
     const result = await tauri.tauriGetSkillDetail(name, source);
-    const installed = await tauri.tauriGetInstalledSkills();
+    const installed = await tauri.tauriGetInstalledSkills({ scope: 'all' });
     const targets = installed.items
       .filter((i) => i.name === name)
       .map((i) => i.target);
-    return {
-      name: result.name,
-      version: result.version,
-      description: result.description,
-      author: result.author,
-      tags: result.tags ?? [],
-      sourceName: result.sourceName,
+    const summary = normalizeSkillSummary({
+      ...result,
       installed: targets.length > 0,
       installedTargets: targets,
-      metadataSource: 'skill-md',
+    });
+    return {
+      ...summary,
       skillDir: '',
       markdown: result.markdown ?? '',
       frontmatter: {},
     };
   }
-  return request<SkillDetail>(
+  const result = await request<SkillDetail>(
     withParams(`/api/skills/${encodeURIComponent(name)}`, { source }),
   );
+  return {
+    ...normalizeSkillSummary(result),
+    skillDir: textField(result.skillDir) ?? '',
+    markdown: textField(result.markdown) ?? '',
+    frontmatter:
+      result.frontmatter &&
+      typeof result.frontmatter === 'object' &&
+      !Array.isArray(result.frontmatter)
+        ? result.frontmatter
+        : {},
+  };
 }
 
 export async function fetchInstalled(params: {
@@ -361,22 +533,15 @@ export async function fetchInstalled(params: {
       target: params.target,
     });
     return {
-      items: result.items.map((skill) => ({
-        name: skill.name,
-        version: skill.version,
-        description: skill.description,
-        tags: [],
-        target: skill.target,
-        scope: skill.scope as 'project' | 'global',
-        path: skill.path,
-        sourceName: skill.sourceName,
-        metadataSource: 'skill-md',
-      })),
+      items: result.items.map(normalizeInstalledSkill),
     };
   }
-  return request<{ items: InstalledSkill[] }>(
+  const result = await request<{ items: InstalledSkill[] }>(
     withParams('/api/installed', params),
   );
+  return {
+    items: result.items.map(normalizeInstalledSkill),
+  };
 }
 
 export async function installSkill(requestBody: {

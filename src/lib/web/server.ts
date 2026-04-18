@@ -4,19 +4,23 @@ import { extname, join, normalize, resolve, sep } from 'node:path';
 import type { CliContext } from '../../cli/context.js';
 import { moduleDir } from '../../utils/module.js';
 import {
+  addWebInstallTarget,
   addWebSource,
   copyWebInstalledSkillPackage,
   exportWebInstalledSkill,
   getWebSkillDetail,
   installWebSkill,
   linkWebInstalledSkillToTargets,
+  listWebInstallTargets,
   listWebInstalledSkills,
   listWebSkills,
   listWebSources,
+  removeWebInstallTarget,
   removeWebSource,
   removeWebInstalledSkill,
   restoreWebBuiltinSources,
   toApiErrorPayload,
+  updateWebInstallTarget,
   updateWebSource,
   WebApiError,
 } from './api.js';
@@ -138,6 +142,35 @@ async function handleApi(
         200,
         updateWebSource(ctx, sourceName, (await readJsonBody(req)) as never),
       );
+      return;
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/install-targets') {
+      sendJson(res, 200, listWebInstallTargets(ctx));
+      return;
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/install-targets') {
+      sendJson(res, 200, addWebInstallTarget(ctx, (await readJsonBody(req)) as never));
+      return;
+    }
+
+    const installTargetId = routeParam(url.pathname, '/api/install-targets/');
+    if (installTargetId && req.method === 'PATCH') {
+      sendJson(
+        res,
+        200,
+        updateWebInstallTarget(
+          ctx,
+          installTargetId,
+          (await readJsonBody(req)) as never,
+        ),
+      );
+      return;
+    }
+
+    if (installTargetId && req.method === 'DELETE') {
+      sendJson(res, 200, removeWebInstallTarget(ctx, installTargetId));
       return;
     }
 

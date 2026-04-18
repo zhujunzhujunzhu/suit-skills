@@ -156,6 +156,56 @@ describe('web api', () => {
     });
   });
 
+  it('keeps built-in source display text as readable UTF-8', () => {
+    const result = listWebSources(ctx());
+
+    expect(
+      result.sources
+        .filter((source) => source.builtin)
+        .map((source) => ({
+          name: source.name,
+          label: source.label,
+          description: source.description,
+        })),
+    ).toEqual([
+      {
+        name: 'default',
+        label: 'Suit Skills 默认源',
+        description: '数知建维护的默认技能库，新安装默认启用。',
+      },
+      {
+        name: 'anthropics-skills',
+        label: 'Anthropic 官方技能库',
+        description: 'Claude 官方技能合集，适合作为基础技能来源。',
+      },
+      {
+        name: 'superpowers',
+        label: 'Superpowers 工程技能库',
+        description: '面向复杂开发、TDD、调试和重构的工程技能库。',
+      },
+      {
+        name: 'vercel-agent-skills',
+        label: 'Vercel Agent 技能库',
+        description: '聚焦 Web、全栈、Next.js 和部署场景的技能库。',
+      },
+      {
+        name: 'huggingface-skills',
+        label: 'Hugging Face 技能库',
+        description: '面向 Hugging Face 与开源模型生态的技能库。',
+      },
+      {
+        name: 'antigravity-awesome-skills',
+        label: 'Antigravity 技能合集',
+        description: '跨平台 AI 技能资源合集。',
+      },
+      {
+        name: 'awesome-claude-skills',
+        label: 'Claude 技能资源索引',
+        description: 'Claude 技能资源的精选索引，适合发现更多来源。',
+      },
+    ]);
+  });
+
   it('restores missing built-in sources without touching custom sources', () => {
     const config = getDefaultConfig();
     config.sources = [
@@ -272,6 +322,21 @@ describe('web api', () => {
 
     const filtered = listWebSkills(ctx(), { q: 'react', tag: 'frontend' });
     expect(filtered.items.map((item) => item.name)).toEqual(['react-helper']);
+  });
+
+  it('filters skills with non-string metadata without leaking unsafe values', () => {
+    const cacheRoot = getSourceCacheDir(sourceUrl);
+    writeSkill(cacheRoot, 'dirty-meta', {
+      description: { en: 'Nested description' },
+      tags: [42, 'findme', { bad: true }],
+    });
+
+    expect(() => listWebSkills(ctx(), { q: 'findme' })).not.toThrow();
+    const result = listWebSkills(ctx(), { q: 'findme' });
+
+    expect(result.items.map((item) => item.name)).toEqual(['dirty-meta']);
+    expect(result.items[0]?.description).toBeUndefined();
+    expect(result.items[0]?.tags).toEqual(['42', 'findme']);
   });
 
   it('reports source refresh failures with the source name and URL', () => {

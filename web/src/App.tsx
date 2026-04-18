@@ -1,20 +1,34 @@
-import { type MouseEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  type MouseEvent,
+  type ReactNode,
+  type RefObject,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { useTranslation } from 'react-i18next';
 import {
+  addInstallTarget,
   addSource,
   copyInstalledSkillPackage,
   exportInstalledSkill,
   fetchInstalled,
+  fetchInstallTargets,
   fetchSkillDetail,
   fetchSkills,
   fetchSources,
   installSkill,
   linkInstalledSkillTargets,
+  removeInstallTarget,
   removeSource,
   removeInstalledSkill,
   restoreBuiltinSources,
+  updateInstallTarget,
   updateSource,
   type InstalledSkill,
+  type InstallTargetOption,
+  type SkillLibraryTarget,
   type SkillDetail,
   type SkillSummary,
   type Source,
@@ -23,12 +37,15 @@ import {
 import { RAW_API, translateApiError } from './i18n/apiErrors';
 import { changeLanguageWithStorage, type AppLocale } from './i18n';
 
-type View = 'library' | 'installed' | 'sources';
+type View = 'library' | 'installed' | 'sources' | 'agents';
 type LocationScope = 'project' | 'global';
 type ScopeFilter = 'all' | LocationScope;
 type InstallStrategy = 'overwrite' | 'skip' | 'rename';
 
-const TARGETS = ['claude', 'cursor', 'codex', 'agents', 'copilot'];
+const SEARCH_DEBOUNCE_MS = 300;
+const SKILL_CARD_HEIGHT = 210;
+const SKILL_GRID_GAP = 14;
+const VIRTUAL_OVERSCAN_ROWS = 4;
 
 const icons = {
   terminal: (
@@ -89,6 +106,12 @@ const icons = {
       <path d="M4 12A8 8 0 0 1 18.6 7.5" />
       <path d="M18 3v5h-5" />
       <path d="M6 21v-5h5" />
+    </>
+  ),
+  settings: (
+    <>
+      <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z" />
+      <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2 3.4-.2-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6V22h-4v-.4a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.2.1-2-3.4.1-.1A1.7 1.7 0 0 0 4.6 15 1.7 1.7 0 0 0 3 14H2v-4h1a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7l2-3.4.2.1a1.7 1.7 0 0 0 1.9.3 1.7 1.7 0 0 0 1-1.6V2h4v.4a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.2-.1 2 3.4-.1.1A1.7 1.7 0 0 0 19.4 9 1.7 1.7 0 0 0 21 10h1v4h-1a1.7 1.7 0 0 0-1.6 1z" />
     </>
   ),
 };
@@ -291,6 +314,7 @@ function SourceWarnings({ warnings }: { warnings: SourceWarning[] }) {
 function installedSkillMatches(item: InstalledSkill, query: string): boolean {
   const needle = query.trim().toLowerCase();
   if (!needle) return true;
+  const tags = Array.isArray(item.tags) ? item.tags : [];
   const fields = [
     item.name,
     item.version,
@@ -300,8 +324,12 @@ function installedSkillMatches(item: InstalledSkill, query: string): boolean {
     item.scope,
     item.sourceName,
     item.metadataSource,
-    ...(item.tags ?? []),
-  ].filter((value): value is string => typeof value === 'string');
+    ...tags,
+  ]
+    .map((value) =>
+      typeof value === 'string' ? value : value == null ? '' : String(value),
+    )
+    .filter(Boolean);
   return fields.some((value) => value.toLowerCase().includes(needle));
 }
 
@@ -348,6 +376,7 @@ const VIEW_KEYS: Record<View, string> = {
   library: 'skills',
   installed: 'installed',
   sources: 'sources',
+  agents: 'agents',
 };
 
 function viewFromHash(): View {
@@ -371,9 +400,12 @@ export default function App() {
   const [detail, setDetail] = useState<SkillDetail | null>(null);
   const [installed, setInstalled] = useState<InstalledSkill[]>([]);
   const [installedQuery, setInstalledQuery] = useState('');
+  const [debouncedInstalledQuery, setDebouncedInstalledQuery] = useState('');
   const [installedTarget, setInstalledTarget] = useState('');
   const [scope, setScope] = useState<ScopeFilter>('all');
-  const [installTargets, setInstallTargets] = useState<string[]>(['claude', 'cursor', 'codex']);
+  const [installTargets, setInstallTargets] = useState<string[]>([]);
+  const [installTargetRows, setInstallTargetRows] = useState<InstallTargetOption[]>([]);
+  const [skillLibrary, setSkillLibrary] = useState<SkillLibraryTarget | null>(null);
   const [installScope, setInstallScope] = useState<LocationScope>('global');
   const [installStrategy, setInstallStrategy] = useState<InstallStrategy>('skip');
   const [loading, setLoading] = useState(false);
@@ -435,7 +467,7 @@ export default function App() {
   async function loadInstalled(
     nextScope = scope,
     target = installedTarget,
-    q = installedQuery,
+    q = debouncedInstalledQuery,
   ) {
     const requestId = installedRequestId.current + 1;
     installedRequestId.current = requestId;
@@ -471,8 +503,80 @@ export default function App() {
     }
   }
 
+  async function refreshInstallTargets() {
+    try {
+      const { library, targets } = await fetchInstallTargets();
+      setSkillLibrary(library ?? null);
+      setInstallTargetRows(targets);
+      setInstallTargets((prev) => {
+        const visibleTargets = targets.filter((row) => !row.hidden);
+        const ids = new Set(visibleTargets.map((row) => row.id));
+        const kept = prev.filter((id) => ids.has(id));
+        if (kept.length > 0) {
+          return kept;
+        }
+        return visibleTargets
+          .filter((row) => row.globalExists || row.projectExists)
+          .map((row) => row.id);
+      });
+    } catch {
+      /* Web API 或桌面 CLI 不可用时保持当前列表 */
+    }
+  }
+
+  async function submitCustomInstallTarget(
+    id: string,
+    globalDir: string,
+    projectDir: string,
+  ) {
+    try {
+      setError('');
+      await addInstallTarget({ id, globalDir, projectDir });
+      notify(t('toast.customTargetAdded'));
+      await refreshInstallTargets();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  async function submitAgentUpdate(
+    id: string,
+    globalDir: string,
+    projectDir: string,
+  ) {
+    try {
+      setError('');
+      await updateInstallTarget(id, { globalDir, projectDir });
+      notify(t('toast.agentUpdated'));
+      await refreshInstallTargets();
+      await loadInstalled();
+      await loadSkills();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  async function deleteAgent(id: string) {
+    try {
+      setError('');
+      await removeInstallTarget(id);
+      setInstallTargets((targets) => targets.filter((target) => target !== id));
+      notify(t('toast.agentRemoved'));
+      await refreshInstallTargets();
+      await loadInstalled();
+      await loadSkills();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
   useEffect(() => {
     void loadSources();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    void refreshInstallTargets();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -487,9 +591,20 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => setDebouncedQuery(query), 200);
+    const timer = window.setTimeout(
+      () => setDebouncedQuery(query),
+      SEARCH_DEBOUNCE_MS,
+    );
     return () => window.clearTimeout(timer);
   }, [query]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(
+      () => setDebouncedInstalledQuery(installedQuery),
+      SEARCH_DEBOUNCE_MS,
+    );
+    return () => window.clearTimeout(timer);
+  }, [installedQuery]);
 
   useEffect(() => {
     void loadSkills();
@@ -526,7 +641,7 @@ export default function App() {
   useEffect(() => {
     void loadInstalled();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scope, installedTarget, installedQuery]);
+  }, [scope, installedTarget, debouncedInstalledQuery]);
 
   const tags = useMemo(() => {
     const all = new Set<string>();
@@ -668,8 +783,19 @@ export default function App() {
   }
 
   async function addSourceFromForm() {
+    const name = sourceName.trim();
+    const url = sourceUrl.trim();
+    if (!name) {
+      setError('Source name is required');
+      return;
+    }
+    if (!url) {
+      setError('Source URL is required');
+      return;
+    }
     try {
-      const result = await addSource({ name: sourceName, url: sourceUrl });
+      setError('');
+      const result = await addSource({ name, url });
       setSources(result.sources);
       setDefaultSource(result.defaultSource);
       setSource((current) => nextSelectableSource(result.sources, current));
@@ -802,7 +928,9 @@ export default function App() {
                 ? t('crumb.viewLibrary')
                 : view === 'installed'
                   ? t('crumb.viewInstalled')
-                  : t('crumb.viewSources')}
+                  : view === 'sources'
+                    ? t('crumb.viewSources')
+                    : t('crumb.viewAgents')}
             </em>
           </div>
           <div className="topbar-actions">
@@ -820,10 +948,11 @@ export default function App() {
             </select>
             <button
               className="icon-button"
+              aria-label={t('topbar.refresh')}
               title={t('topbar.refresh')}
               onClick={() => {
                 void loadSkills(source, debouncedQuery, tag, true);
-                void loadInstalled();
+                void loadInstalled(scope, installedTarget, debouncedInstalledQuery);
               }}
             >
               <Icon name="refresh" />
@@ -850,6 +979,7 @@ export default function App() {
           <NavButton active={view === 'library'} onClick={() => setView('library')} icon="database" label={t('nav.skills')} />
           <NavButton active={view === 'installed'} onClick={() => setView('installed')} icon="check" label={t('nav.installed')} />
           <NavButton active={view === 'sources'} onClick={() => setView('sources')} icon="terminal" label={t('nav.sources')} />
+          <NavButton active={view === 'agents'} onClick={() => setView('agents')} icon="settings" label={t('nav.agents')} />
         </nav>
         <div className="rail-status">
           <span>{t('rail.indexLabel')}</span>
@@ -865,12 +995,14 @@ export default function App() {
             installScope={installScope}
             installStrategy={installStrategy}
             installTargets={installTargets}
+            installTargetRows={installTargetRows}
             loading={loading}
             onCopyCommand={copyCommand}
             onInstall={installSelected}
             onInstallScopeChange={setInstallScope}
             onInstallStrategyChange={setInstallStrategy}
             onInstallTargetsChange={setInstallTargets}
+            onManageAgents={() => setView('agents')}
             onQueryChange={setQuery}
             onSelect={setSelected}
             onShare={shareCommand}
@@ -891,6 +1023,7 @@ export default function App() {
         {view === 'installed' ? (
           <InstalledView
             confirmRemove={confirmRemove}
+            installTargetRows={installTargetRows}
             installed={visibleInstalled}
             loading={installedLoading}
             onConfirmRemove={setConfirmRemove}
@@ -924,6 +1057,17 @@ export default function App() {
             url={sourceUrl}
           />
         ) : null}
+
+        {view === 'agents' ? (
+          <AgentsView
+            installTargetRows={installTargetRows}
+            library={skillLibrary}
+            onAdd={submitCustomInstallTarget}
+            onDelete={deleteAgent}
+            onRefresh={refreshInstallTargets}
+            onUpdate={submitAgentUpdate}
+          />
+        ) : null}
       </main>
 
       {toast ? <div className="toast">{toast}</div> : null}
@@ -943,11 +1087,136 @@ function NavButton({
   onClick: () => void;
 }) {
   return (
-    <button className={active ? 'active' : ''} onClick={onClick}>
+    <button
+      aria-label={label}
+      className={active ? 'active' : ''}
+      onClick={onClick}
+      type="button"
+    >
       <Icon name={icon} />
       <span>{label}</span>
     </button>
   );
+}
+
+function useResponsiveSkillColumns(): number {
+  const [columns, setColumns] = useState(3);
+
+  useEffect(() => {
+    function updateColumns() {
+      if (window.innerWidth <= 760) {
+        setColumns(1);
+      } else if (window.innerWidth <= 1180) {
+        setColumns(2);
+      } else {
+        setColumns(3);
+      }
+    }
+
+    updateColumns();
+    window.addEventListener('resize', updateColumns);
+    return () => window.removeEventListener('resize', updateColumns);
+  }, []);
+
+  return columns;
+}
+
+function useVirtualRows(
+  scrollRef: RefObject<HTMLElement | null>,
+  contentRef: RefObject<HTMLElement | null>,
+  options: {
+    columns: number;
+    gap: number;
+    itemCount: number;
+    overscanRows?: number;
+    resetKey: string;
+    rowHeight: number;
+  },
+) {
+  const {
+    columns,
+    gap,
+    itemCount,
+    overscanRows = VIRTUAL_OVERSCAN_ROWS,
+    resetKey,
+    rowHeight,
+  } = options;
+  const [viewport, setViewport] = useState({ height: 720, scrollTop: 0 });
+
+  useEffect(() => {
+    const scrollEl = scrollRef.current;
+    if (!scrollEl) return;
+
+    function updateViewport() {
+      const scrollStyle = window.getComputedStyle(scrollEl);
+      const usesPageScroll = scrollStyle.overflowY === 'visible';
+      const contentEl = contentRef.current;
+      const next = usesPageScroll
+        ? {
+            height: window.innerHeight,
+            scrollTop: Math.max(0, -(contentEl?.getBoundingClientRect().top ?? 0)),
+          }
+        : {
+            height: scrollEl.clientHeight,
+            scrollTop: Math.max(0, scrollEl.scrollTop - (contentEl?.offsetTop ?? 0)),
+          };
+      setViewport((current) =>
+        current.height === next.height && current.scrollTop === next.scrollTop
+          ? current
+          : next,
+      );
+    }
+
+    updateViewport();
+    scrollEl.addEventListener('scroll', updateViewport, { passive: true });
+    window.addEventListener('scroll', updateViewport, { passive: true });
+    const observer =
+      typeof ResizeObserver === 'undefined'
+        ? null
+        : new ResizeObserver(updateViewport);
+    observer?.observe(scrollEl);
+    if (contentRef.current) {
+      observer?.observe(contentRef.current);
+    }
+    window.addEventListener('resize', updateViewport);
+    return () => {
+      scrollEl.removeEventListener('scroll', updateViewport);
+      window.removeEventListener('scroll', updateViewport);
+      observer?.disconnect();
+      window.removeEventListener('resize', updateViewport);
+    };
+  }, [contentRef, resetKey, scrollRef]);
+
+  useEffect(() => {
+    const scrollEl = scrollRef.current;
+    if (!scrollEl) return;
+    scrollEl.scrollTop = 0;
+    setViewport((current) => ({ ...current, scrollTop: 0 }));
+  }, [resetKey, scrollRef]);
+
+  const totalRows = Math.ceil(itemCount / columns);
+  const rowStride = rowHeight + gap;
+  const totalHeight =
+    totalRows === 0 ? 0 : totalRows * rowHeight + (totalRows - 1) * gap;
+  const startRow =
+    totalRows === 0
+      ? 0
+      : Math.max(0, Math.floor(viewport.scrollTop / rowStride) - overscanRows);
+  const endRow =
+    totalRows === 0
+      ? 0
+      : Math.min(
+          totalRows,
+          Math.ceil((viewport.scrollTop + viewport.height) / rowStride) +
+            overscanRows,
+        );
+
+  return {
+    endRow,
+    startRow,
+    totalHeight,
+    translateY: startRow * rowStride,
+  };
 }
 
 function LibraryView(props: {
@@ -955,12 +1224,14 @@ function LibraryView(props: {
   installScope: LocationScope;
   installStrategy: InstallStrategy;
   installTargets: string[];
+  installTargetRows: InstallTargetOption[];
   loading: boolean;
   onCopyCommand: () => void;
   onInstall: () => void;
   onInstallScopeChange: (value: LocationScope) => void;
   onInstallStrategyChange: (value: InstallStrategy) => void;
   onInstallTargetsChange: (value: string[]) => void;
+  onManageAgents: () => void;
   onQueryChange: (value: string) => void;
   onSelect: (value: string) => void;
   onShare: () => void;
@@ -979,6 +1250,30 @@ function LibraryView(props: {
   const { t } = useTranslation();
   const activeSkill = props.detail ?? props.selectedSummary;
   const unknown = t('common.unknown');
+  const visibleInstallTargets = props.installTargetRows.filter((row) => !row.hidden);
+  const targetRows =
+    visibleInstallTargets.length > 0
+      ? visibleInstallTargets
+      : [
+          { id: 'claude', label: 'Claude Code' },
+          { id: 'cursor', label: 'Cursor' },
+          { id: 'codex', label: 'OpenAI Codex' },
+        ];
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const virtualRef = useRef<HTMLDivElement | null>(null);
+  const columnCount = useResponsiveSkillColumns();
+  const virtual = useVirtualRows(scrollRef, virtualRef, {
+    columns: columnCount,
+    gap: SKILL_GRID_GAP,
+    itemCount: props.skills.length,
+    resetKey: `${props.query}\0${props.source}\0${props.tag}\0${props.skills.length}`,
+    rowHeight: SKILL_CARD_HEIGHT,
+  });
+  const virtualRows: number[] = [];
+  for (let row = virtual.startRow; row < virtual.endRow; row += 1) {
+    virtualRows.push(row);
+  }
+
   return (
     <section className="console-grid">
       <div className="library">
@@ -1008,7 +1303,7 @@ function LibraryView(props: {
           <TagRow active={props.tag} tags={props.tags} onChange={props.onTagChange} />
         </div>
 
-        <div className="library-scroll">
+        <div className="library-scroll" ref={scrollRef}>
           <SourceWarnings warnings={props.sourceWarnings} />
           {props.loading ? (
             <EmptyState>{t('library.loading')}</EmptyState>
@@ -1023,39 +1318,72 @@ function LibraryView(props: {
             </EmptyState>
           ) : null}
 
-          <div className="skill-grid">
-            {props.skills.map((skill) => (
-              <button
-                className={`skill-card ${props.selected === skill.name ? 'selected' : ''}`}
-                key={`${skill.sourceName}:${skill.name}`}
-                onClick={() => props.onSelect(skill.name)}
-              >
-                <span className="skill-card-head">
-                  <span className="skill-icon">
-                    <Icon name={skill.installed ? 'check' : 'database'} />
-                  </span>
-                  <em>
-                    {highlightText(
-                      skill.installed
-                        ? t('library.installedBadge')
-                        : t('library.versionPrefix', {
-                            version: skill.version ?? unknown,
-                          }),
-                      props.query,
-                    )}
-                  </em>
-                </span>
-                <strong>{highlightText(skill.name, props.query)}</strong>
-                <span>
-                  {highlightText(skill.description || t('library.noDescription'), props.query)}
-                </span>
-                <span className="card-tags">
-                  {skill.tags?.slice(0, 4).map((item) => (
-                    <i key={item}>{highlightText(item, props.query)}</i>
-                  ))}
-                </span>
-              </button>
-            ))}
+          <div
+            className="skill-virtual-space"
+            ref={virtualRef}
+            style={{ height: virtual.totalHeight }}
+          >
+            <div
+              className="skill-virtual-items"
+              style={{ transform: `translateY(${virtual.translateY}px)` }}
+            >
+              {virtualRows.map((row) => {
+                const rowSkills = props.skills.slice(
+                  row * columnCount,
+                  row * columnCount + columnCount,
+                );
+                return (
+                  <div
+                    className="skill-grid skill-virtual-row"
+                    key={row}
+                    style={{
+                      gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))`,
+                    }}
+                  >
+                    {rowSkills.map((skill) => {
+                      const skillTags = Array.isArray(skill.tags)
+                        ? skill.tags
+                        : [];
+                      return (
+                        <button
+                          className={`skill-card ${props.selected === skill.name ? 'selected' : ''}`}
+                          key={`${skill.sourceName}:${skill.name}`}
+                          onClick={() => props.onSelect(skill.name)}
+                        >
+                          <span className="skill-card-head">
+                            <span className="skill-icon">
+                              <Icon name={skill.installed ? 'check' : 'database'} />
+                            </span>
+                            <em>
+                              {highlightText(
+                                skill.installed
+                                  ? t('library.installedBadge')
+                                  : t('library.versionPrefix', {
+                                      version: skill.version ?? unknown,
+                                    }),
+                                props.query,
+                              )}
+                            </em>
+                          </span>
+                          <strong>{highlightText(skill.name, props.query)}</strong>
+                          <span>
+                            {highlightText(
+                              skill.description || t('library.noDescription'),
+                              props.query,
+                            )}
+                          </span>
+                          <span className="card-tags">
+                            {skillTags.slice(0, 4).map((item) => (
+                              <i key={item}>{highlightText(item, props.query)}</i>
+                            ))}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
       </div>
@@ -1081,42 +1409,57 @@ function LibraryView(props: {
           </div>
           <div className="install-options">
             <div className="target-checkboxes">
-              {TARGETS.map((target) => (
-                <label key={target} className="target-checkbox">
+              {targetRows.map((row) => (
+                <label key={row.id} className="target-checkbox">
                   <input
                     type="checkbox"
-                    checked={props.installTargets.includes(target)}
+                    checked={props.installTargets.includes(row.id)}
                     onChange={(event) => {
                       if (event.target.checked) {
-                        props.onInstallTargetsChange([...props.installTargets, target]);
+                        props.onInstallTargetsChange([...props.installTargets, row.id]);
                       } else {
                         props.onInstallTargetsChange(
-                          props.installTargets.filter((t) => t !== target),
+                          props.installTargets.filter((x) => x !== row.id),
                         );
                       }
                     }}
                   />
-                  <span>{target}</span>
+                  <span>
+                    {t(`installTarget.${row.id}`, { defaultValue: row.label })}
+                  </span>
                 </label>
               ))}
             </div>
-            <select
-              value={props.installScope}
-              onChange={(event) => props.onInstallScopeChange(event.target.value as LocationScope)}
+            <button
+              type="button"
+              className="button block"
+              onClick={props.onManageAgents}
             >
-              <option value="global">{t('library.scopeGlobal')}</option>
-              <option value="project">{t('library.scopeProject')}</option>
-            </select>
-            <select
-              value={props.installStrategy}
-              onChange={(event) =>
-                props.onInstallStrategyChange(event.target.value as InstallStrategy)
-              }
-            >
-              <option value="skip">{t('library.strategySkip')}</option>
-              <option value="overwrite">{t('library.strategyOverwrite')}</option>
-              <option value="rename">{t('library.strategyRename')}</option>
-            </select>
+              <Icon name="settings" />
+              {t('library.manageAgents')}
+            </button>
+            <p className="install-options-hint">{t('library.installTargetHint')}</p>
+            <div className="install-options-selects">
+              <select
+                value={props.installScope}
+                onChange={(event) =>
+                  props.onInstallScopeChange(event.target.value as LocationScope)
+                }
+              >
+                <option value="global">{t('library.scopeGlobal')}</option>
+                <option value="project">{t('library.scopeProject')}</option>
+              </select>
+              <select
+                value={props.installStrategy}
+                onChange={(event) =>
+                  props.onInstallStrategyChange(event.target.value as InstallStrategy)
+                }
+              >
+                <option value="skip">{t('library.strategySkip')}</option>
+                <option value="overwrite">{t('library.strategyOverwrite')}</option>
+                <option value="rename">{t('library.strategyRename')}</option>
+              </select>
+            </div>
           </div>
           <div className="meta-table">
             <Info label={t('library.metaVersion')} value={activeSkill?.version} />
@@ -1210,6 +1553,7 @@ function TagRow({
 
 function InstalledView(props: {
   confirmRemove: string | null;
+  installTargetRows: InstallTargetOption[];
   installed: InstalledSkill[];
   loading: boolean;
   onConfirmRemove: (value: string | null) => void;
@@ -1228,13 +1572,20 @@ function InstalledView(props: {
   const unknown = t('common.unknown');
   const [linkTargetKey, setLinkTargetKey] = useState<string | null>(null);
   const [linkSelections, setLinkSelections] = useState<Record<string, string[]>>({});
+  const visibleInstallTargets = props.installTargetRows.filter((row) => !row.hidden);
+  const linkTargetIds =
+    visibleInstallTargets.length > 0
+      ? visibleInstallTargets.map((row) => row.id)
+      : ['claude', 'cursor', 'codex'];
 
   function linkOptionsFor(item: InstalledSkill): string[] {
-    return TARGETS.filter((target) => target !== item.target);
+    return linkTargetIds.filter((target) => target !== item.target);
   }
 
   function defaultLinkTargets(item: InstalledSkill): string[] {
-    const preferred = ['cursor', 'codex'].filter((target) => target !== item.target);
+    const preferred = ['cursor', 'codex'].filter(
+      (target) => target !== item.target && linkTargetIds.includes(target),
+    );
     return preferred.length > 0 ? preferred : linkOptionsFor(item).slice(0, 1);
   }
 
@@ -1282,9 +1633,13 @@ function InstalledView(props: {
           onChange={(event) => props.onTargetChange(event.target.value)}
         >
           <option value="">{t('installed.allTargets')}</option>
-          {TARGETS.map((target) => (
-            <option key={target} value={target}>
-              {target}
+          {linkTargetIds.map((targetId) => (
+            <option key={targetId} value={targetId}>
+              {t(`installTarget.${targetId}`, {
+                defaultValue:
+                  props.installTargetRows.find((r) => r.id === targetId)?.label ??
+                  targetId,
+              })}
             </option>
           ))}
         </select>
@@ -1374,7 +1729,13 @@ function InstalledView(props: {
                             checked={selectedTargets.includes(target)}
                             onChange={() => toggleLinkTarget(key, item, target)}
                           />
-                          <span>{target}</span>
+                          <span>
+                            {t(`installTarget.${target}`, {
+                              defaultValue:
+                                props.installTargetRows.find((r) => r.id === target)
+                                  ?.label ?? target,
+                            })}
+                          </span>
                         </label>
                       ))}
                     </div>
@@ -1415,6 +1776,225 @@ function InstalledView(props: {
             );
           })}
         </div>
+      </div>
+    </section>
+  );
+}
+
+function AgentsView({
+  installTargetRows,
+  library,
+  onAdd,
+  onDelete,
+  onRefresh,
+  onUpdate,
+}: {
+  installTargetRows: InstallTargetOption[];
+  library: SkillLibraryTarget | null;
+  onAdd: (id: string, globalDir: string, projectDir: string) => Promise<void>;
+  onDelete: (id: string) => Promise<void>;
+  onRefresh: () => Promise<void>;
+  onUpdate: (id: string, globalDir: string, projectDir: string) => Promise<void>;
+}) {
+  const { t } = useTranslation();
+  const [newId, setNewId] = useState('');
+  const [newGlobalDir, setNewGlobalDir] = useState('~/.my-agent/skills');
+  const [newProjectDir, setNewProjectDir] = useState('./.my-agent/skills');
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editGlobalDir, setEditGlobalDir] = useState('');
+  const [editProjectDir, setEditProjectDir] = useState('');
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const visibleRows = installTargetRows.filter((row) => row.id !== 'agents');
+
+  function beginEdit(row: InstallTargetOption) {
+    setConfirmDelete(null);
+    setEditingId(row.id);
+    setEditGlobalDir(row.globalDir ?? '');
+    setEditProjectDir(row.projectDir ?? '');
+  }
+
+  async function submitNewAgent() {
+    await onAdd(newId.trim(), newGlobalDir.trim(), newProjectDir.trim());
+    setNewId('');
+  }
+
+  async function submitEdit(id: string) {
+    await onUpdate(id, editGlobalDir.trim(), editProjectDir.trim());
+    setEditingId(null);
+  }
+
+  return (
+    <section className="installed-page agents-page">
+      <div className="page-head">
+        <div>
+          <h1>{t('agents.title')}</h1>
+          <p>{t('agents.subtitle')}</p>
+        </div>
+        <button className="button" onClick={() => void onRefresh()}>
+          <Icon name="refresh" />
+          {t('agents.rescan')}
+        </button>
+      </div>
+
+      <div className="library-location">
+        <span className="library-location-icon">
+          <Icon name="database" />
+        </span>
+        <div>
+          <strong>{t('agents.libraryTitle')}</strong>
+          <p>{t('agents.libraryHint')}</p>
+        </div>
+        <div className="agent-paths">
+          <span>
+            <b>{t('agents.globalDir')}</b>
+            <code>{library?.globalDir ?? '~/.agents/skills'}</code>
+            <i>{library?.globalExists ? t('agents.pathReady') : t('agents.pathMissing')}</i>
+          </span>
+          <span>
+            <b>{t('agents.projectDir')}</b>
+            <code>{library?.projectDir ?? './.agents/skills'}</code>
+            <i>{library?.projectExists ? t('agents.pathReady') : t('agents.pathMissing')}</i>
+          </span>
+        </div>
+      </div>
+
+      <div className="source-form agent-form">
+        <label>
+          <span>{t('agents.idLabel')}</span>
+          <input
+            value={newId}
+            onChange={(event) => setNewId(event.target.value)}
+            placeholder={t('agents.idPlaceholder')}
+          />
+        </label>
+        <label>
+          <span>{t('agents.globalDir')}</span>
+          <input
+            value={newGlobalDir}
+            onChange={(event) => setNewGlobalDir(event.target.value)}
+            placeholder="~/.my-agent/skills"
+          />
+        </label>
+        <label>
+          <span>{t('agents.projectDir')}</span>
+          <input
+            value={newProjectDir}
+            onChange={(event) => setNewProjectDir(event.target.value)}
+            placeholder="./.my-agent/skills"
+          />
+        </label>
+        <button
+          className="button primary"
+          disabled={!newId.trim()}
+          onClick={() => void submitNewAgent()}
+        >
+          {t('agents.add')}
+        </button>
+      </div>
+
+      <div className="source-list agent-list">
+        {visibleRows.map((row) => {
+          const editing = editingId === row.id;
+          const deleting = confirmDelete === row.id;
+          return (
+            <article key={row.id}>
+              <div className="source-main">
+                <strong>
+                  <span>{t(`installTarget.${row.id}`, { defaultValue: row.label })}</span>
+                  <span className="source-tags">
+                    <i>{row.builtin ? t('agents.builtin') : t('agents.custom')}</i>
+                    {row.hidden ? <i>{t('agents.hidden')}</i> : null}
+                    <i>
+                      {row.globalExists || row.projectExists
+                        ? t('agents.detected')
+                        : t('agents.configured')}
+                    </i>
+                  </span>
+                </strong>
+                <span className="source-description">
+                  {t('agents.agentHint', { id: row.id })}
+                </span>
+                <div className="agent-paths">
+                  <span>
+                    <b>{t('agents.globalDir')}</b>
+                    <code>{row.globalDir ?? '-'}</code>
+                    <i>{row.globalExists ? t('agents.pathReady') : t('agents.pathMissing')}</i>
+                  </span>
+                  <span>
+                    <b>{t('agents.projectDir')}</b>
+                    <code>{row.projectDir ?? '-'}</code>
+                    <i>{row.projectExists ? t('agents.pathReady') : t('agents.pathMissing')}</i>
+                  </span>
+                </div>
+                <span className="source-key">{row.id}</span>
+              </div>
+              <span className={row.globalExists || row.projectExists ? 'source-status on' : 'source-status'}>
+                {row.globalExists || row.projectExists
+                  ? t('agents.detected')
+                  : t('agents.configured')}
+              </span>
+              <div className="source-actions">
+                <button className="button" onClick={() => beginEdit(row)}>
+                  {t('agents.edit')}
+                </button>
+                <button
+                  className="button danger"
+                  disabled={!row.removable}
+                  onClick={() => {
+                    setEditingId(null);
+                    setConfirmDelete(deleting ? null : row.id);
+                  }}
+                  title={!row.removable ? t('agents.deleteDisabled') : undefined}
+                >
+                  {t('agents.delete')}
+                </button>
+              </div>
+
+              {editing ? (
+                <div className="agent-edit-strip">
+                  <label>
+                    <span>{t('agents.globalDir')}</span>
+                    <input
+                      value={editGlobalDir}
+                      onChange={(event) => setEditGlobalDir(event.target.value)}
+                    />
+                  </label>
+                  <label>
+                    <span>{t('agents.projectDir')}</span>
+                    <input
+                      value={editProjectDir}
+                      onChange={(event) => setEditProjectDir(event.target.value)}
+                    />
+                  </label>
+                  <button className="button primary" onClick={() => void submitEdit(row.id)}>
+                    {t('agents.save')}
+                  </button>
+                  <button className="button" onClick={() => setEditingId(null)}>
+                    {t('installed.cancel')}
+                  </button>
+                </div>
+              ) : null}
+
+              {deleting ? (
+                <div className="confirm-strip source-confirm-strip">
+                  <span>{t('agents.confirmDelete', { name: row.label })}</span>
+                  <button
+                    className="button danger"
+                    onClick={async () => {
+                      await onDelete(row.id);
+                      setConfirmDelete(null);
+                    }}
+                  >
+                    {t('agents.delete')}
+                  </button>
+                  <button className="button" onClick={() => setConfirmDelete(null)}>
+                    {t('installed.cancel')}
+                  </button>
+                </div>
+              ) : null}
+            </article>
+          );
+        })}
       </div>
     </section>
   );

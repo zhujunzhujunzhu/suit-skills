@@ -4,6 +4,14 @@
     "all": "全部",
     "dash": "—"
   },
+  "installTarget": {
+    "claude": "Claude Code",
+    "cursor": "Cursor",
+    "codex": "OpenAI Codex",
+    "gemini": "Gemini CLI",
+    "opencode": "OpenCode",
+    "openclaw": "OpenClaw"
+  },
   "brand": {
     "title": "Suit Skills",
     "subtitle": "网页控制台"
@@ -11,13 +19,15 @@
   "crumb": {
     "viewLibrary": "技能库",
     "viewInstalled": "已安装",
-    "viewSources": "源"
+    "viewSources": "源",
+    "viewAgents": "Agents"
   },
   "nav": {
     "primary": "主导航",
     "skills": "技能库",
     "installed": "已安装",
-    "sources": "源"
+    "sources": "源",
+    "agents": "Agents"
   },
   "rail": {
     "indexLabel": "本地索引",
@@ -70,7 +80,17 @@
     "metaSource": "源",
     "metaTargets": "目标",
     "metaMetadata": "元数据",
-    "notInstalled": "未安装"
+    "notInstalled": "未安装",
+    "manageAgents": "管理 Agents",
+    "installTargetHint": "技能会先安装到中央技能库；勾选的 Agent 会获得链接，从而在对应工具中可用。",
+    "addCustomTarget": "添加自定义目标",
+    "customTargetHide": "收起自定义",
+    "customTargetId": "标识（小写字母开头，可含数字、连字符）",
+    "customGlobalDir": "全局目录，如 ~/.my-tool/skills",
+    "customProjectDir": "项目目录，如 ./.my-tool/skills",
+    "customTargetHint": "将写入 ~/.suit-skills/config.json 的 agents 映射；安装时仍会先写入 .agents 再向此处创建软链接。",
+    "customSubmit": "添加",
+    "customCancel": "取消"
   },
   "tags": {
     "showMore": "还有 {{count}} 个标签"
@@ -133,6 +153,31 @@
     "syncingTitle": "正在刷新源缓存",
     "syncingHint": "网络检查最长约 30 秒"
   },
+  "agents": {
+    "title": "AI Coding Agents",
+    "subtitle": "配置各个编码 Agent 读取技能的位置。技能实际保存在中央库，选中的 Agent 通过链接启用。",
+    "rescan": "重新检测",
+    "libraryTitle": "中央技能库",
+    "libraryHint": "这是技能真实安装位置。启用到 Agent 时，对应目录会链接回这里。",
+    "idLabel": "Agent 标识",
+    "idPlaceholder": "windsurf",
+    "globalDir": "全局",
+    "projectDir": "项目",
+    "add": "添加 Agent",
+    "builtin": "内置",
+    "custom": "自定义",
+    "hidden": "仅管理",
+    "detected": "已检测",
+    "configured": "已配置",
+    "pathReady": "存在",
+    "pathMissing": "未发现",
+    "agentHint": "配置键：{{id}}",
+    "edit": "编辑",
+    "save": "保存",
+    "delete": "删除",
+    "deleteDisabled": "内置 Agent 可编辑路径，但不能删除",
+    "confirmDelete": "从配置中移除自定义 Agent「{{name}}」？不会删除已安装技能或目录。"
+  },
   "sourceCategory": {
     "official": "官方",
     "engineering": "工程",
@@ -169,7 +214,10 @@
     "noMirrors": "没有可用的国内镜像",
     "mirrorsOn": "已批量启用国内镜像",
     "mirrorsOff": "已批量关闭国内镜像",
-    "sourceRemoved": "已删除源"
+    "sourceRemoved": "已删除源",
+    "customTargetAdded": "已添加 Agent",
+    "agentUpdated": "已更新 Agent",
+    "agentRemoved": "已移除 Agent"
   },
   "share": {
     "skill": "技能",
@@ -236,6 +284,12 @@
     "invalidJson": "JSON 无效：{{detail}}",
     "invalidInstallStrategy": "无效的安装策略：{{strategy}}",
     "symlinkFailed": "创建符号链接失败：{{detail}}",
-    "linkedTo": "已关联到 {{path}}"
+    "linkedTo": "已关联到 {{path}}",
+    "installTargetIdLength": "安装目标标识长度须为 2～48（字母、数字、连字符）",
+    "installTargetIdLetter": "安装目标标识须以小写字母开头",
+    "installTargetReserved": "保留标识，不可使用：{{id}}",
+    "installTargetPath": "目录须以 ~/ 或 ./ 开头且不能包含 ..",
+    "installTargetExists": "安装目标已存在：{{id}}",
+    "cannotRemoveBuiltinTarget": "内置 Agent 不能删除"
   }
 }
