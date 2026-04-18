@@ -1,9 +1,9 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { moduleDir } from '../utils/module.js';
 
 export function readPkgVersion(): string {
-  let dir = dirname(fileURLToPath(import.meta.url));
+  let dir = moduleDir(import.meta.url);
   for (let i = 0; i < 8; i++) {
     const p = join(dir, 'package.json');
     if (existsSync(p)) {
@@ -14,5 +14,5 @@ export function readPkgVersion(): string {
     if (parent === dir) break;
     dir = parent;
   }
-  return '0.0.0';
+  return process.env.SUIT_SKILLS_VERSION ?? '0.0.0';
 }

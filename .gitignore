@@ -5,3 +5,6 @@ dist/
 .env
 .env.local
 *.tsbuildinfo
+src-tauri/binaries/
+src-tauri/gen/
+src-tauri/target/

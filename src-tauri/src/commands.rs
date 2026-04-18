@@ -1,6 +1,9 @@
 use serde::{Deserialize, Serialize};
-use std::process::Command;
-use tauri::command;
+use std::process::Command as StdCommand;
+use tauri::{command, AppHandle};
+use tauri_plugin_shell::ShellExt;
+
+const SIDECAR_NAME: &str = "suit-skills";
 
 /// 通用命令执行结果
 #[derive(Debug, Serialize, Deserialize)]
@@ -11,22 +14,52 @@ pub struct SkillResult {
     pub stdout: Option<String>,
 }
 
-/// 获取 sidecar 可执行文件路径
-fn get_sidecar_path() -> String {
-    // 开发环境使用 node 运行 dist/index.js
-    // 生产环境使用打包的 sidecar
-    "suit-skills".to_string()
+/// 执行 suit-skills 命令
+async fn run_cli_command(app: &AppHandle, args: Vec<String>) -> SkillResult {
+    let output = app
+        .shell()
+        .sidecar(SIDECAR_NAME)
+        .map(|command| command.args(&args))
+        .map_err(|error| error.to_string());
+
+    match output {
+        Ok(command) => match command.output().await {
+            Ok(result) => {
+                let stdout = String::from_utf8_lossy(&result.stdout).to_string();
+                let stderr = String::from_utf8_lossy(&result.stderr).to_string();
+
+                if result.status.success() {
+                    let data = if stdout.trim().starts_with('{') || stdout.trim().starts_with('[') {
+                        serde_json::from_str(&stdout).ok()
+                    } else {
+                        None
+                    };
+
+                    SkillResult {
+                        success: true,
+                        data,
+                        error: None,
+                        stdout: Some(stdout),
+                    }
+                } else {
+                    SkillResult {
+                        success: false,
+                        data: None,
+                        error: Some(stderr),
+                        stdout: Some(stdout),
+                    }
+                }
+            }
+            Err(error) => run_cli_command_fallback(&args, Some(error.to_string())),
+        },
+        Err(error) => run_cli_command_fallback(&args, Some(error)),
+    }
 }
 
-/// 执行 suit-skills 命令
-fn run_cli_command(args: &[String]) -> SkillResult {
-    let sidecar = get_sidecar_path();
+fn run_cli_command_fallback(args: &[String], sidecar_error: Option<String>) -> SkillResult {
     let args_str: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
 
-    // 尝试使用 sidecar 或直接调用 node
-    let output = Command::new(&sidecar)
-        .args(&args_str)
-        .output();
+    let output = StdCommand::new("suit-skills").args(&args_str).output();
 
     match output {
         Ok(result) => {
@@ -58,7 +91,7 @@ fn run_cli_command(args: &[String]) -> SkillResult {
         }
         Err(e) => {
             // sidecar 失败时尝试使用 node 直接运行
-            let node_output = Command::new("node")
+            let node_output = StdCommand::new("node")
                 .arg("dist/index.js")
                 .args(&args_str)
                 .output();
@@ -93,7 +126,13 @@ fn run_cli_command(args: &[String]) -> SkillResult {
                 Err(_) => SkillResult {
                     success: false,
                     data: None,
-                    error: Some(format!("Failed to execute command: {}", e)),
+                    error: Some(format!(
+                        "Failed to execute sidecar{}; global suit-skills failed: {}; node fallback failed",
+                        sidecar_error
+                            .map(|message| format!(": {}", message))
+                            .unwrap_or_default(),
+                        e
+                    )),
                     stdout: None,
                 },
             }
@@ -103,31 +142,41 @@ fn run_cli_command(args: &[String]) -> SkillResult {
 
 /// 运行任意 suit-skills 命令
 #[command]
-pub fn run_skill_command(args: Vec<String>) -> SkillResult {
-    run_cli_command(&args)
+pub async fn run_skill_command(app: AppHandle, args: Vec<String>) -> SkillResult {
+    run_cli_command(&app, args).await
 }
 
 /// 获取已安装技能列表
 #[command]
-pub fn get_installed_skills(scope: Option<String>, target: Option<String>) -> SkillResult {
-    let mut args: Vec<String> = vec!["list".to_string(), "--json".to_string()];
+pub async fn get_installed_skills(
+    app: AppHandle,
+    scope: Option<String>,
+    target: Option<String>,
+) -> SkillResult {
+    let mut args: Vec<String> = vec!["installed".to_string(), "--json".to_string()];
 
     if let Some(s) = scope {
-        args.push("--scope".to_string());
-        args.push(s);
+        if s == "global" {
+            args.push("--global".to_string());
+        }
     }
     if let Some(t) = target {
-        args.push("--target".to_string());
+        args.push("--env".to_string());
         args.push(t);
     }
 
-    run_cli_command(&args)
+    run_cli_command(&app, args).await
 }
 
 /// 获取技能库列表
 #[command]
-pub fn get_skills_list(source: Option<String>, query: Option<String>, tag: Option<String>) -> SkillResult {
-    let mut args: Vec<String> = vec!["search".to_string(), "--json".to_string()];
+pub async fn get_skills_list(
+    app: AppHandle,
+    source: Option<String>,
+    query: Option<String>,
+    tag: Option<String>,
+) -> SkillResult {
+    let mut args: Vec<String> = vec!["list".to_string(), "--json".to_string()];
 
     if let Some(s) = source {
         args.push("--source".to_string());
@@ -142,12 +191,12 @@ pub fn get_skills_list(source: Option<String>, query: Option<String>, tag: Optio
         args.push(t);
     }
 
-    run_cli_command(&args)
+    run_cli_command(&app, args).await
 }
 
 /// 获取技能详情
 #[command]
-pub fn get_skill_detail(name: String, source: Option<String>) -> SkillResult {
+pub async fn get_skill_detail(app: AppHandle, name: String, source: Option<String>) -> SkillResult {
     let mut args: Vec<String> = vec!["info".to_string(), "--json".to_string(), name];
 
     if let Some(s) = source {
@@ -155,12 +204,13 @@ pub fn get_skill_detail(name: String, source: Option<String>) -> SkillResult {
         args.push(s);
     }
 
-    run_cli_command(&args)
+    run_cli_command(&app, args).await
 }
 
 /// 安装技能
 #[command]
-pub fn install_skill(
+pub async fn install_skill(
+    app: AppHandle,
     identifier: String,
     source: Option<String>,
     targets: Option<Vec<String>>,
@@ -173,38 +223,49 @@ pub fn install_skill(
         args.push(s);
     }
     if let Some(t_list) = targets {
-        for t in t_list {
-            args.push("--target".to_string());
-            args.push(t);
+        if !t_list.is_empty() {
+            args.push("--env".to_string());
+            args.push(t_list.join(","));
         }
     }
     if global {
         args.push("--global".to_string());
     }
 
-    run_cli_command(&args)
+    run_cli_command(&app, args).await
 }
 
 /// 移除技能
 #[command]
-pub fn remove_skill(name: String, target: Option<String>, scope: Option<String>) -> SkillResult {
+pub async fn remove_skill(
+    app: AppHandle,
+    name: String,
+    target: Option<String>,
+    scope: Option<String>,
+) -> SkillResult {
     let mut args: Vec<String> = vec!["remove".to_string(), name];
 
     if let Some(t) = target {
-        args.push("--target".to_string());
+        args.push("--env".to_string());
         args.push(t);
     }
     if let Some(s) = scope {
-        args.push("--scope".to_string());
-        args.push(s);
+        if s == "global" {
+            args.push("--global".to_string());
+        }
     }
 
-    run_cli_command(&args)
+    run_cli_command(&app, args).await
 }
 
 /// 导出技能
 #[command]
-pub fn export_skill(name: String, target: String, scope: String) -> SkillResult {
+pub async fn export_skill(
+    app: AppHandle,
+    name: String,
+    target: String,
+    scope: String,
+) -> SkillResult {
     let args: Vec<String> = vec![
         "export".to_string(),
         "--json".to_string(),
@@ -214,36 +275,46 @@ pub fn export_skill(name: String, target: String, scope: String) -> SkillResult 
         "--scope".to_string(),
         scope,
     ];
-    run_cli_command(&args)
+    run_cli_command(&app, args).await
 }
 
 /// 获取技能源列表
 #[command]
-pub fn get_sources() -> SkillResult {
-    run_cli_command(&["source".to_string(), "--json".to_string()])
+pub async fn get_sources(app: AppHandle) -> SkillResult {
+    run_cli_command(
+        &app,
+        vec!["source".to_string(), "list".to_string(), "--json".to_string()],
+    )
+    .await
 }
 
 /// 添加技能源
 #[command]
-pub fn add_source(name: String, url: String) -> SkillResult {
-    run_cli_command(&["source".to_string(), "add".to_string(), name, url])
+pub async fn add_source(app: AppHandle, name: String, url: String) -> SkillResult {
+    run_cli_command(
+        &app,
+        vec!["source".to_string(), "add".to_string(), name, url],
+    )
+    .await
 }
 
 /// 移除技能源
 #[command]
-pub fn remove_source(name: String) -> SkillResult {
-    run_cli_command(&["source".to_string(), "remove".to_string(), name])
+pub async fn remove_source(app: AppHandle, name: String) -> SkillResult {
+    run_cli_command(&app, vec!["source".to_string(), "remove".to_string(), name]).await
 }
 
 /// 更新技能源（启用/禁用）
 #[command]
-pub fn update_source(name: String, enabled: bool) -> SkillResult {
-    let enabled_str = if enabled { "true" } else { "false" };
-    run_cli_command(&[
-        "source".to_string(),
-        "update".to_string(),
-        name,
-        "--enabled".to_string(),
-        enabled_str.to_string(),
-    ])
+pub async fn update_source(app: AppHandle, name: String, enabled: bool) -> SkillResult {
+    let action = if enabled { "enable" } else { "disable" };
+    run_cli_command(
+        &app,
+        vec![
+            "source".to_string(),
+            action.to_string(),
+            name,
+        ],
+    )
+    .await
 }

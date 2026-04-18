@@ -39,15 +39,18 @@ button {
 .app-shell {
   display: grid;
   grid-template-columns: 224px minmax(0, 1fr);
+  grid-template-rows: 60px minmax(0, 1fr);
   min-height: 100vh;
 }
 
 .rail {
   position: sticky;
-  top: 0;
+  top: 60px;
+  grid-column: 1;
+  grid-row: 2;
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  height: calc(100vh - 60px);
   background: var(--surface-low);
   border-right: 1px solid var(--outline-soft);
 }
@@ -85,7 +88,7 @@ button {
 .nav {
   display: grid;
   gap: 4px;
-  padding: 20px 10px;
+  padding: 22px 10px 20px;
 }
 
 .nav button {
@@ -147,6 +150,8 @@ button {
 }
 
 .workspace {
+  grid-column: 2;
+  grid-row: 2;
   min-width: 0;
   background: var(--surface);
 }
@@ -154,15 +159,108 @@ button {
 .topbar {
   position: sticky;
   top: 0;
+  grid-column: 1 / -1;
+  grid-row: 1;
   z-index: 10;
-  display: flex;
+  display: grid;
+  grid-template-columns: 224px minmax(0, 1fr);
   align-items: center;
-  justify-content: space-between;
   height: 60px;
-  padding: 0 28px;
+  padding: 0;
   background: color-mix(in srgb, var(--surface-low) 92%, transparent);
   border-bottom: 1px solid var(--outline-soft);
   backdrop-filter: blur(14px);
+}
+
+.topbar .brand {
+  min-width: 0;
+  height: 60px;
+}
+
+.topbar-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-width: 0;
+  height: 100%;
+  padding: 0 10px 0 28px;
+}
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.window-chrome {
+  display: flex;
+  align-items: center;
+  height: 100%;
+  margin-left: 4px;
+}
+
+.window-chrome button {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 36px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted);
+}
+
+.window-chrome button:hover {
+  background: var(--surface-high);
+  color: var(--text);
+}
+
+.window-chrome button.close:hover {
+  background: var(--error);
+  color: var(--surface-lowest);
+}
+
+.window-chrome span,
+.window-chrome i,
+.window-chrome b {
+  position: relative;
+  display: block;
+  width: 12px;
+  height: 12px;
+  font-style: normal;
+}
+
+.window-chrome span::before {
+  content: "";
+  position: absolute;
+  left: 1px;
+  right: 1px;
+  bottom: 2px;
+  border-bottom: 1.5px solid currentColor;
+}
+
+.window-chrome i {
+  border: 1.5px solid currentColor;
+}
+
+.window-chrome b::before,
+.window-chrome b::after {
+  content: "";
+  position: absolute;
+  top: 5px;
+  left: 0;
+  width: 13px;
+  border-bottom: 1.5px solid currentColor;
+}
+
+.window-chrome b::before {
+  transform: rotate(45deg);
+}
+
+.window-chrome b::after {
+  transform: rotate(-45deg);
 }
 
 .crumb {
@@ -557,6 +655,13 @@ button {
 }
 
 .state.error {
+  min-height: auto;
+  width: min(1480px, calc(100% - 56px));
+  margin: 18px auto 0;
+  padding: 12px 14px;
+  place-items: start;
+  border: 1px solid color-mix(in srgb, var(--error) 38%, transparent);
+  background: color-mix(in srgb, var(--error) 8%, var(--surface-low));
   color: var(--error);
 }
 
@@ -801,19 +906,33 @@ button {
 @media (max-width: 760px) {
   .app-shell {
     grid-template-columns: 1fr;
+    grid-template-rows: auto auto minmax(0, 1fr);
+  }
+
+  .topbar {
+    position: sticky;
+    grid-template-columns: 1fr;
+    height: auto;
+  }
+
+  .topbar .brand {
+    height: 60px;
+  }
+
+  .topbar-main {
+    height: 56px;
+    padding: 0 8px 0 16px;
   }
 
   .rail {
     position: static;
+    grid-column: 1;
+    grid-row: 2;
     height: auto;
   }
 
-  .brand {
-    height: 60px;
-  }
-
   .nav {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     padding: 0 12px 12px;
   }
 
@@ -826,9 +945,9 @@ button {
     display: none;
   }
 
-  .topbar {
-    height: 56px;
-    padding: 0 16px;
+  .workspace {
+    grid-column: 1;
+    grid-row: 3;
   }
 
   .console-grid {
@@ -849,5 +968,10 @@ button {
 
   .skill-card.wide {
     grid-column: auto;
+  }
+
+  .state.error {
+    width: calc(100% - 28px);
+    margin-top: 14px;
   }
 }

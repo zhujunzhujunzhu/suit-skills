@@ -6,6 +6,7 @@ import { warn } from '../utils/output.js';
 
 interface SearchOptions {
   source?: string;
+  query?: string;
   json?: boolean;
 }
 
@@ -13,15 +14,20 @@ export function registerSearch(program: Command, ctx: CliContext): void {
   program
     .command('search')
     .description('Search skills by keyword')
-    .argument('<keyword>', 'search keyword')
+    .argument('[keyword]', 'search keyword')
+    .option('--query <keyword>', 'search keyword')
     .option('--source <name>', 'source name, or omit to use default source')
     .option('--json', 'output as JSON')
-    .action((keyword: string, opts: SearchOptions) => {
+    .action((keyword: string | undefined, opts: SearchOptions) => {
+      const searchKeyword = opts.query ?? keyword;
+      if (!searchKeyword?.trim()) {
+        throw new Error('Search keyword is required');
+      }
       const config = ctx.loadConfig();
       const sourceFilter = opts.source ?? config.defaultSource;
       const rows = collectMetasFromSources(ctx, config, sourceFilter);
       const metas = rows.map((r) => r.meta);
-      const found = searchSkills(metas, keyword);
+      const found = searchSkills(metas, searchKeyword);
 
       if (opts.json) {
         const items = found.map((m) => ({

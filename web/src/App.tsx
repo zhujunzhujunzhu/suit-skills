@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
+import { type MouseEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import {
   addSource,
   exportInstalledSkill,
@@ -111,6 +111,32 @@ async function copyText(text: string): Promise<void> {
   textarea.select();
   document.execCommand('copy');
   textarea.remove();
+}
+
+async function windowCommand(action: 'minimize' | 'toggleMaximize' | 'close'): Promise<void> {
+  if (typeof window === 'undefined' || !('__TAURI__' in window)) return;
+  try {
+    const { getCurrentWindow } = await import('@tauri-apps/api/window');
+    const appWindow = getCurrentWindow();
+    await appWindow[action]();
+  } catch (error) {
+    console.error('Window command failed', error);
+  }
+}
+
+async function startWindowDrag(event: MouseEvent<HTMLElement>): Promise<void> {
+  if (event.button !== 0) return;
+  const target = event.target instanceof HTMLElement ? event.target : null;
+  if (target?.closest('button, input, select, textarea, a, .window-chrome')) {
+    return;
+  }
+  if (typeof window === 'undefined' || !('__TAURI__' in window)) return;
+  try {
+    const { getCurrentWindow } = await import('@tauri-apps/api/window');
+    await getCurrentWindow().startDragging();
+  } catch (error) {
+    console.error('Window drag failed', error);
+  }
 }
 
 type MarkdownBlock =
@@ -276,6 +302,7 @@ function nextSelectableSource(sources: Source[], current: string): string {
 }
 
 export default function App() {
+  const isDesktop = typeof window !== 'undefined' && '__TAURI__' in window;
   const [view, setView] = useState<View>('library');
   const [sources, setSources] = useState<Source[]>([]);
   const [source, setSource] = useState('all');
@@ -559,16 +586,51 @@ export default function App() {
 
   return (
     <div className="app-shell">
-      <aside className="rail">
-        <div className="brand">
+      <header
+        className="topbar"
+        data-tauri-drag-region
+        onMouseDown={(event) => void startWindowDrag(event)}
+      >
+        <div className="brand" data-tauri-drag-region>
           <span className="brand-mark">
             <Icon name="terminal" />
           </span>
-          <span>
+          <span data-tauri-drag-region>
             <strong>Suit Skills</strong>
             <small>web console</small>
           </span>
         </div>
+        <div className="topbar-main" data-tauri-drag-region>
+          <div className="crumb" data-tauri-drag-region>
+            <strong>Suit Skills</strong>
+            <span>/</span>
+            <em>{view}</em>
+          </div>
+          <div className="topbar-actions">
+            <button className="icon-button" title="Refresh" onClick={() => {
+              void loadSkills(source, debouncedQuery, tag, true);
+              void loadInstalled();
+            }}>
+              <Icon name="refresh" />
+            </button>
+            {isDesktop ? (
+              <div className="window-chrome" aria-label="Window controls">
+                <button title="Minimize" onClick={() => void windowCommand('minimize')}>
+                  <span />
+                </button>
+                <button title="Maximize" onClick={() => void windowCommand('toggleMaximize')}>
+                  <i />
+                </button>
+                <button className="close" title="Close" onClick={() => void windowCommand('close')}>
+                  <b />
+                </button>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      </header>
+
+      <aside className="rail">
         <nav className="nav" aria-label="Primary">
           <NavButton active={view === 'library'} onClick={() => setView('library')} icon="database" label="Skills" />
           <NavButton active={view === 'installed'} onClick={() => setView('installed')} icon="check" label="Installed" />
@@ -582,20 +644,6 @@ export default function App() {
       </aside>
 
       <main className="workspace">
-        <header className="topbar">
-          <div className="crumb">
-            <strong>Suit Skills</strong>
-            <span>/</span>
-            <em>{view}</em>
-          </div>
-          <button className="icon-button" title="Refresh" onClick={() => {
-            void loadSkills(source, debouncedQuery, tag, true);
-            void loadInstalled();
-          }}>
-            <Icon name="refresh" />
-          </button>
-        </header>
-
         {error ? <ErrorState message={error} /> : null}
         {view === 'library' ? (
           <LibraryView

@@ -1,8 +1,8 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { createReadStream, existsSync, statSync } from 'node:fs';
-import { dirname, extname, join, normalize, resolve, sep } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { extname, join, normalize, resolve, sep } from 'node:path';
 import type { CliContext } from '../../cli/context.js';
+import { moduleDir } from '../../utils/module.js';
 import {
   addWebSource,
   exportWebInstalledSkill,
@@ -215,7 +215,7 @@ async function handleApi(
 }
 
 function defaultAssetCandidates(): string[] {
-  const here = dirname(fileURLToPath(import.meta.url));
+  const here = moduleDir(import.meta.url);
   return [
     resolve(process.cwd(), 'web', 'dist'),
     resolve(process.cwd(), 'dist', 'web'),
