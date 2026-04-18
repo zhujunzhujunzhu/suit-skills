@@ -1,14 +1,17 @@
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import {
   addSource,
+  copyInstalledSkillPackage,
   exportInstalledSkill,
   fetchInstalled,
   fetchSkillDetail,
   fetchSkills,
   fetchSources,
   installSkill,
+  linkInstalledSkillTargets,
   removeSource,
   removeInstalledSkill,
+  restoreBuiltinSources,
   updateSource,
   type InstalledSkill,
   type SkillDetail,
@@ -21,7 +24,7 @@ type LocationScope = 'project' | 'global';
 type ScopeFilter = 'all' | LocationScope;
 type InstallStrategy = 'overwrite' | 'skip' | 'rename';
 
-const TARGETS = ['skills', 'claude', 'cursor', 'codex', 'agents', 'copilot'];
+const TARGETS = ['claude', 'cursor', 'codex', 'agents', 'copilot'];
 
 const icons = {
   terminal: (
@@ -67,6 +70,12 @@ const icons = {
       <path d="m12 2 8 4.5v9L12 20l-8-4.5v-9L12 2z" />
       <path d="m4.5 7 7.5 4.2L19.5 7" />
       <path d="M12 20v-8.8" />
+    </>
+  ),
+  link: (
+    <>
+      <path d="M10 13a5 5 0 0 0 7.1 0l2-2a5 5 0 0 0-7.1-7.1l-1.1 1.1" />
+      <path d="M14 11a5 5 0 0 0-7.1 0l-2 2A5 5 0 0 0 12 20.1l1.1-1.1" />
     </>
   ),
   trash: (
@@ -303,8 +312,8 @@ export default function App() {
   const [installedQuery, setInstalledQuery] = useState('');
   const [installedTarget, setInstalledTarget] = useState('');
   const [scope, setScope] = useState<ScopeFilter>('all');
-  const [installTarget, setInstallTarget] = useState('skills');
-  const [installScope, setInstallScope] = useState<LocationScope>('project');
+  const [installTargets, setInstallTargets] = useState<string[]>(['claude', 'cursor', 'codex']);
+  const [installScope, setInstallScope] = useState<LocationScope>('global');
   const [installStrategy, setInstallStrategy] = useState<InstallStrategy>('skip');
   const [loading, setLoading] = useState(false);
   const [installedLoading, setInstalledLoading] = useState(false);
@@ -498,7 +507,7 @@ export default function App() {
       await installSkill({
         identifier: activeSkill.name,
         source: activeSkill.sourceName,
-        targets: [installTarget],
+        targets: installTargets,
         global: installScope === 'global',
         strategy: installStrategy,
       });
@@ -538,6 +547,40 @@ export default function App() {
     }
   }
 
+  async function copyPackage(item: InstalledSkill) {
+    try {
+      await copyInstalledSkillPackage({
+        name: item.name,
+        target: item.target,
+        scope: item.scope,
+      });
+      notify('Package copied');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  async function linkToolTargets(item: InstalledSkill, targets: string[]) {
+    if (targets.length === 0) {
+      notify('Choose a target');
+      return;
+    }
+    try {
+      const result = await linkInstalledSkillTargets({
+        name: item.name,
+        target: item.target,
+        scope: item.scope,
+        targets,
+      });
+      const linked = result.results.filter((entry) => entry.status === 'linked').length;
+      notify(linked > 0 ? `Linked to ${linked} target${linked > 1 ? 's' : ''}` : 'Already available');
+      await loadInstalled();
+      await loadSkills();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
   async function addSourceFromForm() {
     try {
       const result = await addSource({ name: sourceName, url: sourceUrl });
@@ -547,6 +590,22 @@ export default function App() {
       setSourceName('');
       setSourceUrl('');
       notify('Source added');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  async function restoreBuiltinsFromCatalog() {
+    try {
+      const result = await restoreBuiltinSources();
+      setSources(result.sources);
+      setDefaultSource(result.defaultSource);
+      setSource((current) => nextSelectableSource(result.sources, current));
+      notify(
+        result.added.length > 0
+          ? `Added ${result.added.length} built-in sources`
+          : 'Built-in sources already present',
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -582,7 +641,7 @@ export default function App() {
 
   return (
     <div className="app-shell">
-      <aside className="rail">
+      <header className="topbar">
         <div className="brand">
           <span className="brand-mark">
             <Icon name="terminal" />
@@ -592,6 +651,22 @@ export default function App() {
             <small>web console</small>
           </span>
         </div>
+        <div className="topbar-main">
+          <div className="crumb">
+            <strong>Suit Skills</strong>
+            <span>/</span>
+            <em>{view}</em>
+          </div>
+          <button className="icon-button" title="Refresh" onClick={() => {
+            void loadSkills(source, debouncedQuery, tag, true);
+            void loadInstalled();
+          }}>
+            <Icon name="refresh" />
+          </button>
+        </div>
+      </header>
+
+      <aside className="rail">
         <nav className="nav" aria-label="Primary">
           <NavButton active={view === 'library'} onClick={() => setView('library')} icon="database" label="Skills" />
           <NavButton active={view === 'installed'} onClick={() => setView('installed')} icon="check" label="Installed" />
@@ -605,33 +680,19 @@ export default function App() {
       </aside>
 
       <main className="workspace">
-        <header className="topbar">
-          <div className="crumb">
-            <strong>Suit Skills</strong>
-            <span>/</span>
-            <em>{view}</em>
-          </div>
-          <button className="icon-button" title="Refresh" onClick={() => {
-            void loadSkills(source, debouncedQuery, tag, true);
-            void loadInstalled();
-          }}>
-            <Icon name="refresh" />
-          </button>
-        </header>
-
         {error ? <ErrorState message={error} /> : null}
         {view === 'library' ? (
           <LibraryView
             detail={detail}
             installScope={installScope}
             installStrategy={installStrategy}
-            installTarget={installTarget}
+            installTargets={installTargets}
             loading={loading}
             onCopyCommand={copyCommand}
             onInstall={installSelected}
             onInstallScopeChange={setInstallScope}
             onInstallStrategyChange={setInstallStrategy}
-            onInstallTargetChange={setInstallTarget}
+            onInstallTargetsChange={setInstallTargets}
             onQueryChange={setQuery}
             onSelect={setSelected}
             onShare={shareCommand}
@@ -654,7 +715,9 @@ export default function App() {
             installed={visibleInstalled}
             loading={installedLoading}
             onConfirmRemove={setConfirmRemove}
+            onCopyPackage={copyPackage}
             onExport={exportSkill}
+            onLinkTargets={linkToolTargets}
             onQueryChange={setInstalledQuery}
             onRemove={removeSkill}
             onScopeChange={setScope}
@@ -672,6 +735,7 @@ export default function App() {
             onAdd={addSourceFromForm}
             onDelete={deleteSource}
             onNameChange={setSourceName}
+            onRestore={restoreBuiltinsFromCatalog}
             onToggle={toggleSource}
             onUrlChange={setSourceUrl}
             sources={sources}
@@ -712,13 +776,13 @@ function LibraryView(props: {
   detail: SkillDetail | null;
   installScope: LocationScope;
   installStrategy: InstallStrategy;
-  installTarget: string;
+  installTargets: string[];
   loading: boolean;
   onCopyCommand: () => void;
   onInstall: () => void;
   onInstallScopeChange: (value: LocationScope) => void;
   onInstallStrategyChange: (value: InstallStrategy) => void;
-  onInstallTargetChange: (value: string) => void;
+  onInstallTargetsChange: (value: string[]) => void;
   onQueryChange: (value: string) => void;
   onSelect: (value: string) => void;
   onShare: () => void;
@@ -737,66 +801,70 @@ function LibraryView(props: {
   return (
     <section className="console-grid">
       <div className="library">
-        <div className="toolbar">
-          <label className="search">
-            <Icon name="search" />
-            <input
-              value={props.query}
-              onChange={(event) => props.onQueryChange(event.target.value)}
-              placeholder="Search skills, tags, descriptions"
-            />
-          </label>
-          <select
-            value={props.source}
-            onChange={(event) => props.onSourceChange(event.target.value)}
-          >
-            <option value="all">all enabled</option>
-            {props.sources.map((item) => (
-              <option key={item.name} value={item.name}>
-                {item.name}
-              </option>
-            ))}
-          </select>
+        <div className="library-controls">
+          <div className="toolbar">
+            <label className="search">
+              <Icon name="search" />
+              <input
+                value={props.query}
+                onChange={(event) => props.onQueryChange(event.target.value)}
+                placeholder="Search skills, tags, descriptions"
+              />
+            </label>
+            <select
+              value={props.source}
+              onChange={(event) => props.onSourceChange(event.target.value)}
+            >
+              <option value="all">all enabled</option>
+              {props.sources.map((item) => (
+                <option key={item.name} value={item.name}>
+                  {item.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <TagRow active={props.tag} tags={props.tags} onChange={props.onTagChange} />
         </div>
 
-        <TagRow active={props.tag} tags={props.tags} onChange={props.onTagChange} />
+        <div className="library-scroll">
+          {props.loading ? <EmptyState>Scanning source cache...</EmptyState> : null}
+          {!props.loading && props.skills.length === 0 ? (
+            <EmptyState>
+              {props.sources.length === 0
+                ? 'No enabled sources.'
+                : 'No matching skills.'}
+            </EmptyState>
+          ) : null}
 
-        {props.loading ? <EmptyState>Scanning source cache...</EmptyState> : null}
-        {!props.loading && props.skills.length === 0 ? (
-          <EmptyState>
-            {props.sources.length === 0
-              ? 'No enabled sources.'
-              : 'No matching skills.'}
-          </EmptyState>
-        ) : null}
-
-        <div className="skill-grid">
-          {props.skills.map((skill) => (
-            <button
-              className={`skill-card ${props.selected === skill.name ? 'selected' : ''}`}
-              key={`${skill.sourceName}:${skill.name}`}
-              onClick={() => props.onSelect(skill.name)}
-            >
-              <span className="skill-card-head">
-                <span className="skill-icon">
-                  <Icon name={skill.installed ? 'check' : 'database'} />
+          <div className="skill-grid">
+            {props.skills.map((skill) => (
+              <button
+                className={`skill-card ${props.selected === skill.name ? 'selected' : ''}`}
+                key={`${skill.sourceName}:${skill.name}`}
+                onClick={() => props.onSelect(skill.name)}
+              >
+                <span className="skill-card-head">
+                  <span className="skill-icon">
+                    <Icon name={skill.installed ? 'check' : 'database'} />
+                  </span>
+                  <em>
+                    {highlightText(
+                      skill.installed ? 'installed' : `v${skill.version ?? 'unknown'}`,
+                      props.query,
+                    )}
+                  </em>
                 </span>
-                <em>
-                  {highlightText(
-                    skill.installed ? 'installed' : `v${skill.version ?? 'unknown'}`,
-                    props.query,
-                  )}
-                </em>
-              </span>
-              <strong>{highlightText(skill.name, props.query)}</strong>
-              <span>{highlightText(skill.description || 'No description', props.query)}</span>
-              <span className="card-tags">
-                {skill.tags?.slice(0, 4).map((item) => (
-                  <i key={item}>{highlightText(item, props.query)}</i>
-                ))}
-              </span>
-            </button>
-          ))}
+                <strong>{highlightText(skill.name, props.query)}</strong>
+                <span>{highlightText(skill.description || 'No description', props.query)}</span>
+                <span className="card-tags">
+                  {skill.tags?.slice(0, 4).map((item) => (
+                    <i key={item}>{highlightText(item, props.query)}</i>
+                  ))}
+                </span>
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -820,22 +888,32 @@ function LibraryView(props: {
             </button>
           </div>
           <div className="install-options">
-            <select
-              value={props.installTarget}
-              onChange={(event) => props.onInstallTargetChange(event.target.value)}
-            >
+            <div className="target-checkboxes">
               {TARGETS.map((target) => (
-                <option key={target} value={target}>
-                  {target}
-                </option>
+                <label key={target} className="target-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={props.installTargets.includes(target)}
+                    onChange={(event) => {
+                      if (event.target.checked) {
+                        props.onInstallTargetsChange([...props.installTargets, target]);
+                      } else {
+                        props.onInstallTargetsChange(
+                          props.installTargets.filter((t) => t !== target),
+                        );
+                      }
+                    }}
+                  />
+                  <span>{target}</span>
+                </label>
               ))}
-            </select>
+            </div>
             <select
               value={props.installScope}
               onChange={(event) => props.onInstallScopeChange(event.target.value as LocationScope)}
             >
-              <option value="project">project</option>
               <option value="global">global</option>
+              <option value="project">project</option>
             </select>
             <select
               value={props.installStrategy}
@@ -893,7 +971,9 @@ function InstalledView(props: {
   installed: InstalledSkill[];
   loading: boolean;
   onConfirmRemove: (value: string | null) => void;
+  onCopyPackage: (item: InstalledSkill) => void;
   onExport: (item: InstalledSkill) => void;
+  onLinkTargets: (item: InstalledSkill, targets: string[]) => void;
   onQueryChange: (value: string) => void;
   onRemove: (item: InstalledSkill) => void;
   onScopeChange: (value: ScopeFilter) => void;
@@ -902,6 +982,43 @@ function InstalledView(props: {
   scope: ScopeFilter;
   target: string;
 }) {
+  const [linkTargetKey, setLinkTargetKey] = useState<string | null>(null);
+  const [linkSelections, setLinkSelections] = useState<Record<string, string[]>>({});
+
+  function linkOptionsFor(item: InstalledSkill): string[] {
+    return TARGETS.filter((target) => target !== item.target);
+  }
+
+  function defaultLinkTargets(item: InstalledSkill): string[] {
+    const preferred = ['cursor', 'codex'].filter((target) => target !== item.target);
+    return preferred.length > 0 ? preferred : linkOptionsFor(item).slice(0, 1);
+  }
+
+  function selectedLinkTargets(key: string, item: InstalledSkill): string[] {
+    return linkSelections[key] ?? defaultLinkTargets(item);
+  }
+
+  function toggleLinkTarget(key: string, item: InstalledSkill, target: string): void {
+    const selected = selectedLinkTargets(key, item);
+    const next = selected.includes(target)
+      ? selected.filter((entry) => entry !== target)
+      : [...selected, target];
+    setLinkSelections((current) => ({ ...current, [key]: next }));
+  }
+
+  function openLinkPicker(key: string, item: InstalledSkill): void {
+    if (linkTargetKey === key) {
+      setLinkTargetKey(null);
+      return;
+    }
+    setLinkTargetKey(key);
+    setLinkSelections((current) => ({
+      ...current,
+      [key]: current[key] ?? defaultLinkTargets(item),
+    }));
+    props.onConfirmRemove(null);
+  }
+
   return (
     <section className="installed-page">
       <div className="page-head">
@@ -947,6 +1064,9 @@ function InstalledView(props: {
           {props.installed.map((item) => {
             const key = `${item.scope}:${item.target}:${item.name}`;
             const confirming = props.confirmRemove === key;
+            const pickingTargets = linkTargetKey === key;
+            const linkOptions = linkOptionsFor(item);
+            const selectedTargets = selectedLinkTargets(key, item);
             return (
               <article key={key}>
                 <div className="installed-main">
@@ -960,18 +1080,61 @@ function InstalledView(props: {
                   <span>{highlightText(item.version ?? 'unknown', props.query)}</span>
                 </div>
                 <div className="installed-actions">
+                  <button className="icon-button" title="Copy zip to clipboard" onClick={() => props.onCopyPackage(item)}>
+                    <Icon name="copy" />
+                  </button>
+                  <button className="icon-button" title="Choose target agents" onClick={() => openLinkPicker(key, item)}>
+                    <Icon name="link" />
+                  </button>
                   <button className="icon-button" title="Export zip" onClick={() => props.onExport(item)}>
                     <Icon name="package" />
                   </button>
-                  <button className="icon-button danger" title="Remove" onClick={() => props.onConfirmRemove(confirming ? null : key)}>
+                  <button
+                    className="icon-button danger"
+                    title="Confirm remove"
+                    onClick={() => {
+                      setLinkTargetKey(null);
+                      props.onConfirmRemove(confirming ? null : key);
+                    }}
+                  >
                     <Icon name="trash" />
                   </button>
                 </div>
+                {pickingTargets ? (
+                  <div className="choice-strip">
+                    <span>Enable this skill in</span>
+                    <div className="choice-options">
+                      {linkOptions.map((target) => (
+                        <label key={target} className="target-checkbox">
+                          <input
+                            type="checkbox"
+                            checked={selectedTargets.includes(target)}
+                            onChange={() => toggleLinkTarget(key, item, target)}
+                          />
+                          <span>{target}</span>
+                        </label>
+                      ))}
+                    </div>
+                    <button
+                      className="button primary"
+                      disabled={selectedTargets.length === 0}
+                      onClick={() => {
+                        props.onLinkTargets(item, selectedTargets);
+                        setLinkTargetKey(null);
+                      }}
+                    >
+                      Apply
+                    </button>
+                    <button className="button" onClick={() => setLinkTargetKey(null)}>
+                      Cancel
+                    </button>
+                  </div>
+                ) : null}
                 {confirming ? (
                   <div className="confirm-strip">
-                    <span>{item.path}</span>
+                    <span>Delete {item.name} from {item.target} {item.scope}? {item.path}</span>
                     <button className="button danger" onClick={() => props.onRemove(item)}>
-                      Remove
+                      Delete
                     </button>
                     <button className="button" onClick={() => props.onConfirmRemove(null)}>
                       Cancel
@@ -993,6 +1156,7 @@ function SourcesView({
   onAdd,
   onDelete,
   onNameChange,
+  onRestore,
   onToggle,
   onUrlChange,
   sources,
@@ -1001,19 +1165,27 @@ function SourcesView({
   defaultSource: string;
   name: string;
   onAdd: () => void;
-  onDelete: (name: string) => void;
+  onDelete: (name: string) => Promise<void> | void;
   onNameChange: (value: string) => void;
+  onRestore: () => void;
   onToggle: (source: Source) => void;
   onUrlChange: (value: string) => void;
   sources: Source[];
   url: string;
 }) {
+  const [confirmDeleteSource, setConfirmDeleteSource] = useState<string | null>(
+    null,
+  );
   const enabledCount = sources.filter((source) => source.enabled).length;
 
   return (
     <section className="installed-page">
       <div className="page-head">
         <h1>Sources</h1>
+        <button className="button" onClick={onRestore}>
+          <Icon name="database" />
+          Add built-in sources
+        </button>
       </div>
       <div className="source-form">
         <label>
@@ -1039,13 +1211,31 @@ function SourcesView({
       <div className="source-list">
         {sources.map((source) => {
           const isLastEnabledSource = source.enabled && enabledCount <= 1;
+          const cannotDelete =
+            source.name === defaultSource ||
+            source.name === 'default' ||
+            isLastEnabledSource;
+          const deleteTitle =
+            source.name === defaultSource || source.name === 'default'
+              ? 'Default source cannot be removed'
+              : isLastEnabledSource
+                ? 'At least one source must stay enabled'
+                : undefined;
+          const confirming = confirmDeleteSource === source.name;
           return (
             <article key={source.name}>
               <div className="source-main">
                 <strong>
-                  {source.name}
-                  {source.name === defaultSource ? <i>default</i> : null}
+                  <span>{source.name}</span>
+                  <span className="source-tags">
+                    {source.name === defaultSource ? <i>default</i> : null}
+                    <i>{source.builtin ? 'builtin' : 'custom'}</i>
+                    <i>{source.category}</i>
+                  </span>
                 </strong>
+                <span className="source-description">
+                  {source.description}
+                </span>
                 <code>{source.url}</code>
               </div>
               <span className={source.enabled ? 'source-status on' : 'source-status'}>
@@ -1066,21 +1256,38 @@ function SourcesView({
                 </button>
                 <button
                   className="button danger"
-                  disabled={
-                    source.name === defaultSource ||
-                    source.name === 'default' ||
-                    isLastEnabledSource
+                  disabled={cannotDelete}
+                  onClick={() =>
+                    setConfirmDeleteSource(confirming ? null : source.name)
                   }
-                  onClick={() => onDelete(source.name)}
-                  title={
-                    isLastEnabledSource
-                      ? 'At least one source must stay enabled'
-                      : undefined
-                  }
+                  title={deleteTitle}
                 >
                   Delete
                 </button>
               </div>
+              {confirming ? (
+                <div className="confirm-strip source-confirm-strip">
+                  <span>
+                    Delete source "{source.name}"? Installed skills are not
+                    removed. {source.description}
+                  </span>
+                  <button
+                    className="button danger"
+                    onClick={async () => {
+                      await onDelete(source.name);
+                      setConfirmDeleteSource(null);
+                    }}
+                  >
+                    Delete
+                  </button>
+                  <button
+                    className="button"
+                    onClick={() => setConfirmDeleteSource(null)}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : null}
             </article>
           );
         })}

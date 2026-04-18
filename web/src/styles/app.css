@@ -39,15 +39,18 @@ button {
 .app-shell {
   display: grid;
   grid-template-columns: 224px minmax(0, 1fr);
+  grid-template-rows: 60px minmax(0, 1fr);
   min-height: 100vh;
 }
 
 .rail {
   position: sticky;
-  top: 0;
+  top: 60px;
+  grid-column: 1;
+  grid-row: 2;
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  height: calc(100vh - 60px);
   background: var(--surface-low);
   border-right: 1px solid var(--outline-soft);
 }
@@ -85,7 +88,7 @@ button {
 .nav {
   display: grid;
   gap: 4px;
-  padding: 20px 10px;
+  padding: 22px 10px 20px;
 }
 
 .nav button {
@@ -147,6 +150,8 @@ button {
 }
 
 .workspace {
+  grid-column: 2;
+  grid-row: 2;
   min-width: 0;
   background: var(--surface);
 }
@@ -154,15 +159,31 @@ button {
 .topbar {
   position: sticky;
   top: 0;
+  grid-column: 1 / -1;
+  grid-row: 1;
   z-index: 10;
-  display: flex;
+  display: grid;
+  grid-template-columns: 224px minmax(0, 1fr);
   align-items: center;
-  justify-content: space-between;
   height: 60px;
-  padding: 0 28px;
+  padding: 0;
   background: color-mix(in srgb, var(--surface-low) 92%, transparent);
   border-bottom: 1px solid var(--outline-soft);
   backdrop-filter: blur(14px);
+}
+
+.topbar .brand {
+  min-width: 0;
+  height: 60px;
+}
+
+.topbar-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-width: 0;
+  height: 100%;
+  padding: 0 28px;
 }
 
 .crumb {
@@ -207,9 +228,18 @@ button {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(360px, 420px);
   gap: 28px;
+  height: calc(100vh - 60px);
   width: min(1480px, 100%);
   margin: 0 auto;
   padding: 28px;
+  overflow: hidden;
+}
+
+.library {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
 }
 
 .toolbar {
@@ -218,6 +248,20 @@ button {
   gap: 12px;
   align-items: center;
   margin-bottom: 16px;
+}
+
+.library-controls {
+  flex-shrink: 0;
+  margin-bottom: 18px;
+  background: var(--surface);
+}
+
+.library-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 4px;
+  padding-bottom: 36px;
 }
 
 .search {
@@ -304,6 +348,10 @@ button {
   flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 18px;
+}
+
+.library-controls .tag-row {
+  margin-bottom: 0;
 }
 
 .tag-row button {
@@ -464,7 +512,7 @@ button {
 .action-row,
 .install-options {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr);
   gap: 10px;
   margin-bottom: 10px;
 }
@@ -477,6 +525,36 @@ button {
   background: var(--surface-lowest);
   color: var(--text);
   padding: 0 10px;
+}
+
+.target-checkboxes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.target-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border: 1px solid var(--outline-soft);
+  border-radius: var(--radius);
+  background: var(--surface-lowest);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.target-checkbox input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--primary);
+}
+
+.target-checkbox:hover {
+  border-color: var(--primary);
 }
 
 .meta-table {
@@ -557,6 +635,13 @@ button {
 }
 
 .state.error {
+  min-height: auto;
+  width: min(1480px, calc(100% - 56px));
+  margin: 18px auto 0;
+  padding: 12px 14px;
+  place-items: start;
+  border: 1px solid color-mix(in srgb, var(--error) 38%, transparent);
+  background: color-mix(in srgb, var(--error) 8%, var(--surface-low));
   color: var(--error);
 }
 
@@ -663,13 +748,39 @@ button {
   background: color-mix(in srgb, var(--error) 8%, var(--surface-lowest));
 }
 
-.confirm-strip span {
+.choice-strip {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px;
+  border: 1px solid color-mix(in srgb, var(--primary) 28%, transparent);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--primary) 8%, var(--surface-lowest));
+}
+
+.choice-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.confirm-strip span,
+.choice-strip > span {
   overflow-wrap: anywhere;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 12px;
 }
 
 .source-list {
+  flex: 1;
   display: grid;
   gap: 10px;
+  min-height: 0;
+  overflow-y: auto;
+  padding-bottom: 36px;
 }
 
 .source-form {
@@ -726,7 +837,19 @@ button {
 .source-main strong {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+}
+
+.source-main strong > span:first-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.source-tags {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
 .source-main i {
@@ -739,10 +862,17 @@ button {
   font-style: normal;
 }
 
+.source-description {
+  color: var(--muted);
+  line-height: 1.45;
+}
+
 .source-list code {
   min-width: 0;
   overflow-wrap: anywhere;
   color: var(--muted);
+  font-family: var(--mono);
+  font-size: 12px;
 }
 
 .source-status {
@@ -759,6 +889,10 @@ button {
   display: flex;
   gap: 8px;
   justify-content: end;
+}
+
+.source-confirm-strip {
+  margin-top: 2px;
 }
 
 .tag-cloud {
@@ -813,19 +947,33 @@ button {
 @media (max-width: 760px) {
   .app-shell {
     grid-template-columns: 1fr;
+    grid-template-rows: auto auto minmax(0, 1fr);
+  }
+
+  .topbar {
+    position: sticky;
+    grid-template-columns: 1fr;
+    height: auto;
+  }
+
+  .topbar .brand {
+    height: 60px;
+  }
+
+  .topbar-main {
+    height: 56px;
+    padding: 0 16px;
   }
 
   .rail {
     position: static;
+    grid-column: 1;
+    grid-row: 2;
     height: auto;
   }
 
-  .brand {
-    height: 60px;
-  }
-
   .nav {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     padding: 0 12px 12px;
   }
 
@@ -838,13 +986,21 @@ button {
     display: none;
   }
 
-  .topbar {
-    height: 56px;
-    padding: 0 16px;
+  .workspace {
+    grid-column: 1;
+    grid-row: 3;
   }
 
   .console-grid {
+    height: auto;
+    overflow: visible;
     padding: 18px 14px 28px;
+  }
+
+  .library,
+  .library-scroll {
+    height: auto;
+    overflow: visible;
   }
 
   .toolbar,
@@ -855,8 +1011,14 @@ button {
   .installed-toolbar,
   .source-form,
   .source-list article,
-  .confirm-strip {
+  .confirm-strip,
+  .choice-strip {
     grid-template-columns: 1fr;
+  }
+
+  .state.error {
+    width: calc(100% - 28px);
+    margin-top: 14px;
   }
 
   .skill-card.wide {

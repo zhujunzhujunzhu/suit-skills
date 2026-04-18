@@ -5,14 +5,17 @@ import { fileURLToPath } from 'node:url';
 import type { CliContext } from '../../cli/context.js';
 import {
   addWebSource,
+  copyWebInstalledSkillPackage,
   exportWebInstalledSkill,
   getWebSkillDetail,
   installWebSkill,
+  linkWebInstalledSkillToTargets,
   listWebInstalledSkills,
   listWebSkills,
   listWebSources,
   removeWebSource,
   removeWebInstalledSkill,
+  restoreWebBuiltinSources,
   toApiErrorPayload,
   updateWebSource,
   WebApiError,
@@ -115,6 +118,14 @@ async function handleApi(
       return;
     }
 
+    if (
+      req.method === 'POST' &&
+      url.pathname === '/api/sources/restore-builtins'
+    ) {
+      sendJson(res, 200, restoreWebBuiltinSources(ctx));
+      return;
+    }
+
     const sourceName = routeParam(url.pathname, '/api/sources/');
     if (sourceName && req.method === 'DELETE') {
       sendJson(res, 200, removeWebSource(ctx, sourceName));
@@ -202,6 +213,24 @@ async function handleApi(
         'cache-control': 'no-store',
       });
       res.end(zip.body);
+      return;
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/installed/copy-package') {
+      sendJson(
+        res,
+        200,
+        copyWebInstalledSkillPackage(ctx, (await readJsonBody(req)) as never),
+      );
+      return;
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/installed/link-targets') {
+      sendJson(
+        res,
+        200,
+        linkWebInstalledSkillToTargets(ctx, (await readJsonBody(req)) as never),
+      );
       return;
     }
 

@@ -168,9 +168,9 @@ describe('阶段 9 CLI', () => {
       });
       const prog = createProgramForTest(ctx());
       await runCliUserArgs(prog, ['list']);
-      expect(lines).toContain('code-review');
-      expect(lines).toContain('commit-helper');
-      expect(lines).toContain('react-helper');
+      expect(lines.some((line) => line.startsWith('code-review'))).toBe(true);
+      expect(lines.some((line) => line.startsWith('commit-helper'))).toBe(true);
+      expect(lines.some((line) => line.startsWith('react-helper'))).toBe(true);
     });
 
     it('--tag review 只输出含该标签的 skill', async () => {
@@ -180,8 +180,8 @@ describe('阶段 9 CLI', () => {
       });
       const prog = createProgramForTest(ctx());
       await runCliUserArgs(prog, ['list', '--tag', 'review']);
-      expect(lines).toContain('code-review');
-      expect(lines).not.toContain('react-helper');
+      expect(lines.some((line) => line.startsWith('code-review'))).toBe(true);
+      expect(lines.some((line) => line.startsWith('react-helper'))).toBe(false);
     });
 
     it('--source all 聚合启用源', async () => {
@@ -191,8 +191,19 @@ describe('阶段 9 CLI', () => {
       });
       const prog = createProgramForTest(ctx());
       await runCliUserArgs(prog, ['list', '--source', 'all']);
-      expect(lines).toContain('extra-skill');
-      expect(lines).toContain('code-review');
+      expect(lines.some((line) => line.startsWith('extra-skill'))).toBe(true);
+      expect(lines.some((line) => line.startsWith('code-review'))).toBe(true);
+    });
+
+    it('--query react filters matching skills', async () => {
+      const lines: string[] = [];
+      vi.mocked(console.log).mockImplementation((msg: unknown) => {
+        lines.push(String(msg));
+      });
+      const prog = createProgramForTest(ctx());
+      await runCliUserArgs(prog, ['list', '--query', 'react']);
+      expect(lines.some((line) => line.startsWith('react-helper'))).toBe(true);
+      expect(lines.some((line) => line.startsWith('code-review'))).toBe(false);
     });
 
     it('--source 不存在 → Source not found', async () => {
@@ -211,6 +222,16 @@ describe('阶段 9 CLI', () => {
       });
       const prog = createProgramForTest(ctx());
       await runCliUserArgs(prog, ['search', 'react']);
+      expect(lines).toContain('react-helper');
+    });
+
+    it('search --query react returns react-helper', async () => {
+      const lines: string[] = [];
+      vi.mocked(console.log).mockImplementation((msg: unknown) => {
+        lines.push(String(msg));
+      });
+      const prog = createProgramForTest(ctx());
+      await runCliUserArgs(prog, ['search', '--query', 'react']);
       expect(lines).toContain('react-helper');
     });
 

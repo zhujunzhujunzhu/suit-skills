@@ -1,4 +1,5 @@
-import { existsSync, readdirSync } from 'node:fs';
+import { existsSync, readdirSync, statSync } from 'node:fs';
+import { join } from 'node:path';
 import type { Config } from '../types/index.js';
 
 export interface ResolveTargetOptions {
@@ -45,7 +46,19 @@ export function getInstalledSkills(targetDir: string): string[] {
     return [];
   }
   return readdirSync(targetDir, { withFileTypes: true })
-    .filter((e) => e.isDirectory())
+    .filter((e) => {
+      if (e.isDirectory()) {
+        return true;
+      }
+      if (!e.isSymbolicLink()) {
+        return false;
+      }
+      try {
+        return statSync(join(targetDir, e.name)).isDirectory();
+      } catch {
+        return false;
+      }
+    })
     .map((e) => e.name)
     .sort();
 }

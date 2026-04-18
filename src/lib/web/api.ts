@@ -1,9 +1,14 @@
 import {
   existsSync,
+  mkdirSync,
   readdirSync,
   rmSync,
   statSync,
+  writeFileSync,
+  realpathSync,
 } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import type { CliContext } from '../../cli/context.js';
 import {
@@ -14,10 +19,16 @@ import {
 import { toAbsoluteInstallRoot } from '../../cli/paths.js';
 import { getInstalledSkills } from '../agents.js';
 import {
+  getBuiltinSourceInfo,
+  restoreBuiltinSources,
+  type BuiltinSourceCategory,
+} from '../config.js';
+import {
   parseInstallTargetsCsv,
   resolveDisplayPathForToken,
   SKILLS_TARGET_TOKEN,
 } from '../install-targets.js';
+import { createSymlink } from '../../utils/fs.js';
 import {
   type ConflictResolution,
   installSkillWithConflict,
@@ -90,10 +101,33 @@ export interface WebExportRequest {
   scope?: 'project' | 'global';
 }
 
+export interface WebCopyPackageResult {
+  status: 'copied';
+  fileName: string;
+  path: string;
+}
+
 export interface WebExportResult {
   fileName: string;
   contentType: string;
   body: Buffer;
+}
+
+export interface WebLinkTargetsRequest {
+  name: string;
+  target: string;
+  scope?: 'project' | 'global';
+  targets: string[];
+}
+
+export interface WebLinkTargetsResult {
+  results: {
+    target: string;
+    scope: 'project' | 'global';
+    status: 'linked' | 'skipped';
+    path: string;
+    message?: string;
+  }[];
 }
 
 export interface WebAddSourceRequest {
@@ -103,6 +137,18 @@ export interface WebAddSourceRequest {
 
 export interface WebUpdateSourceRequest {
   enabled?: boolean;
+}
+
+export interface WebSource extends Source {
+  builtin: boolean;
+  label: string;
+  category: BuiltinSourceCategory | 'custom';
+  description: string;
+}
+
+export interface WebSourcesResponse {
+  defaultSource: string;
+  sources: WebSource[];
 }
 
 interface SkillSourceRow {
@@ -545,15 +591,36 @@ export function listWebInstalledSkills(
   return { items };
 }
 
-export function listWebSources(ctx: CliContext): Pick<
-  Config,
-  'defaultSource' | 'sources'
-> {
-  const config = ctx.loadConfig();
+function decorateWebSource(source: Source): WebSource {
+  const builtin = getBuiltinSourceInfo(source);
+  if (!builtin) {
+    return {
+      ...source,
+      builtin: false,
+      label: source.name,
+      category: 'custom',
+      description: 'User-defined skill source.',
+    };
+  }
+  return {
+    ...source,
+    builtin: true,
+    label: builtin.label,
+    category: builtin.category,
+    description: builtin.description,
+  };
+}
+
+function sourcesResponse(config: Config): WebSourcesResponse {
   return {
     defaultSource: config.defaultSource,
-    sources: config.sources,
+    sources: config.sources.map(decorateWebSource),
   };
+}
+
+export function listWebSources(ctx: CliContext): WebSourcesResponse {
+  const config = ctx.loadConfig();
+  return sourcesResponse(config);
 }
 
 function normalizeSourceName(name: unknown): string {
@@ -588,7 +655,7 @@ function normalizeSourceUrl(url: unknown): string {
 export function addWebSource(
   ctx: CliContext,
   request: WebAddSourceRequest,
-): { source: Source; defaultSource: string; sources: Source[] } {
+): WebSourcesResponse & { source: WebSource } {
   const config = ctx.loadConfig();
   const name = normalizeSourceName(request.name);
   const url = normalizeSourceUrl(request.url);
@@ -602,17 +669,26 @@ export function addWebSource(
   config.sources.push(source);
   ctx.saveConfig(config);
   getRowsCacheForContext(ctx).clear();
+  return { ...sourcesResponse(config), source: decorateWebSource(source) };
+}
+
+export function restoreWebBuiltinSources(
+  ctx: CliContext,
+): WebSourcesResponse & { added: string[] } {
+  const config = ctx.loadConfig();
+  const added = restoreBuiltinSources(config);
+  ctx.saveConfig(config);
+  getRowsCacheForContext(ctx).clear();
   return {
-    source,
-    defaultSource: config.defaultSource,
-    sources: config.sources,
+    added,
+    ...sourcesResponse(config),
   };
 }
 
 export function removeWebSource(
   ctx: CliContext,
   name: string,
-): { removed: string; defaultSource: string; sources: Source[] } {
+): WebSourcesResponse & { removed: string } {
   const config = ctx.loadConfig();
   const sourceName = normalizeSourceName(name);
   if (sourceName === 'default' || config.defaultSource === sourceName) {
@@ -638,18 +714,14 @@ export function removeWebSource(
   config.sources.splice(index, 1);
   ctx.saveConfig(config);
   getRowsCacheForContext(ctx).clear();
-  return {
-    removed: sourceName,
-    defaultSource: config.defaultSource,
-    sources: config.sources,
-  };
+  return { ...sourcesResponse(config), removed: sourceName };
 }
 
 export function updateWebSource(
   ctx: CliContext,
   name: string,
   request: WebUpdateSourceRequest,
-): { source: Source; defaultSource: string; sources: Source[] } {
+): WebSourcesResponse & { source: WebSource } {
   const config = ctx.loadConfig();
   const sourceName = normalizeSourceName(name);
   const source = findSourceByName(config, sourceName);
@@ -669,11 +741,7 @@ export function updateWebSource(
   }
   ctx.saveConfig(config);
   getRowsCacheForContext(ctx).clear();
-  return {
-    source,
-    defaultSource: config.defaultSource,
-    sources: config.sources,
-  };
+  return { ...sourcesResponse(config), source: decorateWebSource(source) };
 }
 
 export function generateNpxInstallCommand(options: {
@@ -726,7 +794,7 @@ export function installWebSkill(
   }
   const targets = request.targets?.length
     ? request.targets.map((target) => assertValidTarget(config, target))
-    : parseInstallTargetsCsv(SKILLS_TARGET_TOKEN, config);
+    : parseInstallTargetsCsv('agents', config);
   const strategy = request.strategy ?? 'skip';
   if (!['overwrite', 'skip', 'rename'].includes(strategy)) {
     throw new WebApiError(
@@ -737,23 +805,38 @@ export function installWebSkill(
   }
 
   const refresh = ctx.refreshForSource(source.url);
-  const scope = request.global ? 'global' : 'project';
+  const isGlobal = request.global === true;
+  const scope = isGlobal ? 'global' : 'project';
   const results: WebInstallResult[] = [];
-  for (const target of targets) {
-    const root = getTargetRoot(ctx, config, target, request.global === true);
+
+  // 全局安装时：先安装到中央存储 ~/.agents/skills，再创建软链接
+  if (isGlobal) {
+    // 1. 安装到中央存储
+    const centralRoot = getTargetRoot(ctx, config, 'agents', true);
+    let centralResult: { path?: string; skipped?: boolean; message?: string };
     try {
-      const result = installSkillWithConflict(
+      centralResult = installSkillWithConflict(
         refresh.path,
-        root,
+        centralRoot,
         identifier,
         strategy,
       );
+      if (centralResult.skipped) {
+        results.push({
+          target: 'agents',
+          scope,
+          status: 'skipped',
+          path: centralResult.path,
+          message: centralResult.message,
+        });
+        return { results };
+      }
       results.push({
-        target,
+        target: 'agents',
         scope,
-        status: result.skipped ? 'skipped' : 'installed',
-        path: result.path,
-        message: result.message,
+        status: 'installed',
+        path: centralResult.path,
+        message: centralResult.message,
       });
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
@@ -761,6 +844,64 @@ export function installWebSkill(
         throw new WebApiError('SKILL_NOT_FOUND', message, 404);
       }
       throw new WebApiError('INSTALL_FAILED', message, 500);
+    }
+
+    // 2. 为每个目标平台创建软链接
+    const centralSkillPath = centralResult.path;
+    if (!centralSkillPath) {
+      return { results };
+    }
+    for (const target of targets) {
+      if (target === 'agents') {
+        continue; // 中央存储已处理
+      }
+      const targetRoot = getTargetRoot(ctx, config, target, true);
+      const skillName = parsed.name;
+      const linkPath = join(targetRoot, skillName);
+      try {
+        createSymlink(centralSkillPath, linkPath);
+        results.push({
+          target,
+          scope,
+          status: 'installed',
+          path: linkPath,
+          message: `Linked to ${centralSkillPath}`,
+        });
+      } catch (e) {
+        results.push({
+          target,
+          scope,
+          status: 'skipped',
+          path: linkPath,
+          message: `Failed to create symlink: ${e instanceof Error ? e.message : String(e)}`,
+        });
+      }
+    }
+  } else {
+    // 项目级安装：直接安装到各目标目录
+    for (const target of targets) {
+      const root = getTargetRoot(ctx, config, target, false);
+      try {
+        const result = installSkillWithConflict(
+          refresh.path,
+          root,
+          identifier,
+          strategy,
+        );
+        results.push({
+          target,
+          scope,
+          status: result.skipped ? 'skipped' : 'installed',
+          path: result.path,
+          message: result.message,
+        });
+      } catch (e) {
+        const message = e instanceof Error ? e.message : String(e);
+        if (message.includes('Skill not found')) {
+          throw new WebApiError('SKILL_NOT_FOUND', message, 404);
+        }
+        throw new WebApiError('INSTALL_FAILED', message, 500);
+      }
     }
   }
   return { results };
@@ -840,6 +981,139 @@ export function exportWebInstalledSkill(
     const message = e instanceof Error ? e.message : String(e);
     throw new WebApiError('EXPORT_FAILED', message, 500);
   }
+}
+
+function copyFileToClipboard(filePath: string): void {
+  if (process.platform !== 'win32') {
+    throw new WebApiError(
+      'CLIPBOARD_UNSUPPORTED',
+      'Copying a file to the clipboard is currently supported on Windows only',
+      501,
+    );
+  }
+  const script = [
+    'Add-Type -AssemblyName System.Windows.Forms',
+    '$files = New-Object System.Collections.Specialized.StringCollection',
+    '[void]$files.Add($env:SUIT_SKILLS_CLIPBOARD_FILE)',
+    '$data = New-Object System.Windows.Forms.DataObject',
+    '$data.SetFileDropList($files)',
+    '[System.Windows.Forms.Clipboard]::SetDataObject($data, $true)',
+  ].join('; ');
+  execFileSync(
+    'powershell.exe',
+    ['-NoProfile', '-STA', '-ExecutionPolicy', 'Bypass', '-Command', script],
+    {
+      env: {
+        ...process.env,
+        SUIT_SKILLS_CLIPBOARD_FILE: filePath,
+      },
+      windowsHide: true,
+    },
+  );
+}
+
+export function copyWebInstalledSkillPackage(
+  ctx: CliContext,
+  request: WebExportRequest,
+): WebCopyPackageResult {
+  const zip = exportWebInstalledSkill(ctx, request);
+  const dir = join(tmpdir(), 'suit-skills-share');
+  mkdirSync(dir, { recursive: true });
+  const filePath = join(dir, `${Date.now()}-${zip.fileName}`);
+  writeFileSync(filePath, zip.body);
+  try {
+    copyFileToClipboard(filePath);
+  } catch (e) {
+    if (e instanceof WebApiError) {
+      throw e;
+    }
+    const message = e instanceof Error ? e.message : String(e);
+    throw new WebApiError('COPY_PACKAGE_FAILED', message, 500, {
+      path: filePath,
+    });
+  }
+  return {
+    status: 'copied',
+    fileName: zip.fileName,
+    path: filePath,
+  };
+}
+
+export function linkWebInstalledSkillToTargets(
+  ctx: CliContext,
+  request: WebLinkTargetsRequest,
+): WebLinkTargetsResult {
+  if (!validateSkillName(request.name)) {
+    throw new WebApiError('INVALID_SKILL_NAME', 'Invalid skill name', 400);
+  }
+  const config = ctx.loadConfig();
+  const scope = assertValidScope(request.scope);
+  const sourceTarget = assertValidTarget(config, request.target);
+  const { root, skillPath } = getInstalledSkillPath(
+    ctx,
+    config,
+    request.name,
+    sourceTarget,
+    scope,
+  );
+  if (!existsSync(skillPath) || !statSync(skillPath).isDirectory()) {
+    throw new WebApiError('SKILL_NOT_FOUND', 'Skill not installed', 404);
+  }
+  assertInstalledSkillPathAllowed(root, skillPath);
+
+  const targetPath = realpathSync.native(skillPath);
+  const seen = new Set<string>();
+  const results: WebLinkTargetsResult['results'] = [];
+  for (const rawTarget of request.targets ?? []) {
+    const target = assertValidTarget(config, rawTarget);
+    if (seen.has(target)) {
+      continue;
+    }
+    seen.add(target);
+
+    const targetRoot = getTargetRoot(ctx, config, target, scope === 'global');
+    const linkPath = join(targetRoot, request.name);
+    assertInstalledSkillPathAllowed(targetRoot, linkPath);
+    if (resolve(linkPath) === resolve(skillPath)) {
+      results.push({
+        target,
+        scope,
+        status: 'skipped',
+        path: linkPath,
+        message: 'Source target already has this skill',
+      });
+      continue;
+    }
+    if (existsSync(linkPath) && statSync(linkPath).isDirectory()) {
+      results.push({
+        target,
+        scope,
+        status: 'skipped',
+        path: linkPath,
+        message: 'Target already has this skill',
+      });
+      continue;
+    }
+    try {
+      createSymlink(targetPath, linkPath);
+      results.push({
+        target,
+        scope,
+        status: 'linked',
+        path: linkPath,
+        message: `Linked to ${targetPath}`,
+      });
+    } catch (e) {
+      results.push({
+        target,
+        scope,
+        status: 'skipped',
+        path: linkPath,
+        message: e instanceof Error ? e.message : String(e),
+      });
+    }
+  }
+  return { results };
 }
 
 export function toApiErrorPayload(error: unknown): {

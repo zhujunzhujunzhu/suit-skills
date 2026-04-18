@@ -4,6 +4,7 @@ import {
   rmSync,
   mkdirSync,
   existsSync,
+  symlinkSync,
 } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -62,6 +63,18 @@ describe('getInstalledSkills', () => {
       'code-review',
       'commit-helper',
     ]);
+  });
+
+  it('includes symlinked skill directories', () => {
+    const root = join(tempBase, 'skills-root');
+    const realSkill = join(tempBase, 'store', 'linked-skill');
+    const linkedSkill = join(root, 'linked-skill');
+    mkdirSync(realSkill, { recursive: true });
+    mkdirSync(root, { recursive: true });
+
+    symlinkSync(realSkill, linkedSkill, 'junction');
+
+    expect(getInstalledSkills(root)).toEqual(['linked-skill']);
   });
 
   it('目录不存在 → 空数组', () => {

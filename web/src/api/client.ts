@@ -1,9 +1,20 @@
 export type MetadataSource = 'skill-md' | 'meta-json-fallback' | 'unknown';
+export type SourceCategory =
+  | 'official'
+  | 'engineering'
+  | 'collection'
+  | 'cn'
+  | 'specialized'
+  | 'custom';
 
 export interface Source {
   name: string;
   url: string;
   enabled: boolean;
+  builtin: boolean;
+  label: string;
+  category: SourceCategory;
+  description: string;
 }
 
 export interface SkillSummary {
@@ -135,6 +146,15 @@ export function updateSource(
   );
 }
 
+export function restoreBuiltinSources(): Promise<
+  SourcesResponse & { added: string[] }
+> {
+  return request<SourcesResponse & { added: string[] }>(
+    '/api/sources/restore-builtins',
+    { method: 'POST' },
+  );
+}
+
 export function removeSource(
   name: string,
 ): Promise<SourcesResponse & { removed: string }> {
@@ -197,6 +217,40 @@ export function removeInstalledSkill(
 }> {
   return request(`/api/installed/${encodeURIComponent(name)}`, {
     method: 'DELETE',
+    body: JSON.stringify(requestBody),
+  });
+}
+
+export function copyInstalledSkillPackage(requestBody: {
+  name: string;
+  target: string;
+  scope: 'project' | 'global';
+}): Promise<{ status: 'copied'; fileName: string; path: string }> {
+  return request<{ status: 'copied'; fileName: string; path: string }>(
+    '/api/installed/copy-package',
+    {
+      method: 'POST',
+      body: JSON.stringify(requestBody),
+    },
+  );
+}
+
+export function linkInstalledSkillTargets(requestBody: {
+  name: string;
+  target: string;
+  scope: 'project' | 'global';
+  targets: string[];
+}): Promise<{
+  results: {
+    target: string;
+    scope: 'project' | 'global';
+    status: 'linked' | 'skipped';
+    path: string;
+    message?: string;
+  }[];
+}> {
+  return request('/api/installed/link-targets', {
+    method: 'POST',
     body: JSON.stringify(requestBody),
   });
 }

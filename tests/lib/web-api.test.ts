@@ -1,5 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createCliContext } from '../../src/cli/context.js';
@@ -11,11 +18,13 @@ import {
   getWebSkillDetail,
   generateNpxInstallCommand,
   installWebSkill,
+  linkWebInstalledSkillToTargets,
   listWebInstalledSkills,
   listWebSkills,
   listWebSources,
   removeWebInstalledSkill,
   removeWebSource,
+  restoreWebBuiltinSources,
   updateWebSource,
 } from '../../src/lib/web/api.js';
 
@@ -126,6 +135,53 @@ describe('web api', () => {
     const result = listWebSources(ctx());
     expect(result.defaultSource).toBe('default');
     expect(result.sources[0]?.name).toBe('default');
+    expect(result.sources[0]).toMatchObject({
+      builtin: true,
+      category: 'cn',
+    });
+  });
+
+  it('restores missing built-in sources without touching custom sources', () => {
+    const config = getDefaultConfig();
+    config.sources = [
+      config.sources[0]!,
+      {
+        name: 'team',
+        url: 'https://github.com/acme/team-skills.git',
+        enabled: true,
+      },
+    ];
+    config.defaultSource = 'team';
+    writeFileSync(
+      join(suitHome, 'config.json'),
+      `${JSON.stringify(config, null, 2)}\n`,
+    );
+
+    const result = restoreWebBuiltinSources(ctx());
+    expect(result.added).toContain('anthropics-skills');
+    expect(result.defaultSource).toBe('team');
+    expect(result.sources).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: 'team',
+          builtin: false,
+          category: 'custom',
+          enabled: true,
+        }),
+        expect.objectContaining({
+          name: 'anthropics-skills',
+          builtin: true,
+          category: 'official',
+          enabled: false,
+        }),
+      ]),
+    );
+
+    const disk = JSON.parse(readFileSync(join(suitHome, 'config.json'), 'utf8'));
+    expect(disk.defaultSource).toBe('team');
+    expect(
+      disk.sources.find((source: { name: string }) => source.name === 'team'),
+    ).toMatchObject({ enabled: true });
   });
 
   it('adds, disables, enables, and removes custom sources', () => {
@@ -381,5 +437,30 @@ describe('web api', () => {
     expect(result.body.subarray(0, 4).toString('hex')).toBe('504b0304');
     expect(result.body.includes(Buffer.from('zip-helper/SKILL.md'))).toBe(true);
     expect(result.body.includes(Buffer.from('zip-helper/notes.txt'))).toBe(true);
+  });
+
+  it('links an installed skill to cursor and codex targets', () => {
+    writeStandardSkill(join(userHome, '.claude', 'skills'), 'shared-helper', {
+      version: '1.2.0',
+      description: 'Shared helper',
+    });
+
+    const result = linkWebInstalledSkillToTargets(ctx(), {
+      name: 'shared-helper',
+      target: 'claude',
+      scope: 'global',
+      targets: ['cursor', 'codex'],
+    });
+
+    expect(result.results.map((item) => item.status)).toEqual([
+      'linked',
+      'linked',
+    ]);
+    expect(
+      existsSync(join(userHome, '.cursor', 'skills', 'shared-helper', 'SKILL.md')),
+    ).toBe(true);
+    expect(
+      existsSync(join(userHome, '.codex', 'skills', 'shared-helper', 'SKILL.md')),
+    ).toBe(true);
   });
 });
