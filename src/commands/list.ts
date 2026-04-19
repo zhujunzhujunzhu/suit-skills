@@ -10,6 +10,7 @@ interface ListOptions {
   query?: string;
   tag?: string;
   source?: string;
+  refresh?: boolean;
   json?: boolean;
 }
 
@@ -24,11 +25,14 @@ export function registerList(program: Command, ctx: CliContext): void {
       '--source <name>',
       'source name, or "all" for all enabled sources',
     )
+    .option('--refresh', 'force refresh source cache')
     .option('--json', 'output as JSON')
     .action((opts: ListOptions) => {
       const config = ctx.loadConfig();
       const sourceFilter = opts.source ?? config.defaultSource;
-      let rows = collectMetasFromSources(ctx, config, sourceFilter);
+      let rows = collectMetasFromSources(ctx, config, sourceFilter, {
+        forceRefresh: opts.refresh === true,
+      });
       if (opts.query?.trim()) {
         const found = new Set(
           searchSkills(

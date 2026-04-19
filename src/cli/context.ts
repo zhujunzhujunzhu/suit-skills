@@ -1,6 +1,7 @@
 import { homedir } from 'node:os';
 import type { Config, Source } from '../types/index.js';
 import {
+  getSourceRefreshMaxAgeMs,
   loadConfig,
   saveConfig,
   type ConfigLocationOptions,
@@ -28,6 +29,7 @@ export interface CliContext {
   saveConfig(cfg: Config): void;
   refreshForSource(
     sourceOrUrl: string | Source,
+    options?: { force?: boolean },
   ): ReturnType<typeof refreshCache>;
 }
 
@@ -41,8 +43,14 @@ export function createDefaultCliContext(): CliContext {
     configOptions,
     loadConfig: () => loadConfig(configOptions),
     saveConfig: (cfg) => saveConfig(cfg, configOptions),
-    refreshForSource: (sourceOrUrl: string | Source) =>
-      refreshCache(sourceOrUrl, { ...configOptions }),
+    refreshForSource: (sourceOrUrl: string | Source, options) => {
+      const cfg = loadConfig(configOptions);
+      return refreshCache(sourceOrUrl, {
+        ...configOptions,
+        force: options?.force,
+        maxAgeMs: getSourceRefreshMaxAgeMs(cfg),
+      });
+    },
   };
 }
 
@@ -58,6 +66,7 @@ export function createCliContext(
 ): CliContext {
   const configOptions = opts.configOptions ?? {};
   const refreshExtra = opts.refreshExtra;
+  const injectedRefresh = refreshExtra?.cloneOrPullRepo !== undefined;
   return {
     cwd: opts.cwd,
     userHome: opts.userHome,
@@ -66,10 +75,16 @@ export function createCliContext(
     pickInstallTargetsWhenEmpty: opts.pickInstallTargetsWhenEmpty,
     loadConfig: () => loadConfig(configOptions),
     saveConfig: (cfg) => saveConfig(cfg, configOptions),
-    refreshForSource: (sourceOrUrl: string | Source) =>
+    refreshForSource: (sourceOrUrl: string | Source, options) =>
       refreshCache(sourceOrUrl, {
         ...configOptions,
         ...(refreshExtra ?? {}),
+        force: options?.force,
+        maxAgeMs:
+          refreshExtra?.maxAgeMs ??
+          (injectedRefresh
+            ? undefined
+            : getSourceRefreshMaxAgeMs(loadConfig(configOptions))),
       }),
   };
 }

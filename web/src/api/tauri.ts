@@ -78,6 +78,7 @@ export async function tauriGetSkillsList(options?: {
   source?: string;
   query?: string;
   tag?: string;
+  refresh?: boolean;
 }): Promise<{ items: Array<{
   name: string;
   version?: string;
@@ -193,5 +194,19 @@ export async function tauriRunCommand(args: string[]): Promise<string> {
   if (!result.success) {
     throw new Error(result.error ?? 'Command failed');
   }
-  return result.stdout ?? '';
+  return extractJsonText(result.stdout) ?? result.stdout ?? '';
+}
+
+export async function tauriGetConfigValue(path: string): Promise<unknown> {
+  const stdout = await tauriRunCommand(['config', 'get', path]);
+  const text = stdout.trim();
+  if (!text || text === 'undefined') return undefined;
+  return JSON.parse(text) as unknown;
+}
+
+export async function tauriSetConfigValue(
+  path: string,
+  value: unknown,
+): Promise<void> {
+  await tauriRunCommand(['config', 'set', path, JSON.stringify(value)]);
 }

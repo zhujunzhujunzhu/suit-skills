@@ -39,11 +39,28 @@
     "en": "English"
   },
   "topbar": {
+    "settings": "Settings",
     "refresh": "Refresh",
     "windowControls": "Window controls",
     "minimize": "Minimize",
     "maximize": "Maximize",
-    "close": "Close"
+    "close": "Close",
+    "hideToTray": "Hide to tray"
+  },
+  "settings": {
+    "title": "Settings",
+    "subtitle": "Tune refresh behavior, desktop closing, and agent targets.",
+    "close": "Close settings",
+    "refreshTitle": "Source cache",
+    "refreshInterval": "Check interval",
+    "refreshHint": "Search uses local cache until this interval expires. Manual refresh always checks now.",
+    "refreshAlways": "Every search",
+    "refresh5": "Every 5 minutes",
+    "refresh15": "Every 15 minutes",
+    "refresh60": "Every hour",
+    "desktopTitle": "Desktop",
+    "minimizeToTray": "Close to tray",
+    "minimizeToTrayHint": "The close button hides the window; click the tray icon to restore."
   },
   "markdown": {
     "empty": "No SKILL.md content."
@@ -217,7 +234,8 @@
     "sourceRemoved": "Source removed",
     "customTargetAdded": "Agent added",
     "agentUpdated": "Agent updated",
-    "agentRemoved": "Agent removed"
+    "agentRemoved": "Agent removed",
+    "settingsSaved": "Settings saved"
   },
   "share": {
     "skill": "Skill",

@@ -233,6 +233,116 @@ button {
   color: var(--surface-lowest);
 }
 
+.settings-panel {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  pointer-events: none;
+}
+
+.settings-backdrop {
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, var(--surface-lowest) 52%, transparent);
+  pointer-events: auto;
+}
+
+.settings-sheet {
+  position: absolute;
+  top: 60px;
+  right: 10px;
+  bottom: 10px;
+  width: min(720px, calc(100vw - 20px));
+  overflow: auto;
+  padding: 20px;
+  border: 1px solid var(--outline);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: 0 20px 70px color-mix(in srgb, #000 38%, transparent);
+  pointer-events: auto;
+}
+
+.settings-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.settings-head h1,
+.settings-group h2 {
+  margin: 0;
+}
+
+.settings-head p {
+  margin: 6px 0 0;
+  color: var(--muted);
+}
+
+.settings-group {
+  display: grid;
+  gap: 12px;
+  padding: 16px 0;
+  border-top: 1px solid var(--outline-soft);
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.settings-row span {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.settings-row em {
+  color: var(--muted);
+  font-style: normal;
+}
+
+.settings-row select {
+  min-width: 160px;
+}
+
+.settings-row input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+}
+
+.settings-agents {
+  border-top: 1px solid var(--outline-soft);
+  padding-top: 16px;
+}
+
+.settings-agents .installed-page {
+  padding: 0;
+}
+
+.settings-agents .page-head {
+  margin-bottom: 14px;
+}
+
+.settings-page {
+  min-height: calc(100vh - 60px);
+  overflow: auto;
+  padding: 28px;
+}
+
+.settings-page .settings-sheet {
+  position: static;
+  width: min(960px, 100%);
+  min-height: auto;
+  margin: 0 auto;
+  overflow: visible;
+  box-shadow: none;
+}
+
 .window-chrome span,
 .window-chrome i,
 .window-chrome b {
@@ -310,6 +420,21 @@ button {
 .icon-button:hover {
   background: var(--surface-high);
   color: var(--text);
+}
+
+.icon-button:disabled {
+  cursor: wait;
+  opacity: 0.72;
+}
+
+.icon-button.refreshing .icon {
+  animation: toolbar-refresh-spin 800ms linear infinite;
+}
+
+@keyframes toolbar-refresh-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .console-grid {
