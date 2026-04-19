@@ -82,7 +82,7 @@ jobs:
       # 自动同步到你的 Gitee 仓库
       - name: Push to Gitee
         shell: bash
-        timeout-minutes: 10
+        timeout-minutes: 60
         env:
           GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
           GIT_TERMINAL_PROMPT: '0'
@@ -122,5 +122,5 @@ jobs:
           git \
             -c credential.interactive=false \
             -c http.lowSpeedLimit=1000 \
-            -c http.lowSpeedTime=60 \
+            -c http.lowSpeedTime=600 \
             push --force --progress --porcelain gitee "${GITEE_ARTIFACT_BRANCH}"
