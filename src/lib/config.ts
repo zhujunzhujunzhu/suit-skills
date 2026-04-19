@@ -1,12 +1,13 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir as nodeHomedir } from 'node:os';
 import { join, dirname } from 'node:path';
-import type { AgentMapping, Config, Source } from '../types/index.js';
+import type { AgentMapping, AppSettings, Config, Source } from '../types/index.js';
 import { ensureDir } from '../utils/path.js';
 import { warn } from '../utils/output.js';
 
 const DEFAULT_SOURCE_URL =
   'https://gitee.com/digital-construction-center_1/suit-skills-lib.git';
+export const DEFAULT_SOURCE_REFRESH_INTERVAL_MINUTES = 5;
 
 export type BuiltinSourceCategory =
   | 'official'
@@ -170,6 +171,10 @@ export function getDefaultConfig(): Config {
     },
     /** 默认安装目标：全局安装到 agents（中央存储） */
     installTargets: ['agents'],
+    settings: {
+      sourceRefreshIntervalMinutes: DEFAULT_SOURCE_REFRESH_INTERVAL_MINUTES,
+      minimizeToTray: false,
+    },
   };
 }
 
@@ -419,6 +424,38 @@ function normalizeConfigSources(cfg: Config): boolean {
   return added;
 }
 
+export function normalizeAppSettings(settings: unknown): AppSettings {
+  const raw =
+    settings && typeof settings === 'object' && !Array.isArray(settings)
+      ? (settings as Partial<AppSettings>)
+      : {};
+  const minutes = Number(raw.sourceRefreshIntervalMinutes);
+  return {
+    sourceRefreshIntervalMinutes:
+      Number.isFinite(minutes) && minutes >= 0
+        ? Math.min(24 * 60, Math.floor(minutes))
+        : DEFAULT_SOURCE_REFRESH_INTERVAL_MINUTES,
+    minimizeToTray: raw.minimizeToTray === true,
+  };
+}
+
+function normalizeConfigSettings(cfg: Config): boolean {
+  const normalized = normalizeAppSettings(cfg.settings);
+  const dirty =
+    !cfg.settings ||
+    cfg.settings.sourceRefreshIntervalMinutes !==
+      normalized.sourceRefreshIntervalMinutes ||
+    cfg.settings.minimizeToTray !== normalized.minimizeToTray;
+  cfg.settings = normalized;
+  return dirty;
+}
+
+export function getSourceRefreshMaxAgeMs(config: Config): number {
+  const minutes = normalizeAppSettings(config.settings)
+    .sourceRefreshIntervalMinutes;
+  return minutes > 0 ? minutes * 60_000 : 0;
+}
+
 export function loadConfig(options?: ConfigLocationOptions): Config {
   const filePath = getConfigPath(options);
   if (!existsSync(filePath)) {
@@ -430,6 +467,7 @@ export function loadConfig(options?: ConfigLocationOptions): Config {
     const parsed = JSON.parse(raw) as Config;
     let dirty = normalizeConfigSources(parsed);
     dirty = mergeMissingAgentsFromDefaults(parsed) || dirty;
+    dirty = normalizeConfigSettings(parsed) || dirty;
     if (shouldMigrateLegacyInstallTargetsOnlySkills(parsed)) {
       parsed.installTargets = [];
       dirty = true;

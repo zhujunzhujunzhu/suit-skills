@@ -8,6 +8,7 @@ import {
   addWebSource,
   copyWebInstalledSkillPackage,
   exportWebInstalledSkill,
+  getWebSettings,
   getWebSkillDetail,
   installWebSkill,
   linkWebInstalledSkillToTargets,
@@ -20,6 +21,7 @@ import {
   removeWebInstalledSkill,
   restoreWebBuiltinSources,
   toApiErrorPayload,
+  updateWebSettings,
   updateWebInstallTarget,
   updateWebSource,
   WebApiError,
@@ -109,6 +111,16 @@ async function handleApi(
   try {
     if (req.method === 'GET' && url.pathname === '/api/health') {
       sendJson(res, 200, { ok: true });
+      return;
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/settings') {
+      sendJson(res, 200, getWebSettings(ctx));
+      return;
+    }
+
+    if (req.method === 'PATCH' && url.pathname === '/api/settings') {
+      sendJson(res, 200, updateWebSettings(ctx, (await readJsonBody(req)) as never));
       return;
     }
 

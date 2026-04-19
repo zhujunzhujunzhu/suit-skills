@@ -25,6 +25,11 @@ export interface AgentMapping {
   projectDir: string;
 }
 
+export interface AppSettings {
+  sourceRefreshIntervalMinutes: number;
+  minimizeToTray: boolean;
+}
+
 /** Web UI 中展示和管理的 AI coding agent 配置 */
 export interface WebInstallTarget {
   id: string;
@@ -58,6 +63,7 @@ export interface Config {
   sources: Source[];
   defaultSource: string;
   agents: Record<string, AgentMapping>;
+  settings?: AppSettings;
   /**
    * 项目级显式安装目标（`skills` = `./.skills/`，其余为 `agents` 中的键）。
    * 未配置或为空时不包含任何项，由目录检测（`installTargetsAuto`）或 `--agent` / `--env` 决定。
