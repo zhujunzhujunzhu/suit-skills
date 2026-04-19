@@ -40,19 +40,14 @@ pub fn run() {
                     .build(app)?;
             }
 
-            // 设置优雅退出处理
             #[cfg(not(target_os = "windows"))]
             {
-                use std::process::Command;
                 use signal_hook::consts::TERM_SIGNALS;
                 use signal_hook::iterator::Signals;
-
                 let signals = Signals::new(TERM_SIGNALS).unwrap();
                 std::thread::spawn(move || {
                     for signal in signals.forever() {
-                        // 清理sidecar进程
                         println!("Received termination signal: {:?}", signal);
-                        // 这里可以添加额外的清理逻辑
                     }
                 });
             }
