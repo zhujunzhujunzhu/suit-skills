@@ -182,6 +182,7 @@ pub async fn get_skills_list(
     source: Option<String>,
     query: Option<String>,
     tag: Option<String>,
+    refresh: Option<bool>,
 ) -> SkillResult {
     let mut args: Vec<String> = vec!["list".to_string(), "--json".to_string()];
 
@@ -196,6 +197,9 @@ pub async fn get_skills_list(
     if let Some(t) = tag {
         args.push("--tag".to_string());
         args.push(t);
+    }
+    if refresh.unwrap_or(false) {
+        args.push("--refresh".to_string());
     }
 
     run_cli_command(&app, args).await

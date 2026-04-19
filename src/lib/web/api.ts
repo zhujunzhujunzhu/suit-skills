@@ -22,6 +22,8 @@ import { getSourceCacheDir } from '../cache.js';
 import {
   getEffectiveSourceUrl,
   getBuiltinSourceInfo,
+  getSourceRefreshMaxAgeMs,
+  normalizeAppSettings,
   restoreBuiltinSources,
   type BuiltinSourceCategory,
 } from '../config.js';
@@ -44,6 +46,7 @@ import {
 } from '../skills.js';
 import type {
   AgentMapping,
+  AppSettings,
   Config,
   MetadataSource,
   SkillMeta,
@@ -184,7 +187,10 @@ interface SkillSourceRow {
   metadataSource: MetadataSource;
 }
 
-const sourceRowsCache = new WeakMap<CliContext, Map<string, SkillSourceRow[]>>();
+const sourceRowsCache = new WeakMap<
+  CliContext,
+  Map<string, { expiresAt: number; rows: SkillSourceRow[] }>
+>();
 const installedTargetsIndexCache = new WeakMap<
   CliContext,
   { expiresAt: number; value: Map<string, string[]> }
@@ -221,7 +227,9 @@ function refreshSourceForWeb(
   }
 }
 
-function getRowsCacheForContext(ctx: CliContext): Map<string, SkillSourceRow[]> {
+function getRowsCacheForContext(
+  ctx: CliContext,
+): Map<string, { expiresAt: number; rows: SkillSourceRow[] }> {
   let cache = sourceRowsCache.get(ctx);
   if (!cache) {
     cache = new Map();
@@ -519,12 +527,13 @@ function rowsForSingleSource(
   ctx: CliContext,
   source: Source,
   forceRefresh = false,
+  maxAgeMs = 0,
 ): { rows: SkillSourceRow[]; warnings: WebSourceWarning[] } {
   const cache = getRowsCacheForContext(ctx);
   const cacheKey = `${source.name}\0${getEffectiveSourceUrl(source)}`;
   const cached = cache.get(cacheKey);
-  if (cached && !forceRefresh) {
-    return { rows: cached, warnings: [] };
+  if (cached && !forceRefresh && cached.expiresAt > Date.now()) {
+    return { rows: cached.rows, warnings: [] };
   }
   let refresh: ReturnType<CliContext['refreshForSource']>;
   try {
@@ -533,7 +542,10 @@ function rowsForSingleSource(
     if (error instanceof WebApiError) {
       const fallback = findCachedRowsForSource(ctx, source);
       if (fallback) {
-        cache.set(cacheKey, fallback.rows);
+        cache.set(cacheKey, {
+          expiresAt: Date.now() + maxAgeMs,
+          rows: fallback.rows,
+        });
         return {
           rows: fallback.rows,
           warnings: [
@@ -549,7 +561,10 @@ function rowsForSingleSource(
     throw error;
   }
   const rows = scanSourceRows(refresh.path, source.name);
-  cache.set(cacheKey, rows);
+  cache.set(cacheKey, {
+    expiresAt: Date.now() + maxAgeMs,
+    rows,
+  });
   return {
     rows,
     warnings:
@@ -577,9 +592,10 @@ function rowsForSource(
     const rows: SkillSourceRow[] = [];
     const warnings: WebSourceWarning[] = [];
     const seenNames = new Set<string>();
+    const maxAgeMs = getSourceRefreshMaxAgeMs(config);
     for (const source of sources) {
       try {
-        const result = rowsForSingleSource(ctx, source, forceRefresh);
+        const result = rowsForSingleSource(ctx, source, forceRefresh, maxAgeMs);
         warnings.push(...result.warnings);
         for (const row of result.rows) {
           if (seenNames.has(row.meta.name)) {
@@ -846,6 +862,25 @@ function sourcesResponse(config: Config): WebSourcesResponse {
     defaultSource: config.defaultSource,
     sources: config.sources.map(decorateWebSource),
   };
+}
+
+export function getWebSettings(ctx: CliContext): AppSettings {
+  return normalizeAppSettings(ctx.loadConfig().settings);
+}
+
+export function updateWebSettings(
+  ctx: CliContext,
+  request: Partial<AppSettings>,
+): AppSettings {
+  const config = ctx.loadConfig();
+  const current = normalizeAppSettings(config.settings);
+  config.settings = normalizeAppSettings({
+    ...current,
+    ...request,
+  });
+  ctx.saveConfig(config);
+  sourceRowsCache.delete(ctx);
+  return config.settings;
 }
 
 export function listWebSources(ctx: CliContext): WebSourcesResponse {

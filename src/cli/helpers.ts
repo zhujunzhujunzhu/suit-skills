@@ -23,6 +23,7 @@ export function collectMetasFromSources(
   ctx: CliContext,
   config: Config,
   sourceFilter: string,
+  options: { forceRefresh?: boolean } = {},
 ): MetaWithSource[] {
   const names =
     sourceFilter === 'all'
@@ -37,8 +38,10 @@ export function collectMetasFromSources(
     if (!src) {
       throw new Error('Source not found');
     }
-    warn(`Refreshing source ${src.name} (${getEffectiveSourceUrl(src)})...`);
-    const r = ctx.refreshForSource(src);
+    const r = ctx.refreshForSource(src, { force: options.forceRefresh });
+    if (!('skipped' in r)) {
+      warn(`Refreshing source ${src.name} (${getEffectiveSourceUrl(src)})...`);
+    }
     if ('warning' in r) {
       warn(r.warning);
     }

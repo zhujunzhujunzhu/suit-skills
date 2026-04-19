@@ -1,3 +1,4 @@
+import { existsSync, statSync } from 'node:fs';
 import { homedir as nodeHomedir } from 'node:os';
 import { join } from 'node:path';
 import type { Source } from '../types/index.js';
@@ -32,6 +33,7 @@ export function getSourceCacheDir(
 
 export type RefreshCacheResult =
   | { path: string; freshlyCloned: boolean }
+  | { path: string; skipped: true }
   | { path: string; warning: string };
 
 export type CloneOrPullRepoFn = typeof cloneOrPullRepo;
@@ -40,6 +42,31 @@ export interface RefreshCacheOptions
   extends GitModuleOptions,
     ConfigLocationOptions {
   cloneOrPullRepo?: CloneOrPullRepoFn;
+  force?: boolean;
+  maxAgeMs?: number;
+}
+
+function cacheTimestampMs(path: string): number | null {
+  for (const candidate of [
+    join(path, '.git', 'FETCH_HEAD'),
+    join(path, '.git'),
+    path,
+  ]) {
+    if (!existsSync(candidate)) continue;
+    try {
+      return statSync(candidate).mtimeMs;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+function isCacheFresh(path: string, maxAgeMs: number | undefined): boolean {
+  if (!maxAgeMs || maxAgeMs <= 0) return false;
+  const timestamp = cacheTimestampMs(path);
+  if (timestamp === null) return false;
+  return Date.now() - timestamp < maxAgeMs;
 }
 
 export function refreshCache(
@@ -51,6 +78,9 @@ export function refreshCache(
       ? sourceOrUrl.trim()
       : getEffectiveSourceUrl(sourceOrUrl);
   const path = getSourceCacheDir(url, options);
+  if (!options?.force && isCacheFresh(path, options?.maxAgeMs)) {
+    return { path, skipped: true };
+  }
   const impl = options?.cloneOrPullRepo ?? cloneOrPullRepo;
   const gitOptions: GitModuleOptions | undefined =
     options === undefined

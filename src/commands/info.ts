@@ -8,6 +8,7 @@ import { warn } from '../utils/output.js';
 
 interface InfoOptions {
   source?: string;
+  refresh?: boolean;
   json?: boolean;
 }
 
@@ -16,6 +17,7 @@ function findSkillAcrossSources(
   config: Config,
   sourceFilter: string,
   identifier: string,
+  forceRefresh: boolean,
 ): { meta: SkillMeta; sourceName: string; cachePath: string } | null {
   const names =
     sourceFilter === 'all'
@@ -24,8 +26,10 @@ function findSkillAcrossSources(
 
   for (const n of names) {
     const src = assertSourceExists(config, n);
-    warn(`Refreshing source ${src.name} (${getEffectiveSourceUrl(src)})...`);
-    const r = ctx.refreshForSource(src);
+    const r = ctx.refreshForSource(src, { force: forceRefresh });
+    if (!('skipped' in r)) {
+      warn(`Refreshing source ${src.name} (${getEffectiveSourceUrl(src)})...`);
+    }
     if ('warning' in r) {
       warn(r.warning);
     }
@@ -43,6 +47,7 @@ export function registerInfo(program: Command, ctx: CliContext): void {
     .description('Show skill details')
     .argument('<name>', 'skill name or name@version')
     .option('--source <name>', 'source name, or "all", or omit for default')
+    .option('--refresh', 'force refresh source cache')
     .option('--json', 'output as JSON')
     .action((nameArg: string, opts: InfoOptions) => {
       const config = ctx.loadConfig();
@@ -52,6 +57,7 @@ export function registerInfo(program: Command, ctx: CliContext): void {
         config,
         sourceFilter,
         nameArg.trim(),
+        opts.refresh === true,
       );
       if (!hit) {
         throw new Error('Skill not found');
