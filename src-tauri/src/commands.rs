@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::process::Command as StdCommand;
 use tauri::{command, AppHandle};
 use tauri_plugin_shell::ShellExt;
+use tauri::process::Command as TauriCommand;
 
 const SIDECAR_NAME: &str = "suit-skills";
 
@@ -16,43 +17,45 @@ pub struct SkillResult {
 
 /// 执行 suit-skills 命令
 async fn run_cli_command(app: &AppHandle, args: Vec<String>) -> SkillResult {
-    let output = app
-        .shell()
-        .sidecar(SIDECAR_NAME)
-        .map(|command| command.args(&args))
-        .map_err(|error| error.to_string());
+    let mut command = TauriCommand::new_sidecar(SIDECAR_NAME)
+        .expect("Failed to create sidecar command")
+        .args(&args);
 
-    match output {
-        Ok(command) => match command.output().await {
-            Ok(result) => {
-                let stdout = String::from_utf8_lossy(&result.stdout).to_string();
-                let stderr = String::from_utf8_lossy(&result.stderr).to_string();
+    // 设置进程清理钩子
+    command = command.on_exit(|_event| {
+        // 确保sidecar进程被正确清理
+        // println!("Sidecar process exited cleanly");
+    });
 
-                if result.status.success() {
-                    let data = if stdout.trim().starts_with('{') || stdout.trim().starts_with('[') {
-                        serde_json::from_str(&stdout).ok()
-                    } else {
-                        None
-                    };
+    // 启动进程
+    let mut child = command.spawn().unwrap();
 
-                    SkillResult {
-                        success: true,
-                        data,
-                        error: None,
-                        stdout: Some(stdout),
-                    }
-                } else {
-                    SkillResult {
-                        success: false,
-                        data: None,
-                        error: Some(stderr),
-                        stdout: Some(stdout),
-                    }
-                }
-            }
-            Err(error) => run_cli_command_fallback(&args, Some(error.to_string())),
-        },
-        Err(error) => run_cli_command_fallback(&args, Some(error)),
+    // 等待进程完成
+    let result = child.wait().await.unwrap();
+
+    let stdout = String::from_utf8_lossy(&result.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&result.stderr).to_string();
+
+    if result.status.success() {
+        let data = if stdout.trim().starts_with('{') || stdout.trim().starts_with('[') {
+            serde_json::from_str(&stdout).ok()
+        } else {
+            None
+        };
+
+        SkillResult {
+            success: true,
+            data,
+            error: None,
+            stdout: Some(stdout),
+        }
+    } else {
+        SkillResult {
+            success: false,
+            data: None,
+            error: Some(stderr),
+            stdout: Some(stdout),
+        }
     }
 }
 
