@@ -243,7 +243,7 @@ describe('loadConfig', () => {
 
   it('JSON 非法时返回默认配置并打印警告', () => {
     writeFileSync(getConfigPath(), '{ not json', 'utf8');
-    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const logSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const cfg = loadConfig();
     expect(cfg).toEqual(getDefaultConfig());
     expect(logSpy).toHaveBeenCalled();

@@ -237,7 +237,7 @@ describe('阶段 9 CLI', () => {
 
     it('search zzzz → No skills found', async () => {
       const lines: string[] = [];
-      vi.mocked(console.log).mockImplementation((msg: unknown) => {
+      vi.mocked(console.error).mockImplementation((msg: unknown) => {
         lines.push(String(msg));
       });
       const prog = createProgramForTest(ctx());
@@ -521,7 +521,7 @@ describe('阶段 9 CLI', () => {
 
     it('无 skill → No skills installed', async () => {
       const lines: string[] = [];
-      vi.mocked(console.log).mockImplementation((m: unknown) => {
+      vi.mocked(console.error).mockImplementation((m: unknown) => {
         lines.push(String(m));
       });
       const prog = createProgramForTest(ctx());
@@ -546,7 +546,7 @@ describe('阶段 9 CLI', () => {
         '{"name":"code-review","version":"1.0.0"}',
       );
       const lines: string[] = [];
-      vi.mocked(console.log).mockImplementation((m: unknown) => {
+      vi.mocked(console.error).mockImplementation((m: unknown) => {
         lines.push(String(m));
       });
       const prog = createProgramForTest(ctx());
@@ -562,7 +562,7 @@ describe('阶段 9 CLI', () => {
         '{"name":"code-review","version":"1.0.0"}',
       );
       const lines: string[] = [];
-      vi.mocked(console.log).mockImplementation((m: unknown) => {
+      vi.mocked(console.error).mockImplementation((m: unknown) => {
         lines.push(String(m));
       });
       const prog = createProgramForTest(ctx());
@@ -610,7 +610,7 @@ describe('阶段 9 CLI', () => {
         '{"name":"commit-helper","version":"1.0.0"}',
       );
       const lines: string[] = [];
-      vi.mocked(console.log).mockImplementation((m: unknown) => {
+      vi.mocked(console.error).mockImplementation((m: unknown) => {
         lines.push(String(m));
       });
       const prog = createProgramForTest(ctx());

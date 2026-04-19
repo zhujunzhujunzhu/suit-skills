@@ -31,7 +31,7 @@ describe('output', () => {
 
   it('警告：含三角叹号与黄色 ANSI', () => {
     const lines: string[] = [];
-    vi.spyOn(console, 'log').mockImplementation((m: unknown) => {
+    vi.spyOn(console, 'error').mockImplementation((m: unknown) => {
       lines.push(String(m));
     });
     warn('careful');

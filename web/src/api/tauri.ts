@@ -18,6 +18,83 @@ interface TauriResult<T> {
   stdout?: string;
 }
 
+function findJsonEnd(text: string, start: number): number | undefined {
+  const first = text[start];
+  const expectedClose = first === '{' ? '}' : first === '[' ? ']' : '';
+  if (!expectedClose) return undefined;
+
+  const stack = [expectedClose];
+  let inString = false;
+  let escaped = false;
+
+  for (let index = start + 1; index < text.length; index += 1) {
+    const char = text[index];
+
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === '\\') {
+        escaped = true;
+      } else if (char === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (char === '"') {
+      inString = true;
+      continue;
+    }
+
+    if (char === '{') {
+      stack.push('}');
+      continue;
+    }
+    if (char === '[') {
+      stack.push(']');
+      continue;
+    }
+    if (char === '}' || char === ']') {
+      if (stack.pop() !== char) {
+        return undefined;
+      }
+      if (stack.length === 0) {
+        return index + 1;
+      }
+    }
+  }
+
+  return undefined;
+}
+
+function extractJsonText(output?: string): string | undefined {
+  const text = output?.trim();
+  if (!text) return undefined;
+
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    if (char !== '{' && char !== '[') continue;
+
+    const end = findJsonEnd(text, index);
+    if (end === undefined) continue;
+
+    const candidate = text.slice(index, end);
+    try {
+      JSON.parse(candidate);
+      return candidate;
+    } catch {
+      /* Try the next JSON-looking segment. */
+    }
+  }
+
+  return undefined;
+}
+
+function parseCliJson<T>(output?: string): T | undefined {
+  const jsonText = extractJsonText(output);
+  return jsonText ? (JSON.parse(jsonText) as T) : undefined;
+}
+
 // 执行 IPC 命令
 async function runCommand<T>(
   command: string,
@@ -30,9 +107,9 @@ async function runCommand<T>(
   if (result.data !== undefined && result.data !== null) {
     return result.data;
   }
-  const stdout = result.stdout?.trim();
-  if (stdout?.startsWith('{') || stdout?.startsWith('[')) {
-    return JSON.parse(stdout) as T;
+  const parsed = parseCliJson<T>(result.stdout);
+  if (parsed !== undefined) {
+    return parsed;
   }
   return undefined as T;
 }
@@ -193,5 +270,5 @@ export async function tauriRunCommand(args: string[]): Promise<string> {
   if (!result.success) {
     throw new Error(result.error ?? 'Command failed');
   }
-  return result.stdout ?? '';
+  return extractJsonText(result.stdout) ?? result.stdout ?? '';
 }
