@@ -82,8 +82,10 @@ jobs:
       # 自动同步到你的 Gitee 仓库
       - name: Push to Gitee
         shell: bash
+        timeout-minutes: 10
         env:
           GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+          GIT_TERMINAL_PROMPT: '0'
         run: |
           set -euo pipefail
 
@@ -104,6 +106,7 @@ jobs:
 
           find . -type f | sort > MANIFEST.txt
 
+          git config --global init.defaultBranch "${GITEE_ARTIFACT_BRANCH}"
           git init
           git checkout -B "${GITEE_ARTIFACT_BRANCH}"
           git config user.name 'github-actions[bot]'
@@ -111,4 +114,13 @@ jobs:
           git add .
           git commit -m "auto build"
           git remote add gitee "https://oauth2:${GITEE_TOKEN}@${GITEE_REPO}"
-          git push --force gitee "${GITEE_ARTIFACT_BRANCH}"
+
+          echo 'Artifact files to push:'
+          find . -maxdepth 4 -type f -print | sort
+          du -sh .
+
+          git \
+            -c credential.interactive=false \
+            -c http.lowSpeedLimit=1000 \
+            -c http.lowSpeedTime=60 \
+            push --force --progress --porcelain gitee "${GITEE_ARTIFACT_BRANCH}"
