@@ -15,6 +15,7 @@ import {
   exportInstalledSkill,
   fetchInstalled,
   fetchInstallTargets,
+  fetchSettings,
   fetchSkillDetail,
   fetchSkills,
   fetchSources,
@@ -24,8 +25,10 @@ import {
   removeSource,
   removeInstalledSkill,
   restoreBuiltinSources,
+  updateSettings,
   updateInstallTarget,
   updateSource,
+  type AppSettings,
   type InstalledSkill,
   type InstallTargetOption,
   type SkillLibraryTarget,
@@ -37,7 +40,7 @@ import {
 import { RAW_API, translateApiError } from './i18n/apiErrors';
 import { changeLanguageWithStorage, type AppLocale } from './i18n';
 
-type View = 'library' | 'installed' | 'sources' | 'agents';
+type View = 'library' | 'installed' | 'sources' | 'settings';
 type LocationScope = 'project' | 'global';
 type ScopeFilter = 'all' | LocationScope;
 type InstallStrategy = 'overwrite' | 'skip' | 'rename';
@@ -46,6 +49,10 @@ const SEARCH_DEBOUNCE_MS = 300;
 const SKILL_CARD_HEIGHT = 210;
 const SKILL_GRID_GAP = 14;
 const VIRTUAL_OVERSCAN_ROWS = 4;
+const DEFAULT_SETTINGS: AppSettings = {
+  sourceRefreshIntervalMinutes: 5,
+  minimizeToTray: false,
+};
 
 const icons = {
   terminal: (
@@ -114,6 +121,12 @@ const icons = {
       <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2 3.4-.2-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6V22h-4v-.4a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.2.1-2-3.4.1-.1A1.7 1.7 0 0 0 4.6 15 1.7 1.7 0 0 0 3 14H2v-4h1a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7l2-3.4.2.1a1.7 1.7 0 0 0 1.9.3 1.7 1.7 0 0 0 1-1.6V2h4v.4a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.2-.1 2 3.4-.1.1A1.7 1.7 0 0 0 19.4 9 1.7 1.7 0 0 0 21 10h1v4h-1a1.7 1.7 0 0 0-1.6 1z" />
     </>
   ),
+  x: (
+    <>
+      <path d="M6 6l12 12" />
+      <path d="M18 6 6 18" />
+    </>
+  ),
 };
 
 function Icon({ name }: { name: keyof typeof icons }) {
@@ -146,7 +159,9 @@ async function copyText(text: string): Promise<void> {
   textarea.remove();
 }
 
-async function windowCommand(action: 'minimize' | 'toggleMaximize' | 'close'): Promise<void> {
+async function windowCommand(
+  action: 'minimize' | 'toggleMaximize' | 'close' | 'hide',
+): Promise<void> {
   if (typeof window === 'undefined' || !('__TAURI__' in window)) return;
   try {
     const { getCurrentWindow } = await import('@tauri-apps/api/window');
@@ -376,11 +391,12 @@ const VIEW_KEYS: Record<View, string> = {
   library: 'skills',
   installed: 'installed',
   sources: 'sources',
-  agents: 'agents',
+  settings: 'settings',
 };
 
 function viewFromHash(): View {
   const hash = window.location.hash.slice(1);
+  if (hash === 'agents') return 'settings';
   const key = Object.keys(VIEW_KEYS).find((v) => VIEW_KEYS[v as View] === hash);
   return (key as View) || 'library';
 }
@@ -408,6 +424,8 @@ export default function App() {
   const [skillLibrary, setSkillLibrary] = useState<SkillLibraryTarget | null>(null);
   const [installScope, setInstallScope] = useState<LocationScope>('global');
   const [installStrategy, setInstallStrategy] = useState<InstallStrategy>('skip');
+  const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
+  const [toolbarRefreshing, setToolbarRefreshing] = useState(false);
   const [loading, setLoading] = useState(false);
   const [installedLoading, setInstalledLoading] = useState(false);
   const [error, setError] = useState('');
@@ -503,6 +521,24 @@ export default function App() {
     }
   }
 
+  async function loadSettings() {
+    try {
+      setSettings(await fetchSettings());
+    } catch {
+      setSettings(DEFAULT_SETTINGS);
+    }
+  }
+
+  async function saveSettings(nextSettings: Partial<AppSettings>) {
+    try {
+      const next = await updateSettings(nextSettings);
+      setSettings(next);
+      notify(t('toast.settingsSaved', { defaultValue: '设置已保存' }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
   async function refreshInstallTargets() {
     try {
       const { library, targets } = await fetchInstallTargets();
@@ -572,6 +608,11 @@ export default function App() {
 
   useEffect(() => {
     void loadSources();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    void loadSettings();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -903,6 +944,19 @@ export default function App() {
     }
   }
 
+  async function refreshFromToolbar() {
+    if (toolbarRefreshing) return;
+    setToolbarRefreshing(true);
+    try {
+      await Promise.all([
+        loadSkills(source, debouncedQuery, tag, true),
+        loadInstalled(scope, installedTarget, debouncedInstalledQuery),
+      ]);
+    } finally {
+      setToolbarRefreshing(false);
+    }
+  }
+
   return (
     <div className="app-shell">
       <header
@@ -930,7 +984,7 @@ export default function App() {
                   ? t('crumb.viewInstalled')
                   : view === 'sources'
                     ? t('crumb.viewSources')
-                    : t('crumb.viewAgents')}
+                    : t('crumb.viewSettings', { defaultValue: '设置' })}
             </em>
           </div>
           <div className="topbar-actions">
@@ -948,12 +1002,19 @@ export default function App() {
             </select>
             <button
               className="icon-button"
+              aria-label={t('topbar.settings', { defaultValue: '设置' })}
+              title={t('topbar.settings', { defaultValue: '设置' })}
+              onClick={() => setView('settings')}
+            >
+              <Icon name="settings" />
+            </button>
+            <button
+              className={toolbarRefreshing ? 'icon-button refreshing' : 'icon-button'}
               aria-label={t('topbar.refresh')}
               title={t('topbar.refresh')}
-              onClick={() => {
-                void loadSkills(source, debouncedQuery, tag, true);
-                void loadInstalled(scope, installedTarget, debouncedInstalledQuery);
-              }}
+              aria-busy={toolbarRefreshing}
+              disabled={toolbarRefreshing}
+              onClick={() => void refreshFromToolbar()}
             >
               <Icon name="refresh" />
             </button>
@@ -965,7 +1026,17 @@ export default function App() {
                 <button title={t('topbar.maximize')} onClick={() => void windowCommand('toggleMaximize')}>
                   <i />
                 </button>
-                <button className="close" title={t('topbar.close')} onClick={() => void windowCommand('close')}>
+                <button
+                  className="close"
+                  title={
+                    settings.minimizeToTray
+                      ? t('topbar.hideToTray', { defaultValue: '隐藏到托盘' })
+                      : t('topbar.close')
+                  }
+                  onClick={() =>
+                    void windowCommand(settings.minimizeToTray ? 'hide' : 'close')
+                  }
+                >
                   <b />
                 </button>
               </div>
@@ -979,7 +1050,6 @@ export default function App() {
           <NavButton active={view === 'library'} onClick={() => setView('library')} icon="database" label={t('nav.skills')} />
           <NavButton active={view === 'installed'} onClick={() => setView('installed')} icon="check" label={t('nav.installed')} />
           <NavButton active={view === 'sources'} onClick={() => setView('sources')} icon="terminal" label={t('nav.sources')} />
-          <NavButton active={view === 'agents'} onClick={() => setView('agents')} icon="settings" label={t('nav.agents')} />
         </nav>
         <div className="rail-status">
           <span>{t('rail.indexLabel')}</span>
@@ -1002,7 +1072,7 @@ export default function App() {
             onInstallScopeChange={setInstallScope}
             onInstallStrategyChange={setInstallStrategy}
             onInstallTargetsChange={setInstallTargets}
-            onManageAgents={() => setView('agents')}
+            onManageAgents={() => setView('settings')}
             onQueryChange={setQuery}
             onSelect={setSelected}
             onShare={shareCommand}
@@ -1058,14 +1128,16 @@ export default function App() {
           />
         ) : null}
 
-        {view === 'agents' ? (
-          <AgentsView
+        {view === 'settings' ? (
+          <SettingsView
             installTargetRows={installTargetRows}
             library={skillLibrary}
             onAdd={submitCustomInstallTarget}
             onDelete={deleteAgent}
             onRefresh={refreshInstallTargets}
+            onSettingsChange={saveSettings}
             onUpdate={submitAgentUpdate}
+            settings={settings}
           />
         ) : null}
       </main>
@@ -1997,6 +2069,200 @@ function AgentsView({
         })}
       </div>
     </section>
+  );
+}
+
+function SettingsView({
+  installTargetRows,
+  library,
+  onAdd,
+  onDelete,
+  onRefresh,
+  onSettingsChange,
+  onUpdate,
+  settings,
+}: {
+  installTargetRows: InstallTargetOption[];
+  library: SkillLibraryTarget | null;
+  onAdd: (id: string, globalDir: string, projectDir: string) => Promise<void>;
+  onDelete: (id: string) => Promise<void>;
+  onRefresh: () => Promise<void>;
+  onSettingsChange: (settings: Partial<AppSettings>) => Promise<void>;
+  onUpdate: (id: string, globalDir: string, projectDir: string) => Promise<void>;
+  settings: AppSettings;
+}) {
+  const { t } = useTranslation();
+  const tt = (key: string, defaultValue: string) => t(key, { defaultValue });
+
+  return (
+    <section className="settings-page" aria-label={tt('settings.title', '\u8bbe\u7f6e')}>
+      <div className="settings-sheet">
+        <div className="settings-head">
+          <div>
+            <h1>{tt('settings.title', '\u8bbe\u7f6e')}</h1>
+            <p>
+              {tt(
+                'settings.subtitle',
+                '\u7ba1\u7406\u6e90\u7f13\u5b58\u3001\u684c\u9762\u884c\u4e3a\u548c Agent \u76ee\u6807\u4f4d\u7f6e\u3002',
+              )}
+            </p>
+          </div>
+        </div>
+
+        <div className="settings-group">
+          <h2>{tt('settings.refreshTitle', '\u6e90\u7f13\u5b58')}</h2>
+          <label className="settings-row">
+            <span>
+              <b>{tt('settings.refreshInterval', '\u68c0\u67e5\u95f4\u9694')}</b>
+              <em>
+                {tt(
+                  'settings.refreshHint',
+                  '\u641c\u7d22\u4f1a\u4f18\u5148\u4f7f\u7528\u672c\u5730\u7f13\u5b58\uff0c\u8d85\u8fc7\u95f4\u9694\u624d\u68c0\u67e5\u8fdc\u7aef\uff1b\u624b\u52a8\u5237\u65b0\u59cb\u7ec8\u7acb\u5373\u68c0\u67e5\u3002',
+                )}
+              </em>
+            </span>
+            <select
+              value={settings.sourceRefreshIntervalMinutes}
+              onChange={(event) =>
+                void onSettingsChange({
+                  sourceRefreshIntervalMinutes: Number(event.target.value),
+                })
+              }
+            >
+              <option value={0}>{tt('settings.refreshAlways', '\u6bcf\u6b21\u641c\u7d22')}</option>
+              <option value={5}>{tt('settings.refresh5', '\u6bcf 5 \u5206\u949f')}</option>
+              <option value={15}>{tt('settings.refresh15', '\u6bcf 15 \u5206\u949f')}</option>
+              <option value={60}>{tt('settings.refresh60', '\u6bcf\u5c0f\u65f6')}</option>
+            </select>
+          </label>
+        </div>
+
+        <div className="settings-group">
+          <h2>{tt('settings.desktopTitle', '\u684c\u9762\u7aef')}</h2>
+          <label className="settings-row">
+            <span>
+              <b>{tt('settings.minimizeToTray', '\u5173\u95ed\u5230\u6258\u76d8')}</b>
+              <em>
+                {tt(
+                  'settings.minimizeToTrayHint',
+                  '\u70b9\u51fb\u5173\u95ed\u6309\u94ae\u65f6\u9690\u85cf\u7a97\u53e3\uff0c\u53ef\u4ece\u6258\u76d8\u56fe\u6807\u6062\u590d\u3002',
+                )}
+              </em>
+            </span>
+            <input
+              type="checkbox"
+              checked={settings.minimizeToTray}
+              onChange={(event) =>
+                void onSettingsChange({ minimizeToTray: event.target.checked })
+              }
+            />
+          </label>
+        </div>
+
+        <div className="settings-agents">
+          <AgentsView
+            installTargetRows={installTargetRows}
+            library={library}
+            onAdd={onAdd}
+            onDelete={onDelete}
+            onRefresh={onRefresh}
+            onUpdate={onUpdate}
+          />
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function SettingsPanel({
+  installTargetRows,
+  library,
+  onAdd,
+  onClose,
+  onDelete,
+  onRefresh,
+  onSettingsChange,
+  onUpdate,
+  settings,
+}: {
+  installTargetRows: InstallTargetOption[];
+  library: SkillLibraryTarget | null;
+  onAdd: (id: string, globalDir: string, projectDir: string) => Promise<void>;
+  onClose: () => void;
+  onDelete: (id: string) => Promise<void>;
+  onRefresh: () => Promise<void>;
+  onSettingsChange: (settings: Partial<AppSettings>) => Promise<void>;
+  onUpdate: (id: string, globalDir: string, projectDir: string) => Promise<void>;
+  settings: AppSettings;
+}) {
+  const { t } = useTranslation();
+  const tt = (key: string, defaultValue: string) => t(key, { defaultValue });
+  return (
+    <aside className="settings-panel" aria-label={tt('settings.title', '设置')}>
+      <div className="settings-backdrop" onClick={onClose} />
+      <section className="settings-sheet">
+        <div className="settings-head">
+          <div>
+            <h1>{tt('settings.title', '设置')}</h1>
+            <p>{tt('settings.subtitle', '管理源缓存、桌面行为和 Agent 目标位置。')}</p>
+          </div>
+          <button className="icon-button" title={tt('settings.close', '关闭设置')} onClick={onClose}>
+            <Icon name="x" />
+          </button>
+        </div>
+
+        <div className="settings-group">
+          <h2>{tt('settings.refreshTitle', '源缓存')}</h2>
+          <label className="settings-row">
+            <span>
+              <b>{tt('settings.refreshInterval', '检查间隔')}</b>
+              <em>{tt('settings.refreshHint', '搜索会优先使用本地缓存，超过间隔才检查远端；手动刷新始终立即检查。')}</em>
+            </span>
+            <select
+              value={settings.sourceRefreshIntervalMinutes}
+              onChange={(event) =>
+                void onSettingsChange({
+                  sourceRefreshIntervalMinutes: Number(event.target.value),
+                })
+              }
+            >
+              <option value={0}>{tt('settings.refreshAlways', '每次搜索')}</option>
+              <option value={5}>{tt('settings.refresh5', '每 5 分钟')}</option>
+              <option value={15}>{tt('settings.refresh15', '每 15 分钟')}</option>
+              <option value={60}>{tt('settings.refresh60', '每小时')}</option>
+            </select>
+          </label>
+        </div>
+
+        <div className="settings-group">
+          <h2>{tt('settings.desktopTitle', '桌面端')}</h2>
+          <label className="settings-row">
+            <span>
+              <b>{tt('settings.minimizeToTray', '关闭到托盘')}</b>
+              <em>{tt('settings.minimizeToTrayHint', '点击关闭按钮时隐藏窗口，可从托盘图标恢复。')}</em>
+            </span>
+            <input
+              type="checkbox"
+              checked={settings.minimizeToTray}
+              onChange={(event) =>
+                void onSettingsChange({ minimizeToTray: event.target.checked })
+              }
+            />
+          </label>
+        </div>
+
+        <div className="settings-agents">
+          <AgentsView
+            installTargetRows={installTargetRows}
+            library={library}
+            onAdd={onAdd}
+            onDelete={onDelete}
+            onRefresh={onRefresh}
+            onUpdate={onUpdate}
+          />
+        </div>
+      </section>
+    </aside>
   );
 }
 

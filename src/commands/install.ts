@@ -56,8 +56,10 @@ export function registerInstall(program: Command, ctx: CliContext): void {
         const config = ctx.loadConfig();
         const sourceName = opts.source ?? config.defaultSource;
         const src = assertSourceExists(config, sourceName);
-        warn(`Refreshing source ${src.name} (${getEffectiveSourceUrl(src)})...`);
         const refresh = ctx.refreshForSource(src);
+        if (!('skipped' in refresh)) {
+          warn(`Refreshing source ${src.name} (${getEffectiveSourceUrl(src)})...`);
+        }
         if ('warning' in refresh) {
           warn(refresh.warning);
         }

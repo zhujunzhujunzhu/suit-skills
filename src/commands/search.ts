@@ -7,6 +7,7 @@ import { warn } from '../utils/output.js';
 interface SearchOptions {
   source?: string;
   query?: string;
+  refresh?: boolean;
   json?: boolean;
 }
 
@@ -17,6 +18,7 @@ export function registerSearch(program: Command, ctx: CliContext): void {
     .argument('[keyword]', 'search keyword')
     .option('--query <keyword>', 'search keyword')
     .option('--source <name>', 'source name, or omit to use default source')
+    .option('--refresh', 'force refresh source cache')
     .option('--json', 'output as JSON')
     .action((keyword: string | undefined, opts: SearchOptions) => {
       const searchKeyword = opts.query ?? keyword;
@@ -25,7 +27,9 @@ export function registerSearch(program: Command, ctx: CliContext): void {
       }
       const config = ctx.loadConfig();
       const sourceFilter = opts.source ?? config.defaultSource;
-      const rows = collectMetasFromSources(ctx, config, sourceFilter);
+      const rows = collectMetasFromSources(ctx, config, sourceFilter, {
+        forceRefresh: opts.refresh === true,
+      });
       const metas = rows.map((r) => r.meta);
       const found = searchSkills(metas, searchKeyword);
 

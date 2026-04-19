@@ -64,6 +64,11 @@ export interface SourceWarning {
   usingCache: boolean;
 }
 
+export interface AppSettings {
+  sourceRefreshIntervalMinutes: number;
+  minimizeToTray: boolean;
+}
+
 export interface InstallResult {
   target: string;
   scope: 'project' | 'global';
@@ -256,6 +261,47 @@ function normalizeInstalledSkill(
         ? skill.metadataSource
         : 'skill-md',
   };
+}
+
+function normalizeSettings(value: unknown): AppSettings {
+  const raw =
+    value && typeof value === 'object' && !Array.isArray(value)
+      ? (value as Partial<AppSettings>)
+      : {};
+  const minutes = Number(raw.sourceRefreshIntervalMinutes);
+  return {
+    sourceRefreshIntervalMinutes:
+      Number.isFinite(minutes) && minutes >= 0
+        ? Math.min(24 * 60, Math.floor(minutes))
+        : 5,
+    minimizeToTray: raw.minimizeToTray === true,
+  };
+}
+
+export async function fetchSettings(): Promise<AppSettings> {
+  const tauri = await getTauriApi();
+  if (tauri) {
+    return normalizeSettings(await tauri.tauriGetConfigValue('settings'));
+  }
+  return normalizeSettings(await request<AppSettings>('/api/settings'));
+}
+
+export async function updateSettings(
+  settings: Partial<AppSettings>,
+): Promise<AppSettings> {
+  const tauri = await getTauriApi();
+  if (tauri) {
+    const current = normalizeSettings(await tauri.tauriGetConfigValue('settings'));
+    const next = normalizeSettings({ ...current, ...settings });
+    await tauri.tauriSetConfigValue('settings', next);
+    return next;
+  }
+  return normalizeSettings(
+    await request<AppSettings>('/api/settings', {
+      method: 'PATCH',
+      body: JSON.stringify(settings),
+    }),
+  );
 }
 
 export async function fetchInstallTargets(): Promise<{
@@ -455,6 +501,7 @@ export async function fetchSkills(params: {
       source: params.source,
       query: params.q,
       tag: params.tag,
+      refresh: params.refresh,
     });
     // 与已安装页默认「全部范围」一致，否则全局安装的技能在库里会一直显示未安装
     const installed = await tauri.tauriGetInstalledSkills({ scope: 'all' });

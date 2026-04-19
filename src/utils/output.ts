@@ -26,11 +26,11 @@ export function success(message: string): void {
 /** 警告消息：前缀 U+26A0，TTY 下黄色 */
 export function warn(message: string): void {
   const line = `\u26A0 ${message}`;
-  if (useColorFor(process.stdout)) {
-    console.log(`${YELLOW}${line}${RESET}`);
+  if (useColorFor(process.stderr)) {
+    console.error(`${YELLOW}${line}${RESET}`);
     return;
   }
-  console.log(line);
+  console.error(line);
 }
 
 /** 错误消息：前缀 U+2716，TTY 下红色，写入 stderr */
