@@ -5,6 +5,22 @@ use tauri_plugin_shell::ShellExt;
 
 const SIDECAR_NAME: &str = "suit-skills";
 
+fn parse_json_stdout(stdout: &str) -> Option<serde_json::Value> {
+    for (index, ch) in stdout.char_indices() {
+        if ch != '{' && ch != '[' {
+            continue;
+        }
+
+        let mut values =
+            serde_json::Deserializer::from_str(&stdout[index..]).into_iter::<serde_json::Value>();
+        if let Some(Ok(value)) = values.next() {
+            return Some(value);
+        }
+    }
+
+    None
+}
+
 /// 通用命令执行结果
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SkillResult {
@@ -29,11 +45,7 @@ async fn run_cli_command(app: &AppHandle, args: Vec<String>) -> SkillResult {
                 let stderr = String::from_utf8_lossy(&result.stderr).to_string();
 
                 if result.status.success() {
-                    let data = if stdout.trim().starts_with('{') || stdout.trim().starts_with('[') {
-                        serde_json::from_str(&stdout).ok()
-                    } else {
-                        None
-                    };
+                    let data = parse_json_stdout(&stdout);
 
                     SkillResult {
                         success: true,
@@ -68,11 +80,7 @@ fn run_cli_command_fallback(args: &[String], sidecar_error: Option<String>) -> S
 
             if result.status.success() {
                 // 尝试解析 JSON 输出
-                let data = if stdout.trim().starts_with('{') || stdout.trim().starts_with('[') {
-                    serde_json::from_str(&stdout).ok()
-                } else {
-                    None
-                };
+                let data = parse_json_stdout(&stdout);
 
                 SkillResult {
                     success: true,
@@ -102,11 +110,7 @@ fn run_cli_command_fallback(args: &[String], sidecar_error: Option<String>) -> S
                     let stderr = String::from_utf8_lossy(&result.stderr).to_string();
 
                     if result.status.success() {
-                        let data = if stdout.trim().starts_with('{') || stdout.trim().starts_with('[') {
-                            serde_json::from_str(&stdout).ok()
-                        } else {
-                            None
-                        };
+                        let data = parse_json_stdout(&stdout);
 
                         SkillResult {
                             success: true,
