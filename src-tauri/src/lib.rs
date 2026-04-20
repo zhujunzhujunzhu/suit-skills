@@ -39,6 +39,19 @@ pub fn run() {
                     })
                     .build(app)?;
             }
+
+            #[cfg(not(target_os = "windows"))]
+            {
+                use signal_hook::consts::TERM_SIGNALS;
+                use signal_hook::iterator::Signals;
+                let signals = Signals::new(TERM_SIGNALS).unwrap();
+                std::thread::spawn(move || {
+                    for signal in signals.forever() {
+                        println!("Received termination signal: {:?}", signal);
+                    }
+                });
+            }
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
