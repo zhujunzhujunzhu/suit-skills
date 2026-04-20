@@ -14,3 +14,5 @@ src-tauri/target/
 .skills/
 .cursor/
 .claude/worktrees/
+.playwright-mcp/
+screenshots/
