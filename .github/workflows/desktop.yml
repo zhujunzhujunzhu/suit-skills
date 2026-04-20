@@ -1,4 +1,4 @@
-# Desktop bundles: Windows installers (NSIS setup + MSI) and macOS bundle.
+# Desktop bundles: Windows installers (NSIS setup + MSI) and macOS bundles.
 name: Desktop
 
 on:
@@ -23,9 +23,12 @@ jobs:
           - os: windows-latest
             label: windows
             artifact: desktop-windows-setup-msi
+          - os: macos-15-intel
+            label: macos-intel
+            artifact: desktop-macos-intel-x64
           - os: macos-latest
-            label: macos
-            artifact: desktop-macos
+            label: macos-arm64
+            artifact: desktop-macos-apple-silicon-arm64
 
     runs-on: ${{ matrix.os }}
 
@@ -53,7 +56,7 @@ jobs:
         run: npm run build:all && npm run build:sidecar && npm run tauri:build -- --bundles msi,nsis
 
       - name: Build macOS desktop
-        if: matrix.label == 'macos'
+        if: startsWith(matrix.label, 'macos')
         run: npm run build:desktop
 
       - name: Verify Windows installers
