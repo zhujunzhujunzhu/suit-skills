@@ -1,20 +1,26 @@
 {
   "name": "suit-skills",
-  "version": "0.0.9",
+  "version": "0.0.10",
   "type": "module",
-  "description": "A CLI tool for skills management",
+  "description": "A CLI tool for skills management with Web console and Desktop app",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
     "suit-skills": "./dist/index.js"
   },
+  "authors": [
+    {
+      "name": "zhujun",
+      "email": "2693474327@qq.com"
+    }
+  ],
   "publishConfig": {
     "registry": "https://registry.npmjs.org/",
     "access": "public"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/zhujun/suit-skills-cli"
+    "url": "https://github.com/zhujunzhujunzhu/suit-skills.git"
   },
   "scripts": {
     "build": "tsc",
@@ -46,7 +52,9 @@
     "outputPath": "src-tauri/binaries"
   },
   "files": [
-    "dist"
+    "dist",
+    "readme.md",
+    "imgs/*.png"
   ],
   "keywords": [
     "cli",
