@@ -3287,6 +3287,7 @@ version = "0.0.7"
 dependencies = [
  "serde",
  "serde_json",
+ "signal-hook",
  "tauri",
  "tauri-build",
  "tauri-plugin-dialog",
