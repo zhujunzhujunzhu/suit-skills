@@ -46,8 +46,8 @@ type ScopeFilter = 'all' | LocationScope;
 type InstallStrategy = 'overwrite' | 'skip' | 'rename';
 
 const SEARCH_DEBOUNCE_MS = 300;
-const SKILL_CARD_HEIGHT = 210;
-const SKILL_GRID_GAP = 14;
+const SKILL_CARD_HEIGHT = 180;
+const SKILL_GRID_GAP = 12;
 const VIRTUAL_OVERSCAN_ROWS = 4;
 const DEFAULT_SETTINGS: AppSettings = {
   sourceRefreshIntervalMinutes: 5,
