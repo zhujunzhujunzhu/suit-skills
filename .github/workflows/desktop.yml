@@ -82,6 +82,12 @@ jobs:
       GITEE_REPO: gitee.com/zhujun12/suit-skills-cli.git
 
     steps:
+      # 检出仓库以读取 package.json 中的版本号
+      - uses: actions/checkout@v6
+        with:
+          sparse-checkout: package.json
+          sparse-checkout-cone-mode: false
+
       # 下载构建产物
       - name: Download build artifact
         uses: actions/download-artifact@v4
@@ -89,6 +95,70 @@ jobs:
           pattern: desktop-*
           path: desktop-artifacts
           merge-multiple: false
+
+      # 生成版本清单 latest.json，供客户端版本检测使用
+      - name: Generate latest.json
+        shell: bash
+        env:
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+          GITHUB_SHA: ${{ github.sha }}
+        run: |
+          node - <<'EOF'
+          const fs = require('fs');
+          const path = require('path');
+
+          const version = require('./package.json').version;
+          const baseUrl = 'https://gitee.com/zhujun12/suit-skills-cli/raw/desktop-artifacts';
+          const pubDate = new Date().toISOString();
+          const refName = process.env.GITHUB_REF_NAME || '';
+          const sha = (process.env.GITHUB_SHA || '').substring(0, 7);
+
+          function findFile(dir, ext) {
+            try {
+              const files = fs.readdirSync(dir).filter(f => f.endsWith(ext));
+              return files.length > 0 ? path.join(dir, files[0]) : null;
+            } catch { return null; }
+          }
+
+          const platforms = {};
+
+          const winMsi = findFile('desktop-artifacts/desktop-windows-setup-msi/msi', '.msi');
+          if (winMsi) {
+            const filename = path.basename(winMsi);
+            platforms['windows-x86_64'] = {
+              filename,
+              url: `${baseUrl}/desktop-windows-setup-msi/msi/${encodeURIComponent(filename)}`
+            };
+          }
+
+          const macArm = findFile('desktop-artifacts/desktop-macos-apple-silicon-arm64/dmg', '.dmg');
+          if (macArm) {
+            const filename = path.basename(macArm);
+            platforms['darwin-aarch64'] = {
+              filename,
+              url: `${baseUrl}/desktop-macos-apple-silicon-arm64/dmg/${encodeURIComponent(filename)}`
+            };
+          }
+
+          const macX64 = findFile('desktop-artifacts/desktop-macos-intel-x64/dmg', '.dmg');
+          if (macX64) {
+            const filename = path.basename(macX64);
+            platforms['darwin-x86_64'] = {
+              filename,
+              url: `${baseUrl}/desktop-macos-intel-x64/dmg/${encodeURIComponent(filename)}`
+            };
+          }
+
+          const data = {
+            version,
+            pub_date: pubDate,
+            notes: `Source ref: ${refName}, Commit: ${sha}`,
+            platforms
+          };
+
+          fs.writeFileSync('desktop-artifacts/latest.json', JSON.stringify(data, null, 2));
+          console.log('Generated latest.json:\n' + JSON.stringify(data, null, 2));
+          EOF
 
       # 自动同步到你的 Gitee 仓库
       - name: Push to Gitee

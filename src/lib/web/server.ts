@@ -10,6 +10,9 @@ import {
   exportWebInstalledSkill,
   getWebSettings,
   getWebSkillDetail,
+  getWebSkillFileContent,
+  getWebSkillFileTree,
+  getWebTranslationConfig,
   installWebSkill,
   linkWebInstalledSkillToTargets,
   listWebInstallTargets,
@@ -21,9 +24,11 @@ import {
   removeWebInstalledSkill,
   restoreWebBuiltinSources,
   toApiErrorPayload,
+  translateWebText,
   updateWebSettings,
   updateWebInstallTarget,
   updateWebSource,
+  updateWebTranslationConfig,
   WebApiError,
 } from './api.js';
 
@@ -39,6 +44,10 @@ export interface StartedWebServer {
   url: string;
   host: string;
   port: number;
+  /** 初始请求的端口 */
+  requestedPort?: number;
+  /** 尝试次数（1 表示一次成功） */
+  attempts?: number;
 }
 
 const MIME_TYPES: Record<string, string> = {
@@ -72,13 +81,20 @@ function sendText(
   res.end(text);
 }
 
-async function readJsonBody(req: IncomingMessage): Promise<unknown> {
+const DEFAULT_JSON_BODY_MAX_BYTES = 1024 * 1024;
+/** 翻译请求可能携带整份 SKILL.md，单独放宽上限（其余 API 仍用默认 1MB） */
+const TRANSLATE_JSON_BODY_MAX_BYTES = 8 * 1024 * 1024;
+
+async function readJsonBody(
+  req: IncomingMessage,
+  maxBytes = DEFAULT_JSON_BODY_MAX_BYTES,
+): Promise<unknown> {
   const chunks: Buffer[] = [];
   let total = 0;
   for await (const chunk of req) {
     const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
     total += buf.length;
-    if (total > 1024 * 1024) {
+    if (total > maxBytes) {
       throw new WebApiError('PAYLOAD_TOO_LARGE', 'Request body too large', 413);
     }
     chunks.push(buf);
@@ -200,6 +216,23 @@ async function handleApi(
       return;
     }
 
+    // /api/skills/:name/files  和  /api/skills/:name/files/:filePath
+    const skillFilesMatch = req.method === 'GET'
+      ? url.pathname.match(/^\/api\/skills\/([^/]+)\/files(\/.*)?$/)
+      : null;
+    if (skillFilesMatch) {
+      const sName = decodeURIComponent(skillFilesMatch[1]!);
+      const rawFilePath = skillFilesMatch[2];
+      const sourceOpt = { source: url.searchParams.get('source') ?? options.source ?? undefined };
+      if (rawFilePath) {
+        const filePath = decodeURIComponent(rawFilePath.slice(1));
+        sendJson(res, 200, getWebSkillFileContent(ctx, sName, filePath, sourceOpt));
+      } else {
+        sendJson(res, 200, getWebSkillFileTree(ctx, sName, sourceOpt));
+      }
+      return;
+    }
+
     const skillName = routeParam(url.pathname, '/api/skills/');
     if (req.method === 'GET' && skillName) {
       sendJson(
@@ -208,6 +241,25 @@ async function handleApi(
         getWebSkillDetail(ctx, skillName, {
           source: url.searchParams.get('source') ?? options.source,
         }),
+      );
+      return;
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/translation-config') {
+      sendJson(res, 200, getWebTranslationConfig(ctx));
+      return;
+    }
+
+    if (req.method === 'PATCH' && url.pathname === '/api/translation-config') {
+      sendJson(res, 200, updateWebTranslationConfig(ctx, (await readJsonBody(req)) as never));
+      return;
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/translate') {
+      sendJson(
+        res,
+        200,
+        await translateWebText(ctx, (await readJsonBody(req, TRANSLATE_JSON_BODY_MAX_BYTES)) as never),
       );
       return;
     }
@@ -378,23 +430,47 @@ export function startWebServer(
 ): Promise<StartedWebServer> {
   const host = options.host ?? '127.0.0.1';
   const requestedPort = options.port ?? 4587;
+  const maxAttempts = 3;
 
-  return new Promise((resolvePromise, reject) => {
-    const server = createWebServer(ctx, options);
-    server.once('error', reject);
-    server.listen(requestedPort, host, () => {
-      const address = server.address();
-      const port =
-        typeof address === 'object' && address !== null
-          ? address.port
-          : requestedPort;
-      server.off('error', reject);
-      resolvePromise({
-        server,
-        host,
-        port,
-        url: `http://${host}:${port}`,
+  return new Promise((resolvePromise, rejectPromise) => {
+    let attempt = 0;
+    let currentPort = requestedPort;
+
+    const tryListen = () => {
+      const server = createWebServer(ctx, options);
+
+      server.once('error', (error: NodeJS.ErrnoException) => {
+        if (
+          error.code === 'EADDRINUSE' &&
+          attempt < maxAttempts &&
+          currentPort < 65535
+        ) {
+          attempt++;
+          currentPort++;
+          server.close();
+          tryListen();
+        } else {
+          rejectPromise(error);
+        }
       });
-    });
+
+      server.listen(currentPort, host, () => {
+        const address = server.address();
+        const port =
+          typeof address === 'object' && address !== null
+            ? address.port
+            : currentPort;
+        resolvePromise({
+          server,
+          host,
+          port,
+          url: `http://${host}:${port}`,
+          requestedPort,
+          attempts: attempt + 1,
+        });
+      });
+    };
+
+    tryListen();
   });
 }

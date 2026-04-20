@@ -2,6 +2,7 @@ import {
   type MouseEvent,
   type ReactNode,
   type RefObject,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -17,30 +18,47 @@ import {
   fetchInstallTargets,
   fetchSettings,
   fetchSkillDetail,
+  fetchSkillFileContent,
+  fetchSkillFiles,
   fetchSkills,
   fetchSources,
+  fetchTranslationConfig,
   installSkill,
   linkInstalledSkillTargets,
   removeInstallTarget,
   removeSource,
   removeInstalledSkill,
   restoreBuiltinSources,
+  translateText,
   updateSettings,
   updateInstallTarget,
   updateSource,
+  updateTranslationConfig,
   type AppSettings,
   type InstalledSkill,
   type InstallTargetOption,
+  type SkillFileContent,
+  type SkillFileNode,
   type SkillLibraryTarget,
   type SkillDetail,
   type SkillSummary,
   type Source,
   type SourceWarning,
+  type TranslationConfig,
 } from './api/client';
 import { RAW_API, translateApiError } from './i18n/apiErrors';
 import { changeLanguageWithStorage, type AppLocale } from './i18n';
+import {
+  fetchLatestRelease,
+  compareSemver,
+  detectPlatform,
+  GITEE_REPO_URL,
+  PLATFORM_LABELS,
+  type DesktopRelease,
+  type DesktopPlatform,
+} from './api/download';
 
-type View = 'library' | 'installed' | 'sources' | 'settings';
+type View = 'library' | 'installed' | 'sources' | 'settings' | 'download' | 'skill-detail';
 type LocationScope = 'project' | 'global';
 type ScopeFilter = 'all' | LocationScope;
 type InstallStrategy = 'overwrite' | 'skip' | 'rename';
@@ -55,6 +73,13 @@ const DEFAULT_SETTINGS: AppSettings = {
 };
 
 const icons = {
+  download: (
+    <>
+      <path d="M12 2v13" />
+      <path d="m7 11 5 5 5-5" />
+      <path d="M4 18h16" />
+    </>
+  ),
   terminal: (
     <>
       <path d="M4 5h16v14H4z" />
@@ -125,6 +150,40 @@ const icons = {
     <>
       <path d="M6 6l12 12" />
       <path d="M18 6 6 18" />
+    </>
+  ),
+  translate: (
+    <>
+      <path d="M3 5h8" />
+      <path d="M7 3v2" />
+      <path d="M4 12c0-3.3 2.7-6 6-6s6 2.7 6 6" />
+      <path d="m7 12 2 2" />
+      <path d="M12 17h9" />
+      <path d="M16 13v8" />
+      <path d="m13 20 3-3 3 3" />
+    </>
+  ),
+  folder: (
+    <>
+      <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+    </>
+  ),
+  file: (
+    <>
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+      <path d="M14 2v6h6" />
+    </>
+  ),
+  'chevron-right': (
+    <path d="M9 18l6-6-6-6" />
+  ),
+  'chevron-down': (
+    <path d="M6 9l6 6 6-6" />
+  ),
+  'arrow-left': (
+    <>
+      <path d="m12 19-7-7 7-7" />
+      <path d="M19 12H5" />
     </>
   ),
 };
@@ -392,6 +451,8 @@ const VIEW_KEYS: Record<View, string> = {
   installed: 'installed',
   sources: 'sources',
   settings: 'settings',
+  download: 'download',
+  'skill-detail': 'skills',
 };
 
 function viewFromHash(): View {
@@ -434,6 +495,12 @@ export default function App() {
   const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
   const [sourceName, setSourceName] = useState('');
   const [sourceUrl, setSourceUrl] = useState('');
+  const [updateAvailable, setUpdateAvailable] = useState<DesktopRelease | null>(null);
+  const [updateDismissed, setUpdateDismissed] = useState(false);
+  const [currentAppVersion, setCurrentAppVersion] = useState<string | null>(null);
+  const [detailSkillName, setDetailSkillName] = useState('');
+  const [prevView, setPrevView] = useState<View>('library');
+  const [translationConfig, setTranslationConfig] = useState<TranslationConfig>({ provider: 'none' });
   const skillRequestId = useRef(0);
   const detailRequestId = useRef(0);
   const installedRequestId = useRef(0);
@@ -539,6 +606,35 @@ export default function App() {
     }
   }
 
+  async function loadTranslationConfig() {
+    try {
+      setTranslationConfig(await fetchTranslationConfig());
+    } catch {
+      setTranslationConfig({ provider: 'none' });
+    }
+  }
+
+  async function saveTranslationConfig(next: TranslationConfig) {
+    try {
+      const updated = await updateTranslationConfig(next);
+      setTranslationConfig(updated);
+      notify(t('toast.translationSaved', { defaultValue: '翻译配置已保存' }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  function openSkillDetail(name: string) {
+    setPrevView(view);
+    setDetailSkillName(name);
+    setView('skill-detail');
+  }
+
+  function openSettings() {
+    setPrevView(view);
+    setView('settings');
+  }
+
   async function refreshInstallTargets() {
     try {
       const { library, targets } = await fetchInstallTargets();
@@ -617,6 +713,11 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    void loadTranslationConfig();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
     void refreshInstallTargets();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -630,6 +731,32 @@ export default function App() {
     window.addEventListener('hashchange', handler);
     return () => window.removeEventListener('hashchange', handler);
   }, []);
+
+  // 桌面端自动检测新版本
+  useEffect(() => {
+    if (!isDesktop) return;
+    let cancelled = false;
+    async function checkUpdate() {
+      try {
+        // 读取当前桌面应用版本
+        const { getVersion } = await import('@tauri-apps/api/app');
+        const currentVersion = await getVersion();
+        if (cancelled) return;
+        setCurrentAppVersion(currentVersion);
+
+        const release = await fetchLatestRelease();
+        if (cancelled || !release) return;
+        if (compareSemver(release.version, currentVersion) > 0) {
+          setUpdateAvailable(release);
+        }
+      } catch {
+        // 检测失败时静默处理
+      }
+    }
+    void checkUpdate();
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isDesktop]);
 
   useEffect(() => {
     const timer = window.setTimeout(
@@ -957,8 +1084,10 @@ export default function App() {
     }
   }
 
+  const shellNoRail = view === 'skill-detail' || view === 'settings';
+
   return (
-    <div className="app-shell">
+    <div className={shellNoRail ? 'app-shell app-shell--no-rail' : 'app-shell'}>
       <header
         className="topbar"
         data-tauri-drag-region
@@ -984,7 +1113,11 @@ export default function App() {
                   ? t('crumb.viewInstalled')
                   : view === 'sources'
                     ? t('crumb.viewSources')
-                    : t('crumb.viewSettings', { defaultValue: '设置' })}
+                    : view === 'skill-detail'
+                      ? t('crumb.viewSkillDetail', { defaultValue: '技能详情' })
+                      : view === 'download'
+                        ? t('crumb.viewDownload', { defaultValue: '下载' })
+                        : t('crumb.viewSettings', { defaultValue: '设置' })}
             </em>
           </div>
           <div className="topbar-actions">
@@ -1004,7 +1137,7 @@ export default function App() {
               className="icon-button"
               aria-label={t('topbar.settings', { defaultValue: '设置' })}
               title={t('topbar.settings', { defaultValue: '设置' })}
-              onClick={() => setView('settings')}
+              onClick={openSettings}
             >
               <Icon name="settings" />
             </button>
@@ -1045,19 +1178,40 @@ export default function App() {
         </div>
       </header>
 
-      <aside className="rail">
-        <nav className="nav" aria-label={t('nav.primary')}>
-          <NavButton active={view === 'library'} onClick={() => setView('library')} icon="database" label={t('nav.skills')} />
-          <NavButton active={view === 'installed'} onClick={() => setView('installed')} icon="check" label={t('nav.installed')} />
-          <NavButton active={view === 'sources'} onClick={() => setView('sources')} icon="terminal" label={t('nav.sources')} />
-        </nav>
-        <div className="rail-status">
-          <span>{t('rail.indexLabel')}</span>
-          <strong><i /> {t('rail.ready')}</strong>
-        </div>
-      </aside>
+      {!shellNoRail ? (
+        <aside className="rail">
+          <nav className="nav" aria-label={t('nav.primary')}>
+            <NavButton active={view === 'library'} onClick={() => setView('library')} icon="database" label={t('nav.skills')} />
+            <NavButton active={view === 'installed'} onClick={() => setView('installed')} icon="check" label={t('nav.installed')} />
+            <NavButton active={view === 'sources'} onClick={() => setView('sources')} icon="terminal" label={t('nav.sources')} />
+            <NavButton
+              active={view === 'download'}
+              onClick={() => setView('download')}
+              icon="download"
+              label={t('nav.download', { defaultValue: '下载' })}
+              badge={updateAvailable && !updateDismissed ? true : undefined}
+            />
+          </nav>
+          <div className="rail-status">
+            <span>{t('rail.indexLabel')}</span>
+            <strong><i /> {t('rail.ready')}</strong>
+          </div>
+        </aside>
+      ) : null}
 
-      <main className="workspace">
+      <main
+        className={
+          view === 'skill-detail' ? 'workspace workspace--skill-detail' : 'workspace'
+        }
+      >
+        {updateAvailable && !updateDismissed && isDesktop ? (
+          <UpdateBanner
+            release={updateAvailable}
+            currentVersion={currentAppVersion ?? ''}
+            onDismiss={() => setUpdateDismissed(true)}
+            onGoDownload={() => { setUpdateDismissed(true); setView('download'); }}
+          />
+        ) : null}
         {error ? <ErrorState message={translateApiError(t, error)} /> : null}
         {view === 'library' ? (
           <LibraryView
@@ -1072,7 +1226,8 @@ export default function App() {
             onInstallScopeChange={setInstallScope}
             onInstallStrategyChange={setInstallStrategy}
             onInstallTargetsChange={setInstallTargets}
-            onManageAgents={() => setView('settings')}
+            onManageAgents={openSettings}
+            onOpenDetail={openSkillDetail}
             onQueryChange={setQuery}
             onSelect={setSelected}
             onShare={shareCommand}
@@ -1087,6 +1242,16 @@ export default function App() {
             sources={enabledSources}
             tag={tag}
             tags={tags}
+            translationConfig={translationConfig}
+          />
+        ) : null}
+
+        {view === 'skill-detail' ? (
+          <SkillDetailView
+            skillName={detailSkillName}
+            source={source}
+            translationConfig={translationConfig}
+            onBack={() => setView(prevView)}
           />
         ) : null}
 
@@ -1133,11 +1298,21 @@ export default function App() {
             installTargetRows={installTargetRows}
             library={skillLibrary}
             onAdd={submitCustomInstallTarget}
+            onBack={() => setView(prevView)}
             onDelete={deleteAgent}
             onRefresh={refreshInstallTargets}
             onSettingsChange={saveSettings}
+            onTranslationSave={saveTranslationConfig}
             onUpdate={submitAgentUpdate}
             settings={settings}
+            translationConfig={translationConfig}
+          />
+        ) : null}
+
+        {view === 'download' ? (
+          <DownloadView
+            currentVersion={currentAppVersion}
+            isDesktop={isDesktop}
           />
         ) : null}
       </main>
@@ -1149,11 +1324,13 @@ export default function App() {
 
 function NavButton({
   active,
+  badge,
   icon,
   label,
   onClick,
 }: {
   active: boolean;
+  badge?: boolean;
   icon: keyof typeof icons;
   label: string;
   onClick: () => void;
@@ -1165,7 +1342,10 @@ function NavButton({
       onClick={onClick}
       type="button"
     >
-      <Icon name={icon} />
+      <span className="nav-icon-wrap">
+        <Icon name={icon} />
+        {badge ? <span className="nav-badge" aria-label="有更新" /> : null}
+      </span>
       <span>{label}</span>
     </button>
   );
@@ -1304,6 +1484,7 @@ function LibraryView(props: {
   onInstallStrategyChange: (value: InstallStrategy) => void;
   onInstallTargetsChange: (value: string[]) => void;
   onManageAgents: () => void;
+  onOpenDetail: (name: string) => void;
   onQueryChange: (value: string) => void;
   onSelect: (value: string) => void;
   onShare: () => void;
@@ -1318,6 +1499,7 @@ function LibraryView(props: {
   sources: Source[];
   tag: string;
   tags: string[];
+  translationConfig: TranslationConfig;
 }) {
   const { t } = useTranslation();
   const activeSkill = props.detail ?? props.selectedSummary;
@@ -1478,6 +1660,15 @@ function LibraryView(props: {
             <button className="button" onClick={props.onShare} disabled={!activeSkill}>
               {t('library.share')}
             </button>
+            <button
+              className="button"
+              onClick={() => activeSkill && props.onOpenDetail(activeSkill.name)}
+              disabled={!activeSkill}
+              title="查看完整详情（文件浏览器）"
+            >
+              <Icon name="folder" />
+              详情
+            </button>
           </div>
           <div className="install-options">
             <div className="target-checkboxes">
@@ -1554,7 +1745,11 @@ function LibraryView(props: {
               }
             />
           </div>
-          <MarkdownView markdown={props.detail?.markdown ?? ''} />
+          <TranslateMarkdownView
+            markdown={props.detail?.markdown ?? ''}
+            cacheKey={activeSkill ? `translate:skill:${activeSkill.name}:SKILL.md` : ''}
+            translationConfig={props.translationConfig}
+          />
         </div>
       </aside>
     </section>
@@ -2076,29 +2271,46 @@ function SettingsView({
   installTargetRows,
   library,
   onAdd,
+  onBack,
   onDelete,
   onRefresh,
   onSettingsChange,
+  onTranslationSave,
   onUpdate,
   settings,
+  translationConfig,
 }: {
   installTargetRows: InstallTargetOption[];
   library: SkillLibraryTarget | null;
   onAdd: (id: string, globalDir: string, projectDir: string) => Promise<void>;
+  onBack: () => void;
   onDelete: (id: string) => Promise<void>;
   onRefresh: () => Promise<void>;
   onSettingsChange: (settings: Partial<AppSettings>) => Promise<void>;
+  onTranslationSave: (config: TranslationConfig) => Promise<void>;
   onUpdate: (id: string, globalDir: string, projectDir: string) => Promise<void>;
   settings: AppSettings;
+  translationConfig: TranslationConfig;
 }) {
   const { t } = useTranslation();
   const tt = (key: string, defaultValue: string) => t(key, { defaultValue });
+  const [translationDraft, setTranslationDraft] =
+    useState<TranslationConfig>(translationConfig);
+  const [translationSaving, setTranslationSaving] = useState(false);
+
+  useEffect(() => {
+    setTranslationDraft(translationConfig);
+  }, [translationConfig]);
 
   return (
     <section className="settings-page" aria-label={tt('settings.title', '\u8bbe\u7f6e')}>
       <div className="settings-sheet">
         <div className="settings-head">
-          <div>
+          <button type="button" className="button settings-back-btn" onClick={onBack}>
+            <Icon name="arrow-left" />
+            {tt('settings.back', '\u8fd4\u56de')}
+          </button>
+          <div className="settings-head-text">
             <h1>{tt('settings.title', '\u8bbe\u7f6e')}</h1>
             <p>
               {tt(
@@ -2157,6 +2369,140 @@ function SettingsView({
               }
             />
           </label>
+        </div>
+
+        <div className="settings-group">
+          <h2>{tt('settings.translationTitle', '翻译服务')}</h2>
+          <p className="settings-hint">
+            {tt(
+              'settings.translationHint',
+              '修改后请点击「保存翻译设置」写入配置文件，不会在输入时自动保存。',
+            )}
+          </p>
+          <label className="settings-row">
+            <span>
+              <b>{tt('settings.translationProvider', '翻译提供商')}</b>
+              <em>{tt('settings.translationProviderHint', '选择翻译英文 Skill 内容所使用的服务')}</em>
+            </span>
+            <select
+              value={translationDraft.provider}
+              onChange={(event) =>
+                setTranslationDraft((d) => ({
+                  ...d,
+                  provider: event.target.value as TranslationConfig['provider'],
+                }))
+              }
+            >
+              <option value="none">{tt('settings.translationNone', '不启用')}</option>
+              <option value="openai">{tt('settings.translationOpenai', 'OpenAI 兼容 API')}</option>
+              <option value="cli">{tt('settings.translationCli', '本地 AI CLI 命令')}</option>
+            </select>
+          </label>
+
+          {translationDraft.provider === 'openai' ? (
+            <>
+              <label className="settings-row">
+                <span>
+                  <b>{tt('settings.translationApiUrl', 'API 地址')}</b>
+                  <em>{tt('settings.translationApiUrlHint', '留空使用 OpenAI 默认地址')}</em>
+                </span>
+                <input
+                  type="text"
+                  placeholder="https://api.openai.com/v1"
+                  value={translationDraft.apiBaseUrl ?? ''}
+                  onChange={(event) =>
+                    setTranslationDraft((d) => ({ ...d, apiBaseUrl: event.target.value }))
+                  }
+                />
+              </label>
+              <label className="settings-row">
+                <span><b>{tt('settings.translationApiKey', 'API Key')}</b></span>
+                <input
+                  type="password"
+                  placeholder="sk-..."
+                  value={translationDraft.apiKey ?? ''}
+                  onChange={(event) =>
+                    setTranslationDraft((d) => ({ ...d, apiKey: event.target.value }))
+                  }
+                />
+              </label>
+              <label className="settings-row">
+                <span>
+                  <b>{tt('settings.translationModel', '模型')}</b>
+                  <em>{tt('settings.translationModelHint', '留空使用 gpt-4o-mini')}</em>
+                </span>
+                <input
+                  type="text"
+                  placeholder="gpt-4o-mini"
+                  value={translationDraft.model ?? ''}
+                  onChange={(event) =>
+                    setTranslationDraft((d) => ({ ...d, model: event.target.value }))
+                  }
+                />
+              </label>
+            </>
+          ) : null}
+
+          {translationDraft.provider === 'cli' ? (
+            <>
+              <label className="settings-row">
+                <span>
+                  <b>{tt('settings.translationCliCmd', 'CLI 命令')}</b>
+                  <em>
+                    {tt(
+                      'settings.translationCliCmdHint',
+                      '如 claude、openai 等，内容通过 stdin 传入',
+                    )}
+                  </em>
+                </span>
+                <input
+                  type="text"
+                  placeholder="claude"
+                  value={translationDraft.cliCommand ?? ''}
+                  onChange={(event) =>
+                    setTranslationDraft((d) => ({ ...d, cliCommand: event.target.value }))
+                  }
+                />
+              </label>
+              <label className="settings-row">
+                <span>
+                  <b>{tt('settings.translationCliArgs', '附加参数')}</b>
+                  <em>{tt('settings.translationCliArgsHint', '空格分隔，如 --model claude-opus-4-5')}</em>
+                </span>
+                <input
+                  type="text"
+                  placeholder="--model claude-opus-4-5"
+                  value={(translationDraft.cliArgs ?? []).join(' ')}
+                  onChange={(event) =>
+                    setTranslationDraft((d) => ({
+                      ...d,
+                      cliArgs: event.target.value.trim()
+                        ? event.target.value.trim().split(/\s+/)
+                        : [],
+                    }))
+                  }
+                />
+              </label>
+            </>
+          ) : null}
+
+          <div className="settings-row settings-row-actions">
+            <button
+              type="button"
+              className="button primary"
+              disabled={translationSaving}
+              onClick={() => {
+                setTranslationSaving(true);
+                void onTranslationSave(translationDraft).finally(() => {
+                  setTranslationSaving(false);
+                });
+              }}
+            >
+              {translationSaving
+                ? tt('settings.translationSaving', '保存中…')
+                : tt('settings.translationSave', '保存翻译设置')}
+            </button>
+          </div>
         </div>
 
         <div className="settings-agents">
@@ -2501,5 +2847,556 @@ function Info({ label, value }: { label: string; value?: string }) {
       <span>{label}</span>
       <strong>{value || '-'}</strong>
     </div>
+  );
+}
+
+// ─── 更新提示条 ────────────────────────────────────────────────────────────────
+
+function UpdateBanner({
+  currentVersion,
+  onDismiss,
+  onGoDownload,
+  release,
+}: {
+  currentVersion: string;
+  onDismiss: () => void;
+  onGoDownload: () => void;
+  release: DesktopRelease;
+}) {
+  return (
+    <div className="update-banner" role="status">
+      <span className="update-banner-dot" />
+      <span className="update-banner-text">
+        发现新版本 <strong>v{release.version}</strong>
+        {currentVersion ? <>，当前版本 v{currentVersion}</> : null}
+      </span>
+      <button className="button primary update-banner-btn" onClick={onGoDownload}>
+        查看下载
+      </button>
+      <button
+        className="icon-button update-banner-close"
+        aria-label="关闭提示"
+        onClick={onDismiss}
+      >
+        <Icon name="x" />
+      </button>
+    </div>
+  );
+}
+
+// ─── 下载页面 ──────────────────────────────────────────────────────────────────
+
+// ─── 翻译 MarkdownView ──────────────────────────────────────────────────────
+
+const TRANSLATE_CACHE_PREFIX = 'suit-skills-translate:';
+
+function getTranslateCache(key: string): string | null {
+  try {
+    return localStorage.getItem(TRANSLATE_CACHE_PREFIX + key);
+  } catch {
+    return null;
+  }
+}
+
+function setTranslateCache(key: string, value: string): void {
+  try {
+    localStorage.setItem(TRANSLATE_CACHE_PREFIX + key, value);
+  } catch {
+    // ignore
+  }
+}
+
+function TranslateMarkdownView({
+  markdown,
+  cacheKey,
+  translationConfig,
+}: {
+  markdown: string;
+  cacheKey: string;
+  translationConfig: TranslationConfig;
+}) {
+  const [state, setState] = useState<'original' | 'loading' | 'translated'>('original');
+  const [translated, setTranslated] = useState('');
+  const [error, setError] = useState('');
+  const canTranslate = translationConfig.provider !== 'none';
+
+  const handleToggle = useCallback(async () => {
+    if (state === 'translated') {
+      setState('original');
+      return;
+    }
+    if (!markdown.trim()) return;
+
+    const cached = cacheKey ? getTranslateCache(cacheKey) : null;
+    if (cached) {
+      setTranslated(cached);
+      setState('translated');
+      return;
+    }
+
+    setState('loading');
+    setError('');
+    try {
+      const result = await translateText(markdown);
+      if (cacheKey) setTranslateCache(cacheKey, result.translated);
+      setTranslated(result.translated);
+      setState('translated');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '翻译失败');
+      setState('original');
+    }
+  }, [state, markdown, cacheKey]);
+
+  // 当 markdown 变化时重置状态
+  useEffect(() => {
+    setState('original');
+    setError('');
+  }, [markdown]);
+
+  return (
+    <div className="translate-markdown-view">
+      {canTranslate ? (
+        <div className="translate-toolbar">
+          <button
+            className={`button translate-btn ${state === 'translated' ? 'active' : ''}`}
+            onClick={() => void handleToggle()}
+            disabled={state === 'loading' || !markdown.trim()}
+            title={state === 'translated' ? '显示原文' : '翻译为中文'}
+          >
+            <Icon name="translate" />
+            {state === 'loading' ? '翻译中…' : state === 'translated' ? '原文' : '中文'}
+          </button>
+          {error ? <span className="translate-error">{error}</span> : null}
+        </div>
+      ) : null}
+      <MarkdownView markdown={state === 'translated' ? translated : markdown} />
+    </div>
+  );
+}
+
+function FileContentViewer({
+  content,
+  translationConfig,
+  skillName,
+}: {
+  content: SkillFileContent | null;
+  translationConfig: TranslationConfig;
+  skillName: string;
+}) {
+  if (!content) {
+    return <div className="file-content-empty">暂无内容</div>;
+  }
+  if (!content.previewable) {
+    return (
+      <div className="file-content-empty">
+        <Icon name="file" />
+        <span>无法预览此文件（{content.ext || '二进制'}，{(content.size / 1024).toFixed(1)} KB）</span>
+      </div>
+    );
+  }
+  if (content.encoding === 'base64' && content.contentBase64) {
+    const mimeMap: Record<string, string> = {
+      '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
+      '.gif': 'image/gif', '.webp': 'image/webp', '.svg': 'image/svg+xml',
+    };
+    const mime = mimeMap[content.ext] ?? 'image/png';
+    return (
+      <div className="file-content-image">
+        <img src={`data:${mime};base64,${content.contentBase64}`} alt={content.path} />
+      </div>
+    );
+  }
+  const text = content.content ?? '';
+  if (content.ext === '.md') {
+    return (
+      <div className="file-content-markdown">
+        <TranslateMarkdownView
+          markdown={text}
+          cacheKey={`translate:skill:${skillName}:${content.path}`}
+          translationConfig={translationConfig}
+        />
+      </div>
+    );
+  }
+  return (
+    <div className="file-content-code">
+      <pre className="code-block"><code>{text}</code></pre>
+    </div>
+  );
+}
+
+/** 将 API / 缓存等来源的树数据规整为数组，避免 `files` 或 `children` 非数组导致 for…of / .map 抛错 */
+function normalizeSkillFileList(raw: unknown): SkillFileNode[] {
+  if (!Array.isArray(raw)) return [];
+  const out: SkillFileNode[] = [];
+  for (const item of raw) {
+    const node = normalizeSkillFileNode(item);
+    if (node) out.push(node);
+  }
+  return out;
+}
+
+function normalizeSkillFileNode(item: unknown): SkillFileNode | null {
+  if (!item || typeof item !== 'object') return null;
+  const o = item as Record<string, unknown>;
+  const name = typeof o.name === 'string' ? o.name : String(o.name ?? '');
+  const path = typeof o.path === 'string' ? o.path : String(o.path ?? '');
+  if (o.type === 'dir') {
+    return {
+      name,
+      path,
+      type: 'dir',
+      children: normalizeSkillFileList(o.children),
+    };
+  }
+  if (o.type === 'file') {
+    return { name, path, type: 'file' };
+  }
+  return null;
+}
+
+function findSkillMdInTree(nodes: SkillFileNode[] | undefined): SkillFileNode | undefined {
+  if (!Array.isArray(nodes)) return undefined;
+  for (const node of nodes) {
+    if (node.type === 'file' && node.name.toUpperCase() === 'SKILL.MD') {
+      return node;
+    }
+    if (node.type === 'dir') {
+      const kids = node.children;
+      if (Array.isArray(kids) && kids.length > 0) {
+        const found = findSkillMdInTree(kids);
+        if (found) return found;
+      }
+    }
+  }
+  return undefined;
+}
+
+/** 文件路径的所有祖先目录路径（用于默认展开，便于看到子目录中的 SKILL.md） */
+function ancestorDirPaths(filePath: string): string[] {
+  const parts = filePath.split('/').filter(Boolean);
+  if (parts.length <= 1) return [];
+  const dirs: string[] = [];
+  for (let i = 0; i < parts.length - 1; i++) {
+    dirs.push(parts.slice(0, i + 1).join('/'));
+  }
+  return dirs;
+}
+
+function FileTreeNode({
+  node,
+  depth,
+  selectedPath,
+  expandedDirs,
+  onSelectFile,
+  onToggleDir,
+}: {
+  node: SkillFileNode;
+  depth: number;
+  selectedPath: string;
+  expandedDirs: Set<string>;
+  onSelectFile: (path: string) => void;
+  onToggleDir: (path: string) => void;
+}) {
+  const isSelected = node.type === 'file' && node.path === selectedPath;
+
+  if (node.type === 'dir') {
+    const open = expandedDirs.has(node.path);
+    const children = Array.isArray(node.children) ? node.children : [];
+    return (
+      <div className="file-tree-dir">
+        <button
+          type="button"
+          className="file-tree-item file-tree-dir-btn"
+          style={{ paddingLeft: `${8 + depth * 14}px` }}
+          onClick={() => onToggleDir(node.path)}
+        >
+          <Icon name={open ? 'chevron-down' : 'chevron-right'} />
+          <Icon name="folder" />
+          <span>{node.name}</span>
+        </button>
+        {open && children.length > 0 ? (
+          <div className="file-tree-children">
+            {children.map((child) => (
+              <FileTreeNode
+                key={child.path}
+                node={child}
+                depth={depth + 1}
+                selectedPath={selectedPath}
+                expandedDirs={expandedDirs}
+                onSelectFile={onSelectFile}
+                onToggleDir={onToggleDir}
+              />
+            ))}
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      className={`file-tree-item file-tree-file-btn ${isSelected ? 'selected' : ''}`}
+      style={{ paddingLeft: `${8 + depth * 14}px` }}
+      onClick={() => onSelectFile(node.path)}
+    >
+      <Icon name="file" />
+      <span>{node.name}</span>
+    </button>
+  );
+}
+
+function SkillDetailView({
+  skillName,
+  source,
+  translationConfig,
+  onBack,
+}: {
+  skillName: string;
+  source: string;
+  translationConfig: TranslationConfig;
+  onBack: () => void;
+}) {
+  const [files, setFiles] = useState<SkillFileNode[]>([]);
+  const [loadingFiles, setLoadingFiles] = useState(true);
+  const [filesError, setFilesError] = useState('');
+  const [expandedDirs, setExpandedDirs] = useState<Set<string>>(() => new Set());
+  const [selectedPath, setSelectedPath] = useState('');
+  const [fileContent, setFileContent] = useState<SkillFileContent | null>(null);
+  const [loadingContent, setLoadingContent] = useState(false);
+
+  const toggleDir = useCallback((path: string) => {
+    setExpandedDirs((prev) => {
+      const next = new Set(prev);
+      if (next.has(path)) next.delete(path);
+      else next.add(path);
+      return next;
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!skillName) return;
+    setLoadingFiles(true);
+    setFilesError('');
+    setFiles([]);
+    setSelectedPath('');
+    setExpandedDirs(new Set());
+    fetchSkillFiles(skillName, source !== 'all' ? source : undefined)
+      .then((data) => {
+        const files = normalizeSkillFileList(data?.files);
+        setFiles(files);
+        const skillMd = findSkillMdInTree(files);
+        if (skillMd) {
+          setExpandedDirs(new Set(ancestorDirPaths(skillMd.path)));
+          setSelectedPath(skillMd.path);
+        }
+      })
+      .catch((err: unknown) => {
+        setFilesError(err instanceof Error ? err.message : '加载文件列表失败');
+      })
+      .finally(() => setLoadingFiles(false));
+  }, [skillName, source]);
+
+  useEffect(() => {
+    if (!selectedPath || !skillName) return;
+    setLoadingContent(true);
+    setFileContent(null);
+    fetchSkillFileContent(skillName, selectedPath, source !== 'all' ? source : undefined)
+      .then(setFileContent)
+      .catch((err: unknown) => {
+        setFileContent({
+          path: selectedPath,
+          encoding: 'binary',
+          previewable: false,
+          ext: '',
+          size: 0,
+          content: err instanceof Error ? err.message : '加载失败',
+        });
+      })
+      .finally(() => setLoadingContent(false));
+  }, [selectedPath, skillName, source]);
+
+  return (
+    <section className="skill-detail-page">
+      <div className="skill-detail-topbar">
+        <button type="button" className="button" onClick={onBack}>
+          <Icon name="arrow-left" />
+          返回
+        </button>
+        <span className="skill-detail-breadcrumb">
+          <Icon name="database" />
+          {skillName}
+        </span>
+      </div>
+      <div className="skill-detail-body">
+        <aside className="skill-detail-tree">
+          {loadingFiles ? (
+            <div className="state">加载文件树…</div>
+          ) : filesError ? (
+            <div className="state error">{filesError}</div>
+          ) : (
+            <div className="file-tree-root">
+              {files.map((node) => (
+                <FileTreeNode
+                  key={node.path}
+                  node={node}
+                  depth={0}
+                  selectedPath={selectedPath}
+                  expandedDirs={expandedDirs}
+                  onSelectFile={setSelectedPath}
+                  onToggleDir={toggleDir}
+                />
+              ))}
+            </div>
+          )}
+        </aside>
+        <main className="skill-detail-content">
+          {loadingFiles ? (
+            <div className="state">加载中…</div>
+          ) : filesError ? (
+            <div className="state error">{filesError}</div>
+          ) : !selectedPath ? (
+            <div className="file-content-empty">← 从左侧选择文件查看内容</div>
+          ) : loadingContent ? (
+            <div className="state">加载文件内容…</div>
+          ) : (
+            <FileContentViewer
+              content={fileContent}
+              translationConfig={translationConfig}
+              skillName={skillName}
+            />
+          )}
+        </main>
+      </div>
+    </section>
+  );
+}
+
+function DownloadView({
+  currentVersion,
+  isDesktop,
+}: {
+  currentVersion: string | null;
+  isDesktop: boolean;
+}) {
+  const [release, setRelease] = useState<DesktopRelease | null | 'loading'>('loading');
+  const detectedPlatform = useMemo(() => detectPlatform(), []);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchLatestRelease().then((data) => {
+      if (!cancelled) setRelease(data);
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  const platformOrder: DesktopPlatform[] = [
+    'windows-x86_64',
+    'darwin-aarch64',
+    'darwin-x86_64',
+  ];
+
+  return (
+    <section className="download-page">
+      <div className="download-hero">
+        <span className="download-hero-icon">
+          <Icon name="download" />
+        </span>
+        <div>
+          <h1>
+            {isDesktop ? '检查更新' : '下载桌面版'}
+          </h1>
+          <p>
+            {isDesktop
+              ? `当前版本 v${currentVersion ?? '—'}，以下是 Gitee 上的最新构建。`
+              : '下载 Suit Skills 桌面应用，获得更流畅的本地体验。'}
+          </p>
+        </div>
+      </div>
+
+      {release === 'loading' ? (
+        <div className="state">正在获取最新版本信息…</div>
+      ) : release === null ? (
+        <div className="download-error">
+          <p>无法获取版本信息，请稍后重试或直接前往 Gitee 仓库查看。</p>
+          <a
+            href={GITEE_REPO_URL}
+            target="_blank"
+            rel="noreferrer"
+            className="button"
+          >
+            前往 Gitee 仓库
+          </a>
+        </div>
+      ) : (
+        <>
+          <div className="download-version-badge">
+            最新版本 <strong>v{release.version}</strong>
+            <span className="download-date">
+              {new Date(release.pub_date).toLocaleDateString('zh-CN')}
+            </span>
+          </div>
+
+          <div className="download-platforms">
+            {platformOrder.map((key) => {
+              const asset = release.platforms[key];
+              const meta = PLATFORM_LABELS[key];
+              const isCurrent = key === detectedPlatform;
+              return (
+                <div
+                  key={key}
+                  className={`download-card ${isCurrent ? 'recommended' : ''}`}
+                >
+                  {isCurrent ? (
+                    <span className="download-card-badge">推荐</span>
+                  ) : null}
+                  <div className="download-card-info">
+                    <strong>{meta.os}</strong>
+                    <span>{meta.arch}</span>
+                    <code>{asset?.filename ?? meta.ext}</code>
+                  </div>
+                  {asset ? (
+                    <a
+                      href={asset.url}
+                      className="button primary"
+                      download={asset.filename}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      <Icon name="download" />
+                      下载
+                    </a>
+                  ) : (
+                    <span className="download-card-na">暂未提供</span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {release.notes ? (
+            <div className="download-notes">
+              <strong>构建说明</strong>
+              <span>{release.notes}</span>
+            </div>
+          ) : null}
+
+          <div className="download-footer">
+            <a
+              href={`${GITEE_REPO_URL}/tree/desktop-artifacts`}
+              target="_blank"
+              rel="noreferrer"
+              className="button"
+            >
+              查看 Gitee 仓库
+            </a>
+            <p className="download-hint">
+              下载后直接运行安装包即可完成升级，无需卸载旧版本。
+            </p>
+          </div>
+        </>
+      )}
+    </section>
   );
 }

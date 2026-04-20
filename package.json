@@ -25,6 +25,7 @@
   "scripts": {
     "build": "tsc",
     "build:all": "npm run build && npm run build:web",
+    "sync:version": "node scripts/sync-version.mjs",
     "build:web": "vite build --config web/vite.config.ts",
     "build:sidecar": "node scripts/build-sidecar.mjs",
     "build:desktop": "npm run build:all && npm run build:sidecar && npm run tauri:build",

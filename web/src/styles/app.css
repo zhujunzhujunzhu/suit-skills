@@ -43,6 +43,15 @@ button {
   min-height: 100vh;
 }
 
+/* 技能详情：隐藏全局左侧导航后，主区域占满整行 */
+.app-shell--no-rail {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.app-shell--no-rail .workspace {
+  grid-column: 1;
+}
+
 .rail {
   position: sticky;
   top: 52px;
@@ -155,10 +164,28 @@ button {
   grid-column: 2;
   grid-row: 2;
   min-width: 0;
+  /* 允许作为 grid 子项低于内容最小高度，否则内层 overflow:auto 永远不生效 */
+  min-height: 0;
   background: var(--surface);
   --page-gutter: clamp(12px, 1.4vw, 24px);
   --page-max: 1280px;
   --page-wide-max: 1480px;
+}
+
+/* 详情页：限制在主区域内滚动，左侧树与右侧预览各自 overflow（避免整页一起滚） */
+.workspace--skill-detail {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  /* 与顶栏 52px 对齐的视口高度，避免 flex/% 链在部分环境下算不出上限 */
+  height: calc(100vh - 52px);
+  max-height: calc(100vh - 52px);
+}
+
+.workspace--skill-detail .skill-detail-page {
+  flex: 1 1 0;
+  min-height: 0;
 }
 
 .topbar {
@@ -270,9 +297,18 @@ button {
 .settings-head {
   display: flex;
   align-items: flex-start;
-  justify-content: space-between;
   gap: 14px;
   margin-bottom: 16px;
+}
+
+.settings-head-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.settings-back-btn {
+  flex-shrink: 0;
+  margin-top: 2px;
 }
 
 .settings-head h1,
@@ -318,6 +354,18 @@ button {
   width: 18px;
   height: 18px;
   accent-color: var(--accent);
+}
+
+.settings-hint {
+  margin: -4px 0 4px;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.settings-row-actions {
+  justify-content: flex-start;
+  margin-top: 6px;
 }
 
 .settings-agents {
@@ -1641,6 +1689,16 @@ button {
     grid-row: 3;
   }
 
+  /* 窄屏下未渲染 rail 时，主内容紧跟顶栏 */
+  .app-shell--no-rail .workspace {
+    grid-row: 2;
+  }
+
+  .workspace--skill-detail {
+    height: calc(100vh - 100px);
+    max-height: calc(100vh - 100px);
+  }
+
   .console-grid {
     height: auto;
     overflow: visible;
@@ -1706,5 +1764,479 @@ button {
 @media (prefers-reduced-motion: reduce) {
   .source-sync-spinner {
     animation-duration: 1.8s;
+  }
+}
+
+/* ─── 导航徽章（有更新提示点）────────────────────────────────────────────────── */
+
+.nav-icon-wrap {
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+
+.nav-badge {
+  position: absolute;
+  top: -3px;
+  right: -4px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--tertiary);
+  border: 2px solid var(--surface-low);
+}
+
+/* ─── 更新提示条 ──────────────────────────────────────────────────────────────── */
+
+.update-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 20px;
+  background: color-mix(in srgb, var(--surface-mid) 85%, var(--secondary));
+  border-bottom: 1px solid color-mix(in srgb, var(--secondary) 35%, transparent);
+  font-size: 13px;
+}
+
+.update-banner-dot {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--secondary);
+}
+
+.update-banner-text {
+  flex: 1;
+  color: var(--muted);
+}
+
+.update-banner-text strong {
+  color: var(--secondary);
+}
+
+.update-banner-btn {
+  padding: 4px 12px;
+  font-size: 12px;
+  min-height: unset;
+}
+
+.update-banner-close {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+}
+
+/* ─── 下载页面 ────────────────────────────────────────────────────────────────── */
+
+.download-page {
+  padding: 28px 28px 40px;
+  max-width: 760px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.download-hero {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.download-hero-icon {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--primary) 15%, var(--surface-mid));
+  color: var(--primary);
+  flex-shrink: 0;
+}
+
+.download-hero-icon .icon {
+  width: 24px;
+  height: 24px;
+}
+
+.download-hero h1 {
+  margin: 0 0 4px;
+  font-size: 20px;
+  font-family: var(--display);
+}
+
+.download-hero p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.download-version-badge {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--muted);
+  padding: 8px 14px;
+  background: var(--surface-mid);
+  border-radius: var(--radius);
+  border: 1px solid var(--outline-soft);
+}
+
+.download-version-badge strong {
+  color: var(--primary);
+  font-family: var(--mono);
+  font-size: 14px;
+}
+
+.download-date {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--faint);
+}
+
+.download-platforms {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.download-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+  background: var(--surface-low);
+  border: 1px solid var(--outline-soft);
+  border-radius: var(--radius);
+  transition: border-color 0.15s;
+}
+
+.download-card.recommended {
+  border-color: color-mix(in srgb, var(--primary) 50%, transparent);
+  background: color-mix(in srgb, var(--primary) 5%, var(--surface-low));
+}
+
+.download-card-badge {
+  position: absolute;
+  top: -1px;
+  right: 12px;
+  transform: translateY(-50%);
+  background: var(--primary);
+  color: var(--primary-ink);
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 10px;
+  letter-spacing: 0.03em;
+}
+
+.download-card-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+}
+
+.download-card-info strong {
+  font-size: 15px;
+  font-family: var(--display);
+}
+
+.download-card-info span {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.download-card-info code {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--faint);
+}
+
+.download-card .button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+}
+
+.download-card-na {
+  font-size: 12px;
+  color: var(--faint);
+  text-align: center;
+  padding: 6px 0;
+}
+
+.download-notes {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  background: var(--surface-low);
+  border: 1px solid var(--outline-soft);
+  border-radius: var(--radius);
+  font-size: 12px;
+}
+
+.download-notes strong {
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.download-notes span {
+  color: var(--faint);
+  font-family: var(--mono);
+  word-break: break-all;
+}
+
+.download-footer {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.download-hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--faint);
+}
+
+.download-error {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px;
+  background: var(--surface-low);
+  border-radius: var(--radius);
+  border: 1px solid var(--outline-soft);
+}
+
+.download-error p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+@media (max-width: 760px) {
+  .download-platforms {
+    grid-template-columns: 1fr;
+  }
+
+  .download-page {
+    padding: 16px 12px 32px;
+  }
+}
+
+/* ─── 翻译按钮 ─────────────────────────────────────────────────────────────── */
+
+.translate-markdown-view {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.translate-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0 8px;
+}
+
+.translate-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  padding: 4px 10px;
+  height: 26px;
+  border-radius: 13px;
+}
+
+.translate-btn.active {
+  background: var(--accent-muted, rgba(99,102,241,.18));
+  color: var(--accent, #818cf8);
+  border-color: var(--accent-muted, rgba(99,102,241,.25));
+}
+
+.translate-error {
+  font-size: 12px;
+  color: var(--danger, #f87171);
+}
+
+/* ─── Skill 文件浏览器详情页 ─────────────────────────────────────────────── */
+
+.skill-detail-page {
+  display: flex;
+  flex-direction: column;
+  /* flex-basis:0 避免 body 按子内容撑开导致整页滚动 */
+  flex: 1 1 0;
+  min-height: 0;
+  height: 100%;
+  max-height: 100%;
+  overflow: hidden;
+}
+
+.skill-detail-topbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--outline-soft);
+  flex-shrink: 0;
+}
+
+.skill-detail-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+.skill-detail-breadcrumb .icon {
+  color: var(--muted);
+}
+
+.skill-detail-body {
+  display: flex;
+  flex: 1 1 0;
+  overflow: hidden;
+  min-height: 0;
+  min-width: 0;
+}
+
+.skill-detail-tree {
+  width: 240px;
+  flex-shrink: 0;
+  min-height: 0;
+  align-self: stretch;
+  border-right: 1px solid var(--outline-soft);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 6px 0;
+  background: var(--surface-low);
+}
+
+.skill-detail-content {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 16px 20px;
+}
+
+/* 文件树 */
+
+.file-tree-root {
+  font-size: 13px;
+}
+
+.file-tree-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  text-align: left;
+  padding: 4px 8px;
+  border: none;
+  background: transparent;
+  color: var(--foreground);
+  cursor: pointer;
+  border-radius: 4px;
+  margin: 1px 4px;
+  width: calc(100% - 8px);
+  transition: background 0.1s;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.file-tree-item:hover {
+  background: var(--surface-hover, rgba(255,255,255,.06));
+}
+
+.file-tree-item.selected {
+  background: var(--accent-muted, rgba(99,102,241,.18));
+  color: var(--accent, #818cf8);
+}
+
+.file-tree-item .icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+.file-tree-dir-btn .icon:first-child {
+  color: var(--muted);
+}
+
+.file-tree-dir-btn .icon:nth-child(2) {
+  color: #fbbf24;
+}
+
+.file-tree-file-btn .icon {
+  color: var(--muted);
+}
+
+.file-tree-children {
+  /* indent via paddingLeft in component */
+}
+
+/* 文件内容区 */
+
+.file-content-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  height: 200px;
+  color: var(--faint);
+  font-size: 13px;
+  text-align: center;
+}
+
+.file-content-empty .icon {
+  width: 32px;
+  height: 32px;
+  opacity: 0.4;
+}
+
+.file-content-image {
+  display: flex;
+  justify-content: center;
+  padding: 16px;
+}
+
+.file-content-image img {
+  max-width: 100%;
+  max-height: 500px;
+  object-fit: contain;
+  border-radius: var(--radius);
+}
+
+.file-content-code {
+  overflow-x: auto;
+}
+
+.file-content-code .code-block {
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+@media (max-width: 760px) {
+  .skill-detail-tree {
+    width: 180px;
   }
 }

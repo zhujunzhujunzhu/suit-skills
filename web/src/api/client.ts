@@ -778,3 +778,85 @@ export async function exportInstalledSkill(requestBody: {
   URL.revokeObjectURL(url);
   return { status: 'exported', fileName };
 }
+
+// ---------------------------------------------------------------------------
+// Skill 文件浏览器
+// ---------------------------------------------------------------------------
+
+export interface SkillFileNode {
+  name: string;
+  path: string;
+  type: 'file' | 'dir';
+  children?: SkillFileNode[];
+}
+
+export interface SkillFileContent {
+  path: string;
+  content?: string;
+  contentBase64?: string;
+  encoding: 'text' | 'base64' | 'binary';
+  previewable: boolean;
+  ext: string;
+  size: number;
+}
+
+export async function fetchSkillFiles(
+  skillName: string,
+  source?: string,
+): Promise<{ files: SkillFileNode[] }> {
+  return request(withParams(`/api/skills/${encodeURIComponent(skillName)}/files`, { source }));
+}
+
+export async function fetchSkillFileContent(
+  skillName: string,
+  filePath: string,
+  source?: string,
+): Promise<SkillFileContent> {
+  const encodedPath = filePath.split('/').map(encodeURIComponent).join('/');
+  return request(
+    withParams(`/api/skills/${encodeURIComponent(skillName)}/files/${encodedPath}`, { source }),
+  );
+}
+
+// ---------------------------------------------------------------------------
+// 翻译
+// ---------------------------------------------------------------------------
+
+export type TranslationProvider = 'openai' | 'cli' | 'none';
+
+export interface TranslationConfig {
+  provider: TranslationProvider;
+  apiBaseUrl?: string;
+  apiKey?: string;
+  model?: string;
+  cliCommand?: string;
+  cliArgs?: string[];
+}
+
+export interface TranslateResult {
+  translated: string;
+  provider: string;
+}
+
+export async function fetchTranslationConfig(): Promise<TranslationConfig> {
+  return request('/api/translation-config');
+}
+
+export async function updateTranslationConfig(
+  config: Partial<TranslationConfig>,
+): Promise<TranslationConfig> {
+  return request('/api/translation-config', {
+    method: 'PATCH',
+    body: JSON.stringify(config),
+  });
+}
+
+export async function translateText(
+  text: string,
+  targetLang = '简体中文',
+): Promise<TranslateResult> {
+  return request('/api/translate', {
+    method: 'POST',
+    body: JSON.stringify({ text, targetLang }),
+  });
+}
