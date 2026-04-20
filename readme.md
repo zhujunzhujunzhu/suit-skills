@@ -199,15 +199,15 @@ Web 控制台主要页面：
 
 #### 技能库
 
-![技能库](./imgs/web-skill-list.png)
+![技能库](https://unpkg.com/suit-skills@0.0.10/imgs/web-skill-list.png)
 
 #### 已安装技能
 
-![已安装技能](./imgs/web-installed.png)
+![已安装技能](https://unpkg.com/suit-skills@0.0.10/imgs/web-installed.png)
 
 #### Source 管理
 
-![Source 管理](./imgs/web-sources.png)
+![Source 管理](https://unpkg.com/suit-skills@0.0.10/imgs/web-sources.png)
 
 ## 桌面应用
 
