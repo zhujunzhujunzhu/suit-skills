@@ -2,8 +2,9 @@
 name: Publish npm Package
 
 on:
-  release:
-    types: [published]
+  push:
+    branches:
+      - master
   workflow_dispatch:
     inputs:
       bump_type:
