@@ -44,7 +44,7 @@ pub fn run() {
             {
                 use signal_hook::consts::TERM_SIGNALS;
                 use signal_hook::iterator::Signals;
-                let signals = Signals::new(TERM_SIGNALS).unwrap();
+                let mut signals = Signals::new(TERM_SIGNALS).unwrap();
                 std::thread::spawn(move || {
                     for signal in signals.forever() {
                         println!("Received termination signal: {:?}", signal);
