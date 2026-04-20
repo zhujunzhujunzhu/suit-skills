@@ -20,7 +20,8 @@
     "viewLibrary": "skills",
     "viewInstalled": "installed",
     "viewSources": "sources",
-    "viewAgents": "agents"
+    "viewAgents": "agents",
+    "viewSkillDetail": "skill detail"
   },
   "nav": {
     "primary": "Primary",
@@ -49,6 +50,7 @@
   },
   "settings": {
     "title": "Settings",
+    "back": "Back",
     "subtitle": "Tune refresh behavior, desktop closing, and agent targets.",
     "close": "Close settings",
     "refreshTitle": "Source cache",
@@ -60,7 +62,25 @@
     "refresh60": "Every hour",
     "desktopTitle": "Desktop",
     "minimizeToTray": "Close to tray",
-    "minimizeToTrayHint": "The close button hides the window; click the tray icon to restore."
+    "minimizeToTrayHint": "The close button hides the window; click the tray icon to restore.",
+    "translationTitle": "Translation",
+    "translationHint": "Click \"Save translation settings\" to write to config; changes are not saved while typing.",
+    "translationProvider": "Provider",
+    "translationProviderHint": "Service used to translate English skill content",
+    "translationNone": "Disabled",
+    "translationOpenai": "OpenAI-compatible API",
+    "translationCli": "Local AI CLI",
+    "translationApiUrl": "API base URL",
+    "translationApiUrlHint": "Leave empty for default OpenAI URL",
+    "translationApiKey": "API key",
+    "translationModel": "Model",
+    "translationModelHint": "Leave empty for gpt-4o-mini",
+    "translationCliCmd": "CLI command",
+    "translationCliCmdHint": "e.g. claude; prompt is sent on stdin",
+    "translationCliArgs": "Extra arguments",
+    "translationCliArgsHint": "Space-separated, e.g. --model claude-opus-4-5",
+    "translationSave": "Save translation settings",
+    "translationSaving": "Saving…"
   },
   "markdown": {
     "empty": "No SKILL.md content."
@@ -235,7 +255,8 @@
     "customTargetAdded": "Agent added",
     "agentUpdated": "Agent updated",
     "agentRemoved": "Agent removed",
-    "settingsSaved": "Settings saved"
+    "settingsSaved": "Settings saved",
+    "translationSaved": "Translation settings saved"
   },
   "share": {
     "skill": "Skill",

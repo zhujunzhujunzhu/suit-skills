@@ -74,6 +74,8 @@ export interface Config {
    * 未设置或 `true`：在未传 `--agent` / `--env` 时，会把「当前项目下已存在的智能体配置目录」并入目标（弱检测）。
    */
   installTargetsAuto?: boolean;
+  /** 翻译服务配置 */
+  translation?: TranslationConfig;
 }
 
 /** 安装目标 */
@@ -113,4 +115,43 @@ export interface WebInstalledSkill extends SkillMeta {
   path: string;
   sourceName?: string;
   metadataSource: MetadataSource;
+}
+
+/** Skill 目录中的文件树节点 */
+export interface WebSkillFileNode {
+  name: string;
+  path: string;
+  type: 'file' | 'dir';
+  children?: WebSkillFileNode[];
+}
+
+/** Skill 单个文件的内容 */
+export interface WebSkillFileContent {
+  path: string;
+  /** 文本内容（encoding=text 时存在） */
+  content?: string;
+  /** base64 编码内容（encoding=base64 时存在，用于图片等） */
+  contentBase64?: string;
+  encoding: 'text' | 'base64' | 'binary';
+  /** 是否可预览（false 时前端显示「无法预览」提示） */
+  previewable: boolean;
+  /** 文件扩展名，方便前端选择渲染方式 */
+  ext: string;
+  /** 文件大小（字节） */
+  size: number;
+}
+
+/** 翻译服务配置 */
+export interface TranslationConfig {
+  provider: 'openai' | 'cli' | 'none';
+  /** HTTP API 模式：接口基础地址，默认 https://api.openai.com/v1 */
+  apiBaseUrl?: string;
+  /** HTTP API 模式：API Key */
+  apiKey?: string;
+  /** HTTP API 模式：模型名称，默认 gpt-4o-mini */
+  model?: string;
+  /** CLI 模式：可执行命令，如 "claude" 或 "openai" */
+  cliCommand?: string;
+  /** CLI 模式：附加参数，如 ["--model", "claude-opus-4-5"] */
+  cliArgs?: string[];
 }

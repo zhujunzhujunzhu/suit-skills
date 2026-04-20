@@ -2,14 +2,15 @@ import {
   existsSync,
   mkdirSync,
   readdirSync,
+  readFileSync,
   rmSync,
   statSync,
   writeFileSync,
   realpathSync,
 } from 'node:fs';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, execFile } from 'node:child_process';
 import { tmpdir } from 'node:os';
-import { basename, isAbsolute, join, relative, resolve } from 'node:path';
+import { basename, extname, isAbsolute, join, relative, resolve } from 'node:path';
 import type { CliContext } from '../../cli/context.js';
 import {
   assertSourceExists,
@@ -23,7 +24,9 @@ import {
   getEffectiveSourceUrl,
   getBuiltinSourceInfo,
   getSourceRefreshMaxAgeMs,
+  getTranslationConfig,
   normalizeAppSettings,
+  normalizeTranslationConfig,
   restoreBuiltinSources,
   type BuiltinSourceCategory,
 } from '../config.js';
@@ -55,6 +58,8 @@ import type {
   WebInstallTarget,
   WebSkillLibraryTarget,
   WebSkillDetail,
+  WebSkillFileContent,
+  WebSkillFileNode,
   WebSkillSummary,
 } from '../../types/index.js';
 import { parseSkillIdentifier, validateSkillName } from '../../utils/validate.js';
@@ -1573,6 +1578,299 @@ export function removeWebInstallTarget(
   ctx.saveConfig(config);
   clearInstalledTargetsIndex(ctx);
   return listWebInstallTargets(ctx);
+}
+
+// ---------------------------------------------------------------------------
+// Skill 文件浏览器
+// ---------------------------------------------------------------------------
+
+const TEXT_EXTENSIONS = new Set([
+  '.md', '.txt', '.json', '.yaml', '.yml', '.toml', '.xml', '.html', '.htm',
+  '.js', '.ts', '.jsx', '.tsx', '.mjs', '.cjs', '.css', '.scss', '.sass',
+  '.sh', '.bash', '.zsh', '.fish', '.ps1', '.bat', '.cmd',
+  '.py', '.rb', '.go', '.rs', '.java', '.kt', '.swift', '.c', '.cpp', '.h',
+  '.cs', '.php', '.r', '.lua', '.ex', '.exs', '.clj', '.scala', '.hs',
+  '.env', '.gitignore', '.editorconfig', '.prettierrc', '.eslintrc',
+  '.dockerfile', 'dockerfile', '.makefile', 'makefile',
+]);
+
+const IMAGE_EXTENSIONS = new Set([
+  '.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.ico', '.bmp',
+]);
+
+const MAX_TEXT_FILE_SIZE = 512 * 1024; // 512 KB
+
+function classifyFile(filePath: string, size: number): {
+  encoding: 'text' | 'base64' | 'binary';
+  previewable: boolean;
+} {
+  const ext = extname(filePath).toLowerCase();
+  const nameOnly = basename(filePath).toLowerCase();
+  if (TEXT_EXTENSIONS.has(ext) || TEXT_EXTENSIONS.has(nameOnly)) {
+    if (size > MAX_TEXT_FILE_SIZE) {
+      return { encoding: 'text', previewable: false };
+    }
+    return { encoding: 'text', previewable: true };
+  }
+  if (IMAGE_EXTENSIONS.has(ext)) {
+    return { encoding: 'base64', previewable: true };
+  }
+  return { encoding: 'binary', previewable: false };
+}
+
+const IGNORE_NAMES = new Set(['.git', 'node_modules', '__pycache__', '.DS_Store']);
+
+function buildFileTree(dirPath: string, relBase: string): WebSkillFileNode[] {
+  const nodes: WebSkillFileNode[] = [];
+  try {
+    const entries = readdirSync(dirPath, { withFileTypes: true });
+    for (const entry of entries) {
+      if (IGNORE_NAMES.has(entry.name)) continue;
+      const relPath = relBase ? `${relBase}/${entry.name}` : entry.name;
+      const fullPath = join(dirPath, entry.name);
+      let isDir = entry.isDirectory();
+      let isFile = entry.isFile();
+      // 符号链接在 Dirent 上常为「仅 symlink」；需 stat 跟随目标，否则目录软链会被当成文件，子树丢失
+      if (entry.isSymbolicLink()) {
+        try {
+          const st = statSync(fullPath);
+          isDir = st.isDirectory();
+          isFile = st.isFile();
+        } catch {
+          continue;
+        }
+      }
+      if (isDir) {
+        nodes.push({
+          name: entry.name,
+          path: relPath,
+          type: 'dir',
+          children: buildFileTree(fullPath, relPath),
+        });
+      } else if (isFile) {
+        nodes.push({ name: entry.name, path: relPath, type: 'file' });
+      }
+    }
+  } catch {
+    // 忽略权限错误等
+  }
+  nodes.sort((a, b) => {
+    if (a.type !== b.type) return a.type === 'dir' ? -1 : 1;
+    return a.name.localeCompare(b.name);
+  });
+  return nodes;
+}
+
+export function getWebSkillFileTree(
+  ctx: CliContext,
+  skillName: string,
+  options: { source?: string },
+): { files: WebSkillFileNode[] } {
+  if (!validateSkillName(skillName)) {
+    throw new WebApiError('INVALID_SKILL_NAME', 'Invalid skill name', 400);
+  }
+  const config = ctx.loadConfig();
+  const sourceFilter = options.source ?? 'all';
+  const hit = findSkillRow(ctx, config, sourceFilter, skillName);
+  if (!hit) {
+    throw new WebApiError('SKILL_NOT_FOUND', 'Skill not found', 404);
+  }
+  return { files: buildFileTree(hit.skillDir, '') };
+}
+
+export function getWebSkillFileContent(
+  ctx: CliContext,
+  skillName: string,
+  filePath: string,
+  options: { source?: string },
+): WebSkillFileContent {
+  if (!validateSkillName(skillName)) {
+    throw new WebApiError('INVALID_SKILL_NAME', 'Invalid skill name', 400);
+  }
+  if (!filePath || filePath.trim() === '') {
+    throw new WebApiError('INVALID_FILE_PATH', 'File path is required', 400);
+  }
+
+  const config = ctx.loadConfig();
+  const sourceFilter = options.source ?? 'all';
+  const hit = findSkillRow(ctx, config, sourceFilter, skillName);
+  if (!hit) {
+    throw new WebApiError('SKILL_NOT_FOUND', 'Skill not found', 404);
+  }
+
+  const safePath = filePath.replace(/\\/g, '/').replace(/^\/+/, '');
+  const absolutePath = resolve(join(hit.skillDir, safePath));
+  if (!isInsidePath(hit.skillDir, absolutePath)) {
+    throw new WebApiError('PATH_NOT_ALLOWED', 'File path is outside skill directory', 403);
+  }
+  if (!existsSync(absolutePath) || !statSync(absolutePath).isFile()) {
+    throw new WebApiError('FILE_NOT_FOUND', 'File not found', 404);
+  }
+
+  const stat = statSync(absolutePath);
+  const ext = extname(absolutePath).toLowerCase();
+  const { encoding, previewable } = classifyFile(absolutePath, stat.size);
+
+  if (!previewable) {
+    return { path: safePath, encoding, previewable, ext, size: stat.size };
+  }
+
+  if (encoding === 'text') {
+    const content = readFileSync(absolutePath, 'utf8');
+    return { path: safePath, content, encoding, previewable: true, ext, size: stat.size };
+  }
+
+  // base64 (image)
+  const buf = readFileSync(absolutePath);
+  return {
+    path: safePath,
+    contentBase64: buf.toString('base64'),
+    encoding,
+    previewable: true,
+    ext,
+    size: stat.size,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// 翻译
+// ---------------------------------------------------------------------------
+
+export interface WebTranslateRequest {
+  text: string;
+  targetLang?: string;
+}
+
+export interface WebTranslateResult {
+  translated: string;
+  provider: string;
+}
+
+async function translateViaHttpApi(
+  text: string,
+  targetLang: string,
+  apiBaseUrl: string,
+  apiKey: string,
+  model: string,
+): Promise<string> {
+  const url = `${apiBaseUrl.replace(/\/$/, '')}/chat/completions`;
+  const prompt = `Translate the following markdown content to ${targetLang}. Keep all markdown formatting, code blocks, and links intact. Output only the translated text without any extra explanation.\n\n${text}`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model,
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.3,
+    }),
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new WebApiError(
+      'TRANSLATE_API_ERROR',
+      `Translation API returned ${res.status}: ${body.slice(0, 200)}`,
+      502,
+    );
+  }
+  const data = (await res.json()) as {
+    choices?: { message?: { content?: string } }[];
+  };
+  const result = data?.choices?.[0]?.message?.content;
+  if (typeof result !== 'string' || !result.trim()) {
+    throw new WebApiError('TRANSLATE_EMPTY_RESPONSE', 'Translation API returned empty result', 502);
+  }
+  return result;
+}
+
+function translateViaCli(
+  text: string,
+  targetLang: string,
+  command: string,
+  args: string[],
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const prompt = `Translate the following markdown content to ${targetLang}. Keep all markdown formatting, code blocks, and links intact. Output only the translated text without any extra explanation.\n\n${text}`;
+    const child = execFile(command, args, { timeout: 120_000 }, (err, stdout) => {
+      if (err) {
+        reject(new WebApiError('TRANSLATE_CLI_ERROR', `CLI translation failed: ${err.message}`, 502));
+        return;
+      }
+      const result = stdout.trim();
+      if (!result) {
+        reject(new WebApiError('TRANSLATE_EMPTY_RESPONSE', 'CLI translation returned empty result', 502));
+        return;
+      }
+      resolve(result);
+    });
+    if (child.stdin) {
+      child.stdin.write(prompt);
+      child.stdin.end();
+    }
+  });
+}
+
+export async function translateWebText(
+  ctx: CliContext,
+  request: WebTranslateRequest,
+): Promise<WebTranslateResult> {
+  const { text, targetLang = '简体中文' } = request;
+  if (!text || !text.trim()) {
+    throw new WebApiError('INVALID_TEXT', 'Text is required', 400);
+  }
+
+  const config = ctx.loadConfig();
+  const translationConfig = getTranslationConfig(config);
+
+  if (translationConfig.provider === 'none') {
+    throw new WebApiError(
+      'TRANSLATION_NOT_CONFIGURED',
+      'Translation provider is not configured. Please configure it in Settings.',
+      400,
+    );
+  }
+
+  if (translationConfig.provider === 'openai') {
+    const apiBaseUrl = translationConfig.apiBaseUrl || 'https://api.openai.com/v1';
+    const apiKey = translationConfig.apiKey || '';
+    const model = translationConfig.model || 'gpt-4o-mini';
+    if (!apiKey) {
+      throw new WebApiError('TRANSLATION_NO_API_KEY', 'API key is not configured', 400);
+    }
+    const translated = await translateViaHttpApi(text, targetLang, apiBaseUrl, apiKey, model);
+    return { translated, provider: 'openai' };
+  }
+
+  if (translationConfig.provider === 'cli') {
+    const command = translationConfig.cliCommand || '';
+    if (!command) {
+      throw new WebApiError('TRANSLATION_NO_CLI_COMMAND', 'CLI command is not configured', 400);
+    }
+    const args = translationConfig.cliArgs ?? [];
+    const translated = await translateViaCli(text, targetLang, command, args);
+    return { translated, provider: 'cli' };
+  }
+
+  throw new WebApiError('UNKNOWN_PROVIDER', 'Unknown translation provider', 400);
+}
+
+export function updateWebTranslationConfig(
+  ctx: CliContext,
+  request: Partial<import('../../types/index.js').TranslationConfig>,
+): import('../../types/index.js').TranslationConfig {
+  const config = ctx.loadConfig();
+  const merged = { ...(config.translation ?? {}), ...request };
+  config.translation = normalizeTranslationConfig(merged);
+  ctx.saveConfig(config);
+  return getTranslationConfig(config);
+}
+
+export function getWebTranslationConfig(
+  ctx: CliContext,
+): import('../../types/index.js').TranslationConfig {
+  return getTranslationConfig(ctx.loadConfig());
 }
 
 export function toApiErrorPayload(error: unknown): {

@@ -1,6 +1,6 @@
 [package]
 name = "suit-skills-desktop"
-version = "0.0.7"
+version = "0.0.11"
 description = "Suit Skills Desktop Application"
 authors = ["zhujun"]
 edition = "2021"
