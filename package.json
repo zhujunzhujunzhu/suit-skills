@@ -9,7 +9,12 @@
     "suit-skills": "./dist/index.js"
   },
   "publishConfig": {
-    "registry": "https://registry.npmjs.org/"
+    "registry": "https://registry.npmjs.org/",
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/zhujun/suit-skills-cli"
   },
   "scripts": {
     "build": "tsc",
