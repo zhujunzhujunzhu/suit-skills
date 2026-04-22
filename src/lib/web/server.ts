@@ -3,6 +3,7 @@ import { createReadStream, existsSync, statSync } from 'node:fs';
 import { extname, join, normalize, resolve, sep } from 'node:path';
 import type { CliContext } from '../../cli/context.js';
 import { moduleDir } from '../../utils/module.js';
+import { fetchDesktopReleaseManifestText } from './desktop-release-manifest.js';
 import {
   addWebInstallTarget,
   addWebSource,
@@ -127,6 +128,25 @@ async function handleApi(
   try {
     if (req.method === 'GET' && url.pathname === '/api/health') {
       sendJson(res, 200, { ok: true });
+      return;
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/desktop/latest-release') {
+      const body = await fetchDesktopReleaseManifestText();
+      if (body === null) {
+        sendJson(res, 502, {
+          error: {
+            code: 'UPSTREAM_FAILED',
+            message: 'Could not fetch desktop release manifest from upstream',
+          },
+        });
+        return;
+      }
+      res.writeHead(200, {
+        'content-type': 'application/json; charset=utf-8',
+        'cache-control': 'public, max-age=120',
+      });
+      res.end(body);
       return;
     }
 
