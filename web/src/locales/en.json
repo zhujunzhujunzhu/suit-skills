@@ -21,7 +21,8 @@
     "viewInstalled": "installed",
     "viewSources": "sources",
     "viewAgents": "agents",
-    "viewSkillDetail": "skill detail"
+    "viewSkillDetail": "skill detail",
+    "viewDownload": "downloads"
   },
   "nav": {
     "primary": "Primary",
@@ -40,13 +41,18 @@
     "en": "English"
   },
   "topbar": {
+    "download": "Downloads",
     "settings": "Settings",
     "refresh": "Refresh",
     "windowControls": "Window controls",
     "minimize": "Minimize",
     "maximize": "Maximize",
     "close": "Close",
-    "hideToTray": "Hide to tray"
+    "hideToTray": "Hide to tray",
+    "runtimeWeb": "Web",
+    "runtimeDesktop": "Desktop",
+    "latestShort": "Latest",
+    "updateAvailableTitle": "Update available to v{{version}}"
   },
   "settings": {
     "title": "Settings",

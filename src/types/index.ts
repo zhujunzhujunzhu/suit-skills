@@ -25,9 +25,13 @@ export interface AgentMapping {
   projectDir: string;
 }
 
+export type ThemeMode = 'default' | 'custom';
+
 export interface AppSettings {
   sourceRefreshIntervalMinutes: number;
   minimizeToTray: boolean;
+  themeMode: ThemeMode;
+  themeColor: string;
 }
 
 /** Web UI 中展示和管理的 AI coding agent 配置 */
