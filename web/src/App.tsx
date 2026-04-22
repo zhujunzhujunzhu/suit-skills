@@ -1,4 +1,5 @@
 import {
+  type CSSProperties,
   type MouseEvent,
   type ReactNode,
   type RefObject,
@@ -50,6 +51,7 @@ import { RAW_API, translateApiError } from './i18n/apiErrors';
 import { changeLanguageWithStorage, type AppLocale } from './i18n';
 import {
   fetchLatestRelease,
+  fetchLatestWebRelease,
   compareSemver,
   detectPlatform,
   GITEE_REPO_URL,
@@ -70,7 +72,230 @@ const VIRTUAL_OVERSCAN_ROWS = 4;
 const DEFAULT_SETTINGS: AppSettings = {
   sourceRefreshIntervalMinutes: 5,
   minimizeToTray: false,
+  themeMode: 'default',
+  themeColor: '#b7e05a',
 };
+
+const DEFAULT_THEME_COLOR = '#b7e05a';
+
+type ThemeVariableMap = Record<string, string>;
+type ThemeDraft = Pick<AppSettings, 'themeMode' | 'themeColor'>;
+
+const CLASSIC_THEME_VARIABLES: ThemeVariableMap = {
+  '--surface': '#121411',
+  '--surface-lowest': '#0d0f0c',
+  '--surface-low': '#1a1d18',
+  '--surface-mid': '#22251f',
+  '--surface-high': '#2d3129',
+  '--surface-bright': '#3b4035',
+  '--surface-hover': 'rgba(183, 224, 90, 0.1)',
+  '--text': '#ece9dc',
+  '--foreground': '#ece9dc',
+  '--muted': '#c9c5b3',
+  '--text-secondary': '#a6a18f',
+  '--faint': '#898574',
+  '--outline': 'rgba(120, 126, 99, 0.42)',
+  '--outline-soft': 'rgba(120, 126, 99, 0.2)',
+  '--primary': '#b7e05a',
+  '--primary-strong': '#7ea32b',
+  '--primary-ink': '#161d0b',
+  '--secondary': '#efbd67',
+  '--tertiary': '#e9907b',
+  '--accent': '#b7e05a',
+  '--accent-muted': 'rgba(183, 224, 90, 0.18)',
+  '--warning': '#efbd67',
+  '--error': '#ff9d88',
+  '--danger': '#ff9d88',
+  '--shadow-soft': '0 18px 42px rgba(3, 10, 8, 0.22)',
+  '--shadow-strong': '0 28px 90px rgba(2, 8, 6, 0.3)',
+  '--panel-glow': 'inset 0 1px 0 rgba(255, 255, 255, 0.04)',
+};
+
+const THEME_VARIABLE_NAMES = Object.keys(CLASSIC_THEME_VARIABLES);
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function normalizeHexColor(value: string | undefined, fallback = DEFAULT_THEME_COLOR): string {
+  if (!value) return fallback;
+  const trimmed = value.trim();
+  const match = trimmed.match(/^#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/);
+  if (!match) return fallback;
+  const hex = match[1].toLowerCase();
+  if (hex.length === 3) {
+    return `#${hex
+      .split('')
+      .map((char) => `${char}${char}`)
+      .join('')}`;
+  }
+  return `#${hex}`;
+}
+
+function hexToRgb(hex: string): { r: number; g: number; b: number } {
+  const normalized = normalizeHexColor(hex);
+  return {
+    r: Number.parseInt(normalized.slice(1, 3), 16),
+    g: Number.parseInt(normalized.slice(3, 5), 16),
+    b: Number.parseInt(normalized.slice(5, 7), 16),
+  };
+}
+
+function rgbToHex({ r, g, b }: { r: number; g: number; b: number }): string {
+  return `#${[r, g, b]
+    .map((value) => clamp(Math.round(value), 0, 255).toString(16).padStart(2, '0'))
+    .join('')}`;
+}
+
+function mixHex(colorA: string, colorB: string, weightB: number): string {
+  const a = hexToRgb(colorA);
+  const b = hexToRgb(colorB);
+  const weight = clamp(weightB, 0, 1);
+  return rgbToHex({
+    r: a.r + (b.r - a.r) * weight,
+    g: a.g + (b.g - a.g) * weight,
+    b: a.b + (b.b - a.b) * weight,
+  });
+}
+
+function toRgba(hex: string, alpha: number): string {
+  const { r, g, b } = hexToRgb(hex);
+  return `rgba(${r}, ${g}, ${b}, ${clamp(alpha, 0, 1)})`;
+}
+
+function rgbToHsl({
+  r,
+  g,
+  b,
+}: {
+  r: number;
+  g: number;
+  b: number;
+}): { h: number; s: number; l: number } {
+  const rn = r / 255;
+  const gn = g / 255;
+  const bn = b / 255;
+  const max = Math.max(rn, gn, bn);
+  const min = Math.min(rn, gn, bn);
+  const delta = max - min;
+  let h = 0;
+
+  if (delta !== 0) {
+    if (max === rn) {
+      h = ((gn - bn) / delta) % 6;
+    } else if (max === gn) {
+      h = (bn - rn) / delta + 2;
+    } else {
+      h = (rn - gn) / delta + 4;
+    }
+  }
+
+  const l = (max + min) / 2;
+  const s = delta === 0 ? 0 : delta / (1 - Math.abs(2 * l - 1));
+  return {
+    h: ((h * 60) + 360) % 360,
+    s: s * 100,
+    l: l * 100,
+  };
+}
+
+function hslToHex(h: number, s: number, l: number): string {
+  const hue = ((h % 360) + 360) % 360;
+  const sat = clamp(s, 0, 100) / 100;
+  const light = clamp(l, 0, 100) / 100;
+  const chroma = (1 - Math.abs(2 * light - 1)) * sat;
+  const x = chroma * (1 - Math.abs(((hue / 60) % 2) - 1));
+  const m = light - chroma / 2;
+  let r = 0;
+  let g = 0;
+  let b = 0;
+
+  if (hue < 60) {
+    r = chroma;
+    g = x;
+  } else if (hue < 120) {
+    r = x;
+    g = chroma;
+  } else if (hue < 180) {
+    g = chroma;
+    b = x;
+  } else if (hue < 240) {
+    g = x;
+    b = chroma;
+  } else if (hue < 300) {
+    r = x;
+    b = chroma;
+  } else {
+    r = chroma;
+    b = x;
+  }
+
+  return rgbToHex({
+    r: (r + m) * 255,
+    g: (g + m) * 255,
+    b: (b + m) * 255,
+  });
+}
+
+function buildCustomThemeVariables(themeColor: string): ThemeVariableMap {
+  const primary = normalizeHexColor(themeColor);
+  const primaryRgb = hexToRgb(primary);
+  const { h, s, l } = rgbToHsl(primaryRgb);
+  const surfaceBaseS = clamp(8 + s * 0.18, 8, 18);
+  const surface = hslToHex(h, surfaceBaseS, 8);
+  const surfaceLowest = hslToHex(h, surfaceBaseS * 0.9, 5);
+  const surfaceLow = hslToHex(h, surfaceBaseS, 10);
+  const surfaceMid = hslToHex(h, surfaceBaseS + 1, 15);
+  const surfaceHigh = hslToHex(h, surfaceBaseS + 2, 21);
+  const surfaceBright = hslToHex(h, surfaceBaseS + 3, 29);
+  const text = hslToHex(h, clamp(6 + s * 0.08, 6, 16), 93);
+  const muted = hslToHex(h, clamp(8 + s * 0.1, 8, 18), 78);
+  const textSecondary = hslToHex(h, clamp(7 + s * 0.08, 7, 16), 65);
+  const faint = hslToHex(h, clamp(6 + s * 0.07, 6, 14), 53);
+  const primaryStrong = hslToHex(h, clamp(28 + s * 0.28, 28, 72), clamp(l * 0.72, 28, 45));
+  const primaryInk = hslToHex(h, clamp(12 + s * 0.18, 12, 28), 10);
+  const secondary = hslToHex(h + 34, clamp(26 + s * 0.34, 26, 70), clamp(Math.max(l, 62), 62, 72));
+  const tertiary = hslToHex(h - 24, clamp(30 + s * 0.38, 30, 74), clamp(Math.max(l, 64), 64, 74));
+  const accent = hslToHex(h + 10, clamp(24 + s * 0.36, 24, 72), clamp(Math.max(l, 60), 60, 72));
+  const outlineBase = mixHex(primary, text, 0.34);
+  const shadowColor = mixHex(surfaceLowest, primaryStrong, 0.2);
+
+  return {
+    '--surface': surface,
+    '--surface-lowest': surfaceLowest,
+    '--surface-low': surfaceLow,
+    '--surface-mid': surfaceMid,
+    '--surface-high': surfaceHigh,
+    '--surface-bright': surfaceBright,
+    '--surface-hover': toRgba(primary, 0.1),
+    '--text': text,
+    '--foreground': text,
+    '--muted': muted,
+    '--text-secondary': textSecondary,
+    '--faint': faint,
+    '--outline': toRgba(outlineBase, 0.34),
+    '--outline-soft': toRgba(outlineBase, 0.18),
+    '--primary': primary,
+    '--primary-strong': primaryStrong,
+    '--primary-ink': primaryInk,
+    '--secondary': secondary,
+    '--tertiary': tertiary,
+    '--accent': accent,
+    '--accent-muted': toRgba(accent, 0.18),
+    '--warning': secondary,
+    '--error': tertiary,
+    '--danger': tertiary,
+    '--shadow-soft': `0 18px 42px ${toRgba(shadowColor, 0.24)}`,
+    '--shadow-strong': `0 28px 90px ${toRgba(shadowColor, 0.34)}`,
+    '--panel-glow': 'inset 0 1px 0 rgba(255, 255, 255, 0.04)',
+  };
+}
+
+function buildThemePreviewVariables(theme: ThemeDraft): ThemeVariableMap {
+  return theme.themeMode === 'custom'
+    ? buildCustomThemeVariables(theme.themeColor)
+    : CLASSIC_THEME_VARIABLES;
+}
 
 const icons = {
   download: (
@@ -462,6 +687,8 @@ function viewFromHash(): View {
   return (key as View) || 'library';
 }
 
+const WEB_APP_VERSION = __APP_VERSION__;
+
 export default function App() {
   const { t, i18n } = useTranslation();
   const isDesktop = typeof window !== 'undefined' && '__TAURI__' in window;
@@ -498,12 +725,39 @@ export default function App() {
   const [updateAvailable, setUpdateAvailable] = useState<DesktopRelease | null>(null);
   const [updateDismissed, setUpdateDismissed] = useState(false);
   const [currentAppVersion, setCurrentAppVersion] = useState<string | null>(null);
+  const [latestDesktopRelease, setLatestDesktopRelease] =
+    useState<DesktopRelease | null | 'loading'>('loading');
+  const [latestWebVersion, setLatestWebVersion] = useState<string | null | 'loading'>('loading');
   const [detailSkillName, setDetailSkillName] = useState('');
   const [prevView, setPrevView] = useState<View>('library');
   const [translationConfig, setTranslationConfig] = useState<TranslationConfig>({ provider: 'none' });
   const skillRequestId = useRef(0);
   const detailRequestId = useRef(0);
   const installedRequestId = useRef(0);
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const rootStyle = document.documentElement.style;
+
+    for (const name of THEME_VARIABLE_NAMES) {
+      rootStyle.removeProperty(name);
+    }
+
+    if (settings.themeMode !== 'custom') {
+      return;
+    }
+
+    const themeVariables = buildCustomThemeVariables(settings.themeColor);
+    for (const [name, value] of Object.entries(themeVariables)) {
+      rootStyle.setProperty(name, value);
+    }
+
+    return () => {
+      for (const name of THEME_VARIABLE_NAMES) {
+        rootStyle.removeProperty(name);
+      }
+    };
+  }, [settings.themeColor, settings.themeMode]);
 
   function notify(message: string) {
     setToast(message);
@@ -635,6 +889,11 @@ export default function App() {
     setView('settings');
   }
 
+  function openDownload() {
+    setPrevView(view);
+    setView('download');
+  }
+
   async function refreshInstallTargets() {
     try {
       const { library, targets } = await fetchInstallTargets();
@@ -732,25 +991,51 @@ export default function App() {
     return () => window.removeEventListener('hashchange', handler);
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    fetchLatestWebRelease().then((data) => {
+      if (!cancelled) {
+        setLatestWebVersion(data?.version ?? null);
+      }
+    }).catch(() => {
+      if (!cancelled) {
+        setLatestWebVersion(null);
+      }
+    });
+    return () => { cancelled = true; };
+  }, []);
+
   // 桌面端自动检测新版本
   useEffect(() => {
-    if (!isDesktop) return;
     let cancelled = false;
     async function checkUpdate() {
       try {
+        const release = await fetchLatestRelease();
+        if (cancelled) return;
+        setLatestDesktopRelease(release);
+
+        if (!isDesktop) {
+          setUpdateAvailable(null);
+          return;
+        }
+
         // 读取当前桌面应用版本
         const { getVersion } = await import('@tauri-apps/api/app');
         const currentVersion = await getVersion();
         if (cancelled) return;
         setCurrentAppVersion(currentVersion);
 
-        const release = await fetchLatestRelease();
-        if (cancelled || !release) return;
-        if (compareSemver(release.version, currentVersion) > 0) {
+        if (release && compareSemver(release.version, currentVersion) > 0) {
           setUpdateAvailable(release);
+        } else {
+          setUpdateAvailable(null);
         }
       } catch {
         // 检测失败时静默处理
+        if (!cancelled) {
+          setLatestDesktopRelease(null);
+          setUpdateAvailable(null);
+        }
       }
     }
     void checkUpdate();
@@ -832,6 +1117,23 @@ export default function App() {
     () => installed.filter((item) => installedSkillMatches(item, installedQuery)),
     [installed, installedQuery],
   );
+
+  const webUpdateAvailable =
+    latestWebVersion !== null && latestWebVersion !== 'loading'
+      ? compareSemver(latestWebVersion, WEB_APP_VERSION) > 0
+      : false;
+  const runtimeCurrentVersion = isDesktop ? currentAppVersion : WEB_APP_VERSION;
+  const runtimeLatestVersion = isDesktop
+    ? latestDesktopRelease && latestDesktopRelease !== 'loading'
+      ? latestDesktopRelease.version
+      : null
+    : latestWebVersion === 'loading'
+      ? null
+      : latestWebVersion;
+  const runtimeChannelLabel = isDesktop
+    ? t('topbar.runtimeDesktop', { defaultValue: '桌面端' })
+    : t('topbar.runtimeWeb', { defaultValue: 'Web 端' });
+  const runtimeUpdateAvailable = isDesktop ? updateAvailable !== null : webUpdateAvailable;
 
   const selectedSummary =
     skills.find((skill) => skill.name === selected) ?? null;
@@ -1084,7 +1386,8 @@ export default function App() {
     }
   }
 
-  const shellNoRail = view === 'skill-detail' || view === 'settings';
+  const shellNoRail =
+    view === 'skill-detail' || view === 'settings' || view === 'download';
 
   return (
     <div className={shellNoRail ? 'app-shell app-shell--no-rail' : 'app-shell'}>
@@ -1121,6 +1424,15 @@ export default function App() {
             </em>
           </div>
           <div className="topbar-actions">
+            <TopbarDownloadEntry
+              active={view === 'download'}
+              currentVersion={runtimeCurrentVersion}
+              label={t('topbar.download', { defaultValue: '下载' })}
+              latestVersion={runtimeLatestVersion}
+              runtimeLabel={runtimeChannelLabel}
+              updateAvailable={runtimeUpdateAvailable}
+              onClick={openDownload}
+            />
             <select
               id="app-locale-select"
               className="locale-select"
@@ -1184,13 +1496,6 @@ export default function App() {
             <NavButton active={view === 'library'} onClick={() => setView('library')} icon="database" label={t('nav.skills')} />
             <NavButton active={view === 'installed'} onClick={() => setView('installed')} icon="check" label={t('nav.installed')} />
             <NavButton active={view === 'sources'} onClick={() => setView('sources')} icon="terminal" label={t('nav.sources')} />
-            <NavButton
-              active={view === 'download'}
-              onClick={() => setView('download')}
-              icon="download"
-              label={t('nav.download', { defaultValue: '下载' })}
-              badge={updateAvailable && !updateDismissed ? true : undefined}
-            />
           </nav>
           <div className="rail-status">
             <span>{t('rail.indexLabel')}</span>
@@ -1209,7 +1514,10 @@ export default function App() {
             release={updateAvailable}
             currentVersion={currentAppVersion ?? ''}
             onDismiss={() => setUpdateDismissed(true)}
-            onGoDownload={() => { setUpdateDismissed(true); setView('download'); }}
+            onGoDownload={() => {
+              setUpdateDismissed(true);
+              openDownload();
+            }}
           />
         ) : null}
         {error ? <ErrorState message={translateApiError(t, error)} /> : null}
@@ -1313,6 +1621,10 @@ export default function App() {
           <DownloadView
             currentVersion={currentAppVersion}
             isDesktop={isDesktop}
+            latestDesktopRelease={latestDesktopRelease}
+            latestWebVersion={latestWebVersion}
+            onBack={() => setView(prevView)}
+            webVersion={WEB_APP_VERSION}
           />
         ) : null}
       </main>
@@ -1348,6 +1660,64 @@ function NavButton({
       </span>
       <span>{label}</span>
     </button>
+  );
+}
+
+function TopbarDownloadEntry({
+  active,
+  currentVersion,
+  label,
+  latestVersion,
+  onClick,
+  runtimeLabel,
+  updateAvailable,
+}: {
+  active: boolean;
+  currentVersion: string | null;
+  label: string;
+  latestVersion: string | null;
+  onClick: () => void;
+  runtimeLabel: string;
+  updateAvailable: boolean;
+}) {
+  const { t } = useTranslation();
+  return (
+    <div className={`topbar-download ${active ? 'active' : ''}`}>
+      <button
+        type="button"
+        className={`topbar-download-button ${active ? 'active' : ''}`}
+        aria-label={label}
+        title={label}
+        onClick={onClick}
+      >
+        <span className="topbar-download-icon-wrap">
+          <Icon name="download" />
+          {updateAvailable ? <span className="topbar-download-dot" aria-hidden="true" /> : null}
+        </span>
+        <span>{label}</span>
+      </button>
+      <span
+        className={`topbar-version-chip ${updateAvailable ? 'topbar-version-chip--warn' : ''}`}
+        title={`${runtimeLabel} v${currentVersion ?? '—'}`}
+      >
+        <em>{runtimeLabel}</em>
+        <strong>v{currentVersion ?? '—'}</strong>
+      </span>
+      {updateAvailable && latestVersion ? (
+        <span
+          className="topbar-version-chip topbar-version-chip--update"
+          title={t('topbar.updateAvailableTitle', {
+            defaultValue: '可更新到 v{{version}}',
+            version: latestVersion,
+          })}
+        >
+          <i />
+          <span>
+            {t('topbar.latestShort', { defaultValue: '最新' })} v{latestVersion}
+          </span>
+        </span>
+      ) : null}
+    </div>
   );
 }
 
@@ -2297,10 +2667,34 @@ function SettingsView({
   const [translationDraft, setTranslationDraft] =
     useState<TranslationConfig>(translationConfig);
   const [translationSaving, setTranslationSaving] = useState(false);
+  const [themeDraft, setThemeDraft] = useState<ThemeDraft>({
+    themeMode: settings.themeMode,
+    themeColor: settings.themeColor,
+  });
+  const [themeSaving, setThemeSaving] = useState(false);
 
   useEffect(() => {
     setTranslationDraft(translationConfig);
   }, [translationConfig]);
+
+  useEffect(() => {
+    setThemeDraft({
+      themeMode: settings.themeMode,
+      themeColor: settings.themeColor,
+    });
+  }, [settings.themeColor, settings.themeMode]);
+
+  const themePreviewVariables = useMemo(
+    () => buildThemePreviewVariables(themeDraft),
+    [themeDraft],
+  );
+  const themePreviewStyle = themePreviewVariables as CSSProperties;
+  const themeSwatches = [
+    themePreviewVariables['--surface-high'],
+    themePreviewVariables['--primary'],
+    themePreviewVariables['--secondary'],
+    themePreviewVariables['--tertiary'],
+  ];
 
   return (
     <section className="settings-page" aria-label={tt('settings.title', '\u8bbe\u7f6e')}>
@@ -2369,6 +2763,131 @@ function SettingsView({
               }
             />
           </label>
+        </div>
+
+        <div className="settings-group">
+          <h2>{tt('settings.themeTitle', '主题')}</h2>
+          <p className="settings-hint">
+            {tt(
+              'settings.themeHint',
+              '默认保留经典主题色，也可以切换为自定义主色；系统会自动生成整套深色主题。',
+            )}
+          </p>
+          <div className="settings-theme-grid">
+            <button
+              type="button"
+              className={`theme-card ${themeDraft.themeMode === 'default' ? 'active' : ''}`}
+              onClick={() =>
+                setThemeDraft((current) => ({ ...current, themeMode: 'default' }))
+              }
+            >
+              <span className="theme-card-head">
+                <strong>{tt('settings.themeDefault', '默认主题')}</strong>
+                <em>{tt('settings.themeDefaultHint', '经典黄绿配色')}</em>
+              </span>
+              <span className="theme-preview-strip">
+                {[
+                  CLASSIC_THEME_VARIABLES['--surface-high'],
+                  CLASSIC_THEME_VARIABLES['--primary'],
+                  CLASSIC_THEME_VARIABLES['--secondary'],
+                  CLASSIC_THEME_VARIABLES['--tertiary'],
+                ].map((color, index) => (
+                  <i
+                    key={`${color}-${index}`}
+                    className="theme-preview-swatch"
+                    style={{ background: color }}
+                  />
+                ))}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              className={`theme-card ${themeDraft.themeMode === 'custom' ? 'active' : ''}`}
+              onClick={() =>
+                setThemeDraft((current) => ({ ...current, themeMode: 'custom' }))
+              }
+            >
+              <span className="theme-card-head">
+                <strong>{tt('settings.themeCustom', '自定义主题')}</strong>
+                <em>{tt('settings.themeCustomHint', '用主色自动派生整套配色')}</em>
+              </span>
+              <span className="theme-preview-strip">
+                {themeSwatches.map((color, index) => (
+                  <i
+                    key={`${color}-${index}`}
+                    className="theme-preview-swatch"
+                    style={{ background: color }}
+                  />
+                ))}
+              </span>
+            </button>
+          </div>
+
+          <label className="settings-row">
+            <span>
+              <b>{tt('settings.themeColor', '主题主色')}</b>
+              <em>{tt('settings.themeColorHint', '选择后会影响按钮、高亮、卡片强调色和整体氛围')}</em>
+            </span>
+            <div className="theme-color-control">
+              <input
+                type="color"
+                className="theme-color-input"
+                value={normalizeHexColor(themeDraft.themeColor)}
+                disabled={themeDraft.themeMode !== 'custom'}
+                onChange={(event) =>
+                  setThemeDraft((current) => ({
+                    ...current,
+                    themeColor: normalizeHexColor(event.target.value),
+                  }))
+                }
+              />
+              <code className="theme-color-value">
+                {normalizeHexColor(themeDraft.themeColor)}
+              </code>
+            </div>
+          </label>
+
+          <div className="theme-preview-panel" style={themePreviewStyle}>
+            <div className="theme-preview-panel-top">
+              <strong>{tt('settings.themePreview', '主题预览')}</strong>
+              <span>{tt('settings.themePreviewHint', '保存后会立即应用到整个界面')}</span>
+            </div>
+            <div className="theme-preview-panel-body">
+              <div className="theme-preview-surface">
+                <span>{tt('settings.themePreviewSurface', '面板')}</span>
+                <button type="button" className="button primary">
+                  {tt('settings.themePreviewPrimary', '主按钮')}
+                </button>
+              </div>
+              <div className="theme-preview-meta">
+                <i style={{ background: 'var(--primary)' }} />
+                <i style={{ background: 'var(--secondary)' }} />
+                <i style={{ background: 'var(--tertiary)' }} />
+              </div>
+            </div>
+          </div>
+
+          <div className="settings-row settings-row-actions">
+            <button
+              type="button"
+              className="button primary"
+              disabled={themeSaving}
+              onClick={() => {
+                setThemeSaving(true);
+                void onSettingsChange({
+                  themeMode: themeDraft.themeMode,
+                  themeColor: normalizeHexColor(themeDraft.themeColor),
+                }).finally(() => {
+                  setThemeSaving(false);
+                });
+              }}
+            >
+              {themeSaving
+                ? tt('settings.themeSaving', '保存中…')
+                : tt('settings.themeSave', '保存主题设置')}
+            </button>
+          </div>
         </div>
 
         <div className="settings-group">
@@ -2906,7 +3425,7 @@ function setTranslateCache(key: string, value: string): void {
   }
 }
 
-function TranslateMarkdownView({
+function LegacyTranslateMarkdownView({
   markdown,
   cacheKey,
   translationConfig,
@@ -2970,6 +3489,511 @@ function TranslateMarkdownView({
         </div>
       ) : null}
       <MarkdownView markdown={state === 'translated' ? translated : markdown} />
+    </div>
+  );
+}
+
+const TRANSLATE_CACHE_VERSION = 'v2';
+const TRANSLATE_TARGET_LANG = '简体中文';
+const TRANSLATE_CONCURRENCY = 4;
+
+type TranslationDisplayMode = 'original' | 'replace' | 'compare';
+
+interface TranslateTask {
+  key: string;
+  text: string;
+}
+
+interface CachedTranslationEntry {
+  source: string;
+  targetLang: string;
+  translated: string;
+  provider: string;
+  createdAt: number;
+}
+
+const translateMemoryCache = new Map<string, CachedTranslationEntry>();
+const translateInflightCache = new Map<string, Promise<CachedTranslationEntry>>();
+
+function fingerprintText(text: string): string {
+  let hashA = 2166136261;
+  let hashB = 1315423911;
+  for (let index = 0; index < text.length; index += 1) {
+    const code = text.charCodeAt(index);
+    hashA ^= code;
+    hashA = Math.imul(hashA, 16777619);
+    hashB ^= code + 0x9e3779b9 + (hashB << 6) + (hashB >> 2);
+  }
+  return `${text.length}:${(hashA >>> 0).toString(16)}:${(hashB >>> 0).toString(16)}`;
+}
+
+function getBlockTranslateStorageKey(text: string, targetLang: string): string {
+  return `${TRANSLATE_CACHE_PREFIX}${TRANSLATE_CACHE_VERSION}:block:${fingerprintText(text)}:${targetLang}`;
+}
+
+function readBlockTranslationCache(
+  text: string,
+  targetLang: string,
+): CachedTranslationEntry | null {
+  const storageKey = getBlockTranslateStorageKey(text, targetLang);
+  const memoryHit = translateMemoryCache.get(storageKey);
+  if (memoryHit && memoryHit.source === text && memoryHit.targetLang === targetLang) {
+    return memoryHit;
+  }
+  try {
+    const raw = localStorage.getItem(storageKey);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<CachedTranslationEntry>;
+    if (
+      parsed.source !== text ||
+      parsed.targetLang !== targetLang ||
+      typeof parsed.translated !== 'string' ||
+      !parsed.translated.trim()
+    ) {
+      return null;
+    }
+    const entry: CachedTranslationEntry = {
+      source: text,
+      targetLang,
+      translated: parsed.translated,
+      provider: typeof parsed.provider === 'string' ? parsed.provider : 'cache',
+      createdAt: typeof parsed.createdAt === 'number' ? parsed.createdAt : Date.now(),
+    };
+    translateMemoryCache.set(storageKey, entry);
+    return entry;
+  } catch {
+    return null;
+  }
+}
+
+function writeBlockTranslationCache(
+  text: string,
+  targetLang: string,
+  translated: string,
+  provider: string,
+): CachedTranslationEntry {
+  const storageKey = getBlockTranslateStorageKey(text, targetLang);
+  const entry: CachedTranslationEntry = {
+    source: text,
+    targetLang,
+    translated,
+    provider,
+    createdAt: Date.now(),
+  };
+  translateMemoryCache.set(storageKey, entry);
+  try {
+    localStorage.setItem(storageKey, JSON.stringify(entry));
+  } catch {
+    // ignore quota errors
+  }
+  return entry;
+}
+
+async function resolveBlockTranslation(
+  text: string,
+  targetLang: string,
+): Promise<CachedTranslationEntry> {
+  const cached = readBlockTranslationCache(text, targetLang);
+  if (cached) return cached;
+
+  const storageKey = getBlockTranslateStorageKey(text, targetLang);
+  const inflight = translateInflightCache.get(storageKey);
+  if (inflight) return inflight;
+
+  const request = translateText(text, targetLang)
+    .then((result) =>
+      writeBlockTranslationCache(text, targetLang, result.translated, result.provider),
+    )
+    .finally(() => {
+      translateInflightCache.delete(storageKey);
+    });
+
+  translateInflightCache.set(storageKey, request);
+  return request;
+}
+
+function isProbablyEnglishText(text: string): boolean {
+  const normalized = text
+    .replace(/`[^`]*`/g, ' ')
+    .replace(/https?:\/\/\S+/g, ' ')
+    .replace(/\b[a-zA-Z]:\\[^\s]*/g, ' ')
+    .trim();
+  if (!normalized) return false;
+  const latinRuns = normalized.match(/[A-Za-z]{3,}/g) ?? [];
+  if (latinRuns.length === 0) return false;
+  const latinLength = latinRuns.reduce((sum, item) => sum + item.length, 0);
+  const cjkLength = (normalized.match(/[\u4e00-\u9fff]/g) ?? []).length;
+  return latinLength >= Math.max(6, cjkLength * 2);
+}
+
+function getTranslateTaskKey(blockIndex: number, itemIndex?: number): string {
+  return itemIndex === undefined ? `block:${blockIndex}` : `block:${blockIndex}:item:${itemIndex}`;
+}
+
+function collectTranslateTasks(markdown: string, blocks: MarkdownBlock[]): TranslateTask[] {
+  if (!markdown.trim()) return [];
+  const tasks: TranslateTask[] = [];
+  blocks.forEach((block, blockIndex) => {
+    if (block.kind === 'pre') return;
+    if (block.kind === 'ul') {
+      block.items.forEach((item, itemIndex) => {
+        if (isProbablyEnglishText(item)) {
+          tasks.push({ key: getTranslateTaskKey(blockIndex, itemIndex), text: item });
+        }
+      });
+      return;
+    }
+    if (isProbablyEnglishText(block.text)) {
+      tasks.push({ key: getTranslateTaskKey(blockIndex), text: block.text });
+    }
+  });
+  return tasks;
+}
+
+function renderTranslationHint(
+  translated: string | undefined,
+  pending: boolean,
+  failed: boolean,
+  onRetry?: () => void,
+): ReactNode {
+  if (translated) return <p className="translation-line">{translated}</p>;
+  if (pending) return <p className="translation-line pending">翻译中…</p>;
+  if (failed) {
+    return (
+      <div className="translation-line error">
+        <span>翻译失败</span>
+        {onRetry ? (
+          <button
+            className="button translation-retry-btn"
+            onClick={onRetry}
+            type="button"
+          >
+            重试
+          </button>
+        ) : null}
+      </div>
+    );
+  }
+  return null;
+}
+
+function TranslateMarkdownView({
+  markdown,
+  cacheKey,
+  translationConfig,
+}: {
+  markdown: string;
+  cacheKey: string;
+  translationConfig: TranslationConfig;
+}) {
+  const { t } = useTranslation();
+  const blocks = useMemo(
+    () => parseMarkdown(markdown, t('markdown.empty')),
+    [markdown, t],
+  );
+  const tasks = useMemo(
+    () => collectTranslateTasks(markdown, blocks),
+    [blocks, markdown],
+  );
+  const taskKeySet = useMemo(() => new Set(tasks.map((task) => task.key)), [tasks]);
+  const contentIdentity = useMemo(
+    () => `${cacheKey}:${fingerprintText(markdown)}`,
+    [cacheKey, markdown],
+  );
+  const [mode, setMode] = useState<TranslationDisplayMode>('original');
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [translatedByKey, setTranslatedByKey] = useState<Record<string, string>>({});
+  const [failedByKey, setFailedByKey] = useState<Record<string, string>>({});
+  const runIdRef = useRef(0);
+  const canTranslate = translationConfig.provider !== 'none';
+  const canTranslateCurrent = canTranslate && tasks.length > 0;
+  const failedTaskKeys = useMemo(
+    () => tasks.filter((task) => failedByKey[task.key]).map((task) => task.key),
+    [failedByKey, tasks],
+  );
+
+  const progress = useMemo(() => {
+    let completed = 0;
+    let failed = 0;
+    tasks.forEach((task) => {
+      if (translatedByKey[task.key]) completed += 1;
+      else if (failedByKey[task.key]) failed += 1;
+    });
+    return {
+      total: tasks.length,
+      completed,
+      failed,
+    };
+  }, [failedByKey, tasks, translatedByKey]);
+
+  const ensureTranslations = useCallback(async (requestedTaskKeys?: Set<string>) => {
+    const targetTasks = requestedTaskKeys
+      ? tasks.filter((task) => requestedTaskKeys.has(task.key))
+      : tasks;
+    if (!targetTasks.length) return;
+
+    const runId = runIdRef.current + 1;
+    runIdRef.current = runId;
+    setIsLoading(true);
+    setError('');
+    setFailedByKey((prev) => {
+      if (!requestedTaskKeys) return {};
+      const next = { ...prev };
+      requestedTaskKeys.forEach((taskKey) => {
+        delete next[taskKey];
+      });
+      return next;
+    });
+
+    const cachedTranslations: Record<string, string> = {};
+    const groupedTasks = new Map<string, TranslateTask[]>();
+
+    targetTasks.forEach((task) => {
+      const cached = readBlockTranslationCache(task.text, TRANSLATE_TARGET_LANG);
+      if (cached) {
+        cachedTranslations[task.key] = cached.translated;
+        return;
+      }
+      const group = groupedTasks.get(task.text);
+      if (group) group.push(task);
+      else groupedTasks.set(task.text, [task]);
+    });
+
+    if (Object.keys(cachedTranslations).length > 0) {
+      setTranslatedByKey((prev) => ({ ...prev, ...cachedTranslations }));
+      setFailedByKey((prev) => {
+        const next = { ...prev };
+        Object.keys(cachedTranslations).forEach((key) => {
+          delete next[key];
+        });
+        return next;
+      });
+    }
+
+    const queue = Array.from(groupedTasks.entries()).map(([text, relatedTasks]) => ({
+      text,
+      relatedTasks,
+    }));
+
+    if (queue.length === 0) {
+      if (runIdRef.current === runId) setIsLoading(false);
+      return;
+    }
+
+    let hadFailure = false;
+    let cursor = 0;
+
+    const worker = async () => {
+      while (cursor < queue.length) {
+        const currentIndex = cursor;
+        cursor += 1;
+        const current = queue[currentIndex];
+        try {
+          const result = await resolveBlockTranslation(current.text, TRANSLATE_TARGET_LANG);
+          if (runIdRef.current !== runId) return;
+          setTranslatedByKey((prev) => {
+            const next = { ...prev };
+            current.relatedTasks.forEach((task) => {
+              next[task.key] = result.translated;
+            });
+            return next;
+          });
+          setFailedByKey((prev) => {
+            const next = { ...prev };
+            current.relatedTasks.forEach((task) => {
+              delete next[task.key];
+            });
+            return next;
+          });
+        } catch (err) {
+          if (runIdRef.current !== runId) return;
+          hadFailure = true;
+          const message = err instanceof Error ? err.message : '翻译失败';
+          setFailedByKey((prev) => {
+            const next = { ...prev };
+            current.relatedTasks.forEach((task) => {
+              next[task.key] = message;
+            });
+            return next;
+          });
+        }
+      }
+    };
+
+    await Promise.all(
+      Array.from({ length: Math.min(TRANSLATE_CONCURRENCY, queue.length) }, () => worker()),
+    );
+
+    if (runIdRef.current !== runId) return;
+    setIsLoading(false);
+    setError(hadFailure ? '部分内容翻译失败，可重试失败项' : '');
+  }, [tasks]);
+
+  const activateMode = useCallback(
+    async (nextMode: TranslationDisplayMode) => {
+      if (nextMode === 'original') {
+        runIdRef.current += 1;
+        setMode('original');
+        setIsLoading(false);
+        setError('');
+        return;
+      }
+      if (!canTranslateCurrent) return;
+      setMode(nextMode);
+      await ensureTranslations();
+    },
+    [canTranslateCurrent, ensureTranslations],
+  );
+
+  const retryFailedTranslations = useCallback(async () => {
+    if (!failedTaskKeys.length) return;
+    await ensureTranslations(new Set(failedTaskKeys));
+  }, [ensureTranslations, failedTaskKeys]);
+
+  const retrySingleTranslation = useCallback(
+    async (taskKey: string) => {
+      await ensureTranslations(new Set([taskKey]));
+    },
+    [ensureTranslations],
+  );
+
+  useEffect(() => {
+    runIdRef.current += 1;
+    setMode('original');
+    setIsLoading(false);
+    setError('');
+    setTranslatedByKey({});
+    setFailedByKey({});
+  }, [contentIdentity]);
+
+  useEffect(() => () => {
+    runIdRef.current += 1;
+  }, []);
+
+  return (
+    <div className="translate-markdown-view">
+      {canTranslate ? (
+        <div className="translate-toolbar">
+          <button
+            className={`button translate-btn ${mode === 'replace' ? 'active' : ''}`}
+            onClick={() => void activateMode('replace')}
+            disabled={!canTranslateCurrent}
+            title="翻译后直接替换原文"
+            type="button"
+          >
+            <Icon name="translate" />
+            中文替换
+          </button>
+          <button
+            className={`button translate-btn ${mode === 'compare' ? 'active' : ''}`}
+            onClick={() => void activateMode('compare')}
+            disabled={!canTranslateCurrent}
+            title="保留原文并显示中文对照"
+            type="button"
+          >
+            中英对照
+          </button>
+          <button
+            className={`button translate-btn ${mode === 'original' ? 'active' : ''}`}
+            onClick={() => void activateMode('original')}
+            disabled={mode === 'original' && !isLoading}
+            type="button"
+          >
+            原文
+          </button>
+          {progress.failed ? (
+            <button
+              className="button translate-btn"
+              onClick={() => void retryFailedTranslations()}
+              disabled={isLoading}
+              type="button"
+            >
+              重试失败 {progress.failed}
+            </button>
+          ) : null}
+          <span className="translate-progress">
+            {!tasks.length
+              ? '当前内容无需翻译'
+              : isLoading
+                ? `翻译中 ${progress.completed}/${progress.total}`
+                : `已就绪 ${progress.completed}/${progress.total}${progress.failed ? `，失败 ${progress.failed}` : ''}`}
+          </span>
+          {error ? <span className="translate-error">{error}</span> : null}
+        </div>
+      ) : null}
+      <div className="markdown">
+        {blocks.map((block, blockIndex) => {
+          if (block.kind === 'pre') {
+            return (
+              <pre className="code-block" key={blockIndex}>
+                <code>{block.text}</code>
+              </pre>
+            );
+          }
+          if (block.kind === 'ul') {
+            return (
+              <ul key={blockIndex}>
+                {block.items.map((item, itemIndex) => {
+                  const taskKey = getTranslateTaskKey(blockIndex, itemIndex);
+                  const translated = translatedByKey[taskKey];
+                  const failed = Boolean(failedByKey[taskKey]);
+                  const pending =
+                    mode !== 'original' &&
+                    isLoading &&
+                    taskKeySet.has(taskKey) &&
+                    !translated &&
+                    !failed;
+                  const displayText = mode === 'replace' ? translated ?? item : item;
+                  return (
+                    <li key={taskKey}>
+                      <span>{displayText}</span>
+                      {mode === 'compare'
+                        ? renderTranslationHint(
+                            translated,
+                            pending,
+                            failed,
+                            failed ? () => void retrySingleTranslation(taskKey) : undefined,
+                          )
+                        : null}
+                    </li>
+                  );
+                })}
+              </ul>
+            );
+          }
+
+          const taskKey = getTranslateTaskKey(blockIndex);
+          const translated = translatedByKey[taskKey];
+          const failed = Boolean(failedByKey[taskKey]);
+          const pending =
+            mode !== 'original' &&
+            isLoading &&
+            taskKeySet.has(taskKey) &&
+            !translated &&
+            !failed;
+          const displayText = mode === 'replace' ? translated ?? block.text : block.text;
+
+          if (mode === 'compare') {
+            const Tag = block.kind;
+            return (
+              <div className="markdown-compare-block" key={taskKey}>
+                <Tag>{block.text}</Tag>
+                {renderTranslationHint(
+                  translated,
+                  pending,
+                  failed,
+                  failed ? () => void retrySingleTranslation(taskKey) : undefined,
+                )}
+              </div>
+            );
+          }
+
+          if (block.kind === 'h1') return <h1 key={taskKey}>{displayText}</h1>;
+          if (block.kind === 'h2') return <h2 key={taskKey}>{displayText}</h2>;
+          return <p key={taskKey}>{displayText}</p>;
+        })}
+      </div>
     </div>
   );
 }
@@ -3276,20 +4300,31 @@ function SkillDetailView({
 function DownloadView({
   currentVersion,
   isDesktop,
+  latestDesktopRelease,
+  latestWebVersion,
+  onBack,
+  webVersion,
 }: {
   currentVersion: string | null;
   isDesktop: boolean;
+  latestDesktopRelease: DesktopRelease | null | 'loading';
+  latestWebVersion: string | null | 'loading';
+  onBack: () => void;
+  webVersion: string;
 }) {
-  const [release, setRelease] = useState<DesktopRelease | null | 'loading'>('loading');
   const detectedPlatform = useMemo(() => detectPlatform(), []);
-
-  useEffect(() => {
-    let cancelled = false;
-    fetchLatestRelease().then((data) => {
-      if (!cancelled) setRelease(data);
-    });
-    return () => { cancelled = true; };
-  }, []);
+  const release = latestDesktopRelease;
+  const currentRuntimeVersion = isDesktop ? currentVersion : webVersion;
+  const currentRuntimeLabel = isDesktop ? '桌面端' : 'Web 端';
+  const latestRuntimeVersion = isDesktop
+    ? release !== 'loading' && release ? release.version : null
+    : latestWebVersion !== 'loading'
+      ? latestWebVersion
+      : null;
+  const runtimeUpdateAvailable =
+    currentRuntimeVersion && latestRuntimeVersion
+      ? compareSemver(latestRuntimeVersion, currentRuntimeVersion) > 0
+      : false;
 
   const platformOrder: DesktopPlatform[] = [
     'windows-x86_64',
@@ -3299,6 +4334,12 @@ function DownloadView({
 
   return (
     <section className="download-page">
+      <div className="download-topbar">
+        <button type="button" className="button" onClick={onBack}>
+          <Icon name="arrow-left" />
+          返回
+        </button>
+      </div>
       <div className="download-hero">
         <span className="download-hero-icon">
           <Icon name="download" />
@@ -3309,8 +4350,12 @@ function DownloadView({
           </h1>
           <p>
             {isDesktop
-              ? `当前版本 v${currentVersion ?? '—'}，以下是 Gitee 上的最新构建。`
-              : '下载 Suit Skills 桌面应用，获得更流畅的本地体验。'}
+              ? `当前桌面版本 v${currentVersion ?? '—'}，以下是 Gitee 上的最新构建。`
+              : `当前 Web 版本 v${webVersion}${latestWebVersion && latestWebVersion !== 'loading'
+                ? runtimeUpdateAvailable
+                  ? `，npm 最新版本为 v${latestWebVersion}。`
+                  : '，当前已是 npm 最新版本。'
+                : '。'} 下载 Suit Skills 桌面应用，获得更流畅的本地体验。`}
           </p>
         </div>
       </div>
@@ -3331,6 +4376,19 @@ function DownloadView({
         </div>
       ) : (
         <>
+          <div className="download-version-badge download-version-badge--current">
+            当前{currentRuntimeLabel}
+            <strong>v{currentRuntimeVersion ?? '—'}</strong>
+            <span
+              className={
+                runtimeUpdateAvailable
+                  ? 'download-status-tag download-status-tag--update'
+                  : 'download-status-tag'
+              }
+            >
+              {runtimeUpdateAvailable ? '可更新' : '已最新'}
+            </span>
+          </div>
           <div className="download-version-badge">
             最新版本 <strong>v{release.version}</strong>
             <span className="download-date">

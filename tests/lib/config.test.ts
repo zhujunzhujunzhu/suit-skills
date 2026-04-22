@@ -15,6 +15,16 @@ import {
   getConfigPath,
 } from '../../src/lib/config.js';
 
+describe('theme defaults', () => {
+  it('keeps the classic theme as the saved default', () => {
+    const cfg = getDefaultConfig();
+    expect(cfg.settings).toMatchObject({
+      themeMode: 'default',
+      themeColor: '#b7e05a',
+    });
+  });
+});
+
 describe('getDefaultConfig', () => {
   it('sources 首项 name 为 default', () => {
     const cfg = getDefaultConfig();
