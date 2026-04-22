@@ -1,10 +1,13 @@
 /**
  * 桌面应用下载 & 版本检测
  * 数据源：Gitee desktop-artifacts 分支的 latest.json
+ * 浏览器内请走同源 `/api/desktop/latest-release`（由 Web 服务端代理），避免 Gitee raw 无 CORS 头导致跨域失败。
  */
 
 export const GITEE_REPO_URL = 'https://gitee.com/zhujun12/suit-skills-cli';
+/** 与 `src/lib/web/desktop-artifacts-url.ts` 中上游地址保持一致 */
 export const LATEST_JSON_URL = `${GITEE_REPO_URL}/raw/desktop-artifacts/latest.json`;
+export const NPM_LATEST_URL = 'https://registry.npmjs.org/suit-skills/latest';
 
 export interface PlatformAsset {
   filename: string;
@@ -24,13 +27,43 @@ export interface DesktopRelease {
 
 export type DesktopPlatform = keyof DesktopRelease['platforms'];
 
+export interface WebRelease {
+  version: string;
+}
+
 export async function fetchLatestRelease(): Promise<DesktopRelease | null> {
+  if (typeof window !== 'undefined' && '__TAURI__' in window) {
+    try {
+      const { tauriRunCommand } = await import('./tauri');
+      const stdout = await tauriRunCommand(['desktop-release-manifest']);
+      const text = stdout.trim();
+      if (!text) return null;
+      return JSON.parse(text) as DesktopRelease;
+    } catch {
+      return null;
+    }
+  }
   try {
-    const res = await fetch(`${LATEST_JSON_URL}?_t=${Date.now()}`, {
+    const res = await fetch(`/api/desktop/latest-release?_t=${Date.now()}`, {
       cache: 'no-store',
     });
     if (!res.ok) return null;
     return (await res.json()) as DesktopRelease;
+  } catch {
+    return null;
+  }
+}
+
+export async function fetchLatestWebRelease(): Promise<WebRelease | null> {
+  try {
+    const res = await fetch(`${NPM_LATEST_URL}?_t=${Date.now()}`, {
+      cache: 'no-store',
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as Partial<WebRelease>;
+    return typeof data.version === 'string' && data.version.trim()
+      ? { version: data.version.trim() }
+      : null;
   } catch {
     return null;
   }

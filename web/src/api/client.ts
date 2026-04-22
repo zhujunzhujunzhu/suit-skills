@@ -67,6 +67,8 @@ export interface SourceWarning {
 export interface AppSettings {
   sourceRefreshIntervalMinutes: number;
   minimizeToTray: boolean;
+  themeMode: 'default' | 'custom';
+  themeColor: string;
 }
 
 export interface InstallResult {
@@ -269,13 +271,32 @@ function normalizeSettings(value: unknown): AppSettings {
       ? (value as Partial<AppSettings>)
       : {};
   const minutes = Number(raw.sourceRefreshIntervalMinutes);
+  const themeMode = raw.themeMode === 'custom' ? 'custom' : 'default';
+  const themeColor = normalizeHexColor(raw.themeColor, '#b7e05a');
   return {
     sourceRefreshIntervalMinutes:
       Number.isFinite(minutes) && minutes >= 0
         ? Math.min(24 * 60, Math.floor(minutes))
         : 5,
     minimizeToTray: raw.minimizeToTray === true,
+    themeMode,
+    themeColor,
   };
+}
+
+function normalizeHexColor(value: unknown, fallback: string): string {
+  if (typeof value !== 'string') return fallback;
+  const trimmed = value.trim();
+  const match = trimmed.match(/^#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/);
+  if (!match) return fallback;
+  const hex = match[1].toLowerCase();
+  if (hex.length === 3) {
+    return `#${hex
+      .split('')
+      .map((char) => `${char}${char}`)
+      .join('')}`;
+  }
+  return `#${hex}`;
 }
 
 export async function fetchSettings(): Promise<AppSettings> {
@@ -804,6 +825,15 @@ export async function fetchSkillFiles(
   skillName: string,
   source?: string,
 ): Promise<{ files: SkillFileNode[] }> {
+  const tauri = await getTauriApi();
+  if (tauri) {
+    const args = ['skill-files', skillName];
+    if (source) {
+      args.push('--source', source);
+    }
+    const stdout = await tauri.tauriRunCommand(args);
+    return JSON.parse(stdout.trim()) as { files: SkillFileNode[] };
+  }
   return request(withParams(`/api/skills/${encodeURIComponent(skillName)}/files`, { source }));
 }
 
@@ -812,6 +842,15 @@ export async function fetchSkillFileContent(
   filePath: string,
   source?: string,
 ): Promise<SkillFileContent> {
+  const tauri = await getTauriApi();
+  if (tauri) {
+    const args = ['skill-file-content', skillName, '--file', filePath];
+    if (source) {
+      args.push('--source', source);
+    }
+    const stdout = await tauri.tauriRunCommand(args);
+    return JSON.parse(stdout.trim()) as SkillFileContent;
+  }
   const encodedPath = filePath.split('/').map(encodeURIComponent).join('/');
   return request(
     withParams(`/api/skills/${encodeURIComponent(skillName)}/files/${encodedPath}`, { source }),

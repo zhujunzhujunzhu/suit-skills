@@ -22,6 +22,7 @@
     "viewSources": "源",
     "viewAgents": "Agents",
     "viewSkillDetail": "技能详情",
+    "viewDownload": "下载",
     "viewSettings": "\u8bbe\u7f6e"
   },
   "nav": {
@@ -41,13 +42,18 @@
     "en": "English"
   },
   "topbar": {
+    "download": "下载",
     "settings": "\u8bbe\u7f6e",
     "hideToTray": "\u9690\u85cf\u5230\u6258\u76d8",
     "refresh": "刷新",
     "windowControls": "窗口控制",
     "minimize": "最小化",
     "maximize": "最大化",
-    "close": "关闭"
+    "close": "关闭",
+    "runtimeWeb": "Web 端",
+    "runtimeDesktop": "桌面端",
+    "latestShort": "最新",
+    "updateAvailableTitle": "可更新到 v{{version}}"
   },
   "settings": {
     "title": "\u8bbe\u7f6e",
