@@ -367,3 +367,12 @@ pub async fn update_source(app: AppHandle, name: String, enabled: bool) -> Skill
     )
     .await
 }
+
+#[command]
+pub async fn get_desktop_bootstrap(app: AppHandle) -> SkillResult {
+    run_cli_command(
+        &app,
+        vec!["desktop-bootstrap".to_string(), "--json".to_string()],
+    )
+    .await
+}

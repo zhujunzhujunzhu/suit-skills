@@ -111,6 +111,39 @@ export interface ExportResult {
   path?: string;
 }
 
+export type AiEditProvider = 'openai' | 'cli' | 'none';
+
+export interface AiEditConfig {
+  provider: AiEditProvider;
+  apiBaseUrl?: string;
+  apiKey?: string;
+  model?: string;
+  cliCommand?: string;
+  cliArgs?: string[];
+}
+
+interface ApiCallOptions {
+  signal?: AbortSignal;
+}
+
+type TauriApi = Exclude<Awaited<ReturnType<typeof getTauriApi>>, null>;
+type TauriInstalledResponse = Awaited<
+  ReturnType<TauriApi['tauriGetInstalledSkills']>
+>;
+
+const TAURI_INSTALLED_CACHE_TTL_MS = 2_000;
+let tauriInstalledCache:
+  | {
+      expiresAt: number;
+      value?: TauriInstalledResponse;
+      pending?: Promise<TauriInstalledResponse>;
+    }
+  | null = null;
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === 'AbortError';
+}
+
 // 动态检测运行环境并导入 Tauri API
 const getTauriApi = async () => {
   if (typeof window !== 'undefined' && '__TAURI__' in window) {
@@ -159,6 +192,9 @@ async function request<T>(
       ...options,
     });
   } catch (error) {
+    if (isAbortError(error)) {
+      throw error;
+    }
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(`Cannot reach Suit Skills Web API: ${message}`);
   }
@@ -176,6 +212,47 @@ function withParams(
     }
   }
   return `${url.pathname}${url.search}`;
+}
+
+function primeTauriInstalledCache(value: TauriInstalledResponse): void {
+  tauriInstalledCache = {
+    expiresAt: Date.now() + TAURI_INSTALLED_CACHE_TTL_MS,
+    value,
+  };
+}
+
+function invalidateTauriInstalledCache(): void {
+  tauriInstalledCache = null;
+}
+
+async function getCachedTauriInstalledSkills(
+  tauri: TauriApi,
+): Promise<TauriInstalledResponse> {
+  const now = Date.now();
+  if (tauriInstalledCache?.value && tauriInstalledCache.expiresAt > now) {
+    return tauriInstalledCache.value;
+  }
+  if (tauriInstalledCache?.pending) {
+    return tauriInstalledCache.pending;
+  }
+
+  const pending = tauri.tauriGetInstalledSkills({ scope: 'all' })
+    .then((result) => {
+      primeTauriInstalledCache(result);
+      return result;
+    })
+    .catch((error) => {
+      if (tauriInstalledCache?.pending === pending) {
+        tauriInstalledCache = null;
+      }
+      throw error;
+    });
+
+  tauriInstalledCache = {
+    expiresAt: now + TAURI_INSTALLED_CACHE_TTL_MS,
+    pending,
+  };
+  return pending;
 }
 
 function normalizeSource(
@@ -246,7 +323,10 @@ function normalizeSkillSummary(
 }
 
 function normalizeInstalledSkill(
-  skill: Partial<InstalledSkill> & { name?: unknown },
+  skill: Partial<Omit<InstalledSkill, 'scope'>> & {
+    name?: unknown;
+    scope?: unknown;
+  },
 ): InstalledSkill {
   return {
     name: textField(skill.name) ?? '',
@@ -282,6 +362,66 @@ function normalizeSettings(value: unknown): AppSettings {
     themeMode,
     themeColor,
   };
+}
+
+function normalizeTranslationConfig(value: unknown): TranslationConfig {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return { provider: 'none' };
+  }
+  const raw = value as Partial<TranslationConfig>;
+  const provider =
+    raw.provider === 'openai' || raw.provider === 'cli'
+      ? raw.provider
+      : 'none';
+  const normalized: TranslationConfig = { provider };
+  if (provider === 'openai') {
+    const apiBaseUrl = textField(raw.apiBaseUrl);
+    const apiKey = textField(raw.apiKey);
+    const model = textField(raw.model);
+    if (apiBaseUrl) normalized.apiBaseUrl = apiBaseUrl;
+    if (apiKey) normalized.apiKey = apiKey;
+    if (model) normalized.model = model;
+  }
+  if (provider === 'cli') {
+    const cliCommand = textField(raw.cliCommand);
+    if (cliCommand) normalized.cliCommand = cliCommand;
+    if (Array.isArray(raw.cliArgs)) {
+      normalized.cliArgs = raw.cliArgs
+        .map(textField)
+        .filter((item): item is string => typeof item === 'string');
+    }
+  }
+  return normalized;
+}
+
+function normalizeAiEditConfig(value: unknown): AiEditConfig {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return { provider: 'none' };
+  }
+  const raw = value as Partial<AiEditConfig>;
+  const provider =
+    raw.provider === 'openai' || raw.provider === 'cli'
+      ? raw.provider
+      : 'none';
+  const normalized: AiEditConfig = { provider };
+  if (provider === 'openai') {
+    const apiBaseUrl = textField(raw.apiBaseUrl);
+    const apiKey = textField(raw.apiKey);
+    const model = textField(raw.model);
+    if (apiBaseUrl) normalized.apiBaseUrl = apiBaseUrl;
+    if (apiKey) normalized.apiKey = apiKey;
+    if (model) normalized.model = model;
+  }
+  if (provider === 'cli') {
+    const cliCommand = textField(raw.cliCommand);
+    if (cliCommand) normalized.cliCommand = cliCommand;
+    if (Array.isArray(raw.cliArgs)) {
+      normalized.cliArgs = raw.cliArgs
+        .map(textField)
+        .filter((item): item is string => typeof item === 'string');
+    }
+  }
+  return normalized;
 }
 
 function normalizeHexColor(value: unknown, fallback: string): string {
@@ -323,6 +463,36 @@ export async function updateSettings(
       body: JSON.stringify(settings),
     }),
   );
+}
+
+export async function fetchDesktopBootstrap(): Promise<{
+  sources: SourcesResponse;
+  settings: AppSettings;
+  installTargets: {
+    library?: SkillLibraryTarget;
+    targets: InstallTargetOption[];
+  };
+  translationConfig: TranslationConfig;
+  aiEditConfig: AiEditConfig;
+} | null> {
+  const tauri = await getTauriApi();
+  if (!tauri) {
+    return null;
+  }
+  const result = await tauri.tauriGetDesktopBootstrap();
+  return {
+    sources: {
+      defaultSource: result.sources.defaultSource,
+      sources: result.sources.sources.map(normalizeSource),
+    },
+    settings: normalizeSettings(result.settings),
+    installTargets: {
+      library: result.installTargets.library,
+      targets: result.installTargets.targets,
+    },
+    translationConfig: normalizeTranslationConfig(result.translationConfig),
+    aiEditConfig: normalizeAiEditConfig(result.aiEditConfig),
+  };
 }
 
 export async function fetchInstallTargets(): Promise<{
@@ -515,7 +685,7 @@ export async function fetchSkills(params: {
   q?: string;
   tag?: string;
   refresh?: boolean;
-}): Promise<{ items: SkillSummary[]; warnings: SourceWarning[] }> {
+}, options: ApiCallOptions = {}): Promise<{ items: SkillSummary[]; warnings: SourceWarning[] }> {
   const tauri = await getTauriApi();
   if (tauri) {
     const result = await tauri.tauriGetSkillsList({
@@ -525,7 +695,7 @@ export async function fetchSkills(params: {
       refresh: params.refresh,
     });
     // 与已安装页默认「全部范围」一致，否则全局安装的技能在库里会一直显示未安装
-    const installed = await tauri.tauriGetInstalledSkills({ scope: 'all' });
+    const installed = await getCachedTauriInstalledSkills(tauri);
     const installedMap = new Map<string, string[]>();
     for (const item of installed.items) {
       const targets = installedMap.get(item.name) ?? [];
@@ -543,6 +713,7 @@ export async function fetchSkills(params: {
   }
   const result = await request<{ items: SkillSummary[]; warnings: SourceWarning[] }>(
     withParams('/api/skills', params),
+    { signal: options.signal },
   );
   return {
     ...result,
@@ -553,11 +724,12 @@ export async function fetchSkills(params: {
 export async function fetchSkillDetail(
   name: string,
   source?: string,
+  options: ApiCallOptions = {},
 ): Promise<SkillDetail> {
   const tauri = await getTauriApi();
   if (tauri) {
     const result = await tauri.tauriGetSkillDetail(name, source);
-    const installed = await tauri.tauriGetInstalledSkills({ scope: 'all' });
+    const installed = await getCachedTauriInstalledSkills(tauri);
     const targets = installed.items
       .filter((i) => i.name === name)
       .map((i) => i.target);
@@ -575,6 +747,7 @@ export async function fetchSkillDetail(
   }
   const result = await request<SkillDetail>(
     withParams(`/api/skills/${encodeURIComponent(name)}`, { source }),
+    { signal: options.signal },
   );
   return {
     ...normalizeSkillSummary(result),
@@ -593,19 +766,23 @@ export async function fetchInstalled(params: {
   scope?: 'all' | 'project' | 'global';
   target?: string;
   q?: string;
-}): Promise<{ items: InstalledSkill[] }> {
+}, options: ApiCallOptions = {}): Promise<{ items: InstalledSkill[] }> {
   const tauri = await getTauriApi();
   if (tauri) {
     const result = await tauri.tauriGetInstalledSkills({
       scope: params.scope,
       target: params.target,
     });
+    if (!params.target && (params.scope === undefined || params.scope === 'all')) {
+      primeTauriInstalledCache(result);
+    }
     return {
       items: result.items.map(normalizeInstalledSkill),
     };
   }
   const result = await request<{ items: InstalledSkill[] }>(
     withParams('/api/installed', params),
+    { signal: options.signal },
   );
   return {
     items: result.items.map(normalizeInstalledSkill),
@@ -627,6 +804,7 @@ export async function installSkill(requestBody: {
       targets: requestBody.targets,
       global: requestBody.global ?? true,
     });
+    invalidateTauriInstalledCache();
     // 返回模拟结果
     return {
       results: requestBody.targets.map((target) => ({
@@ -659,6 +837,7 @@ export async function removeInstalledSkill(
       target: requestBody.target,
       scope: requestBody.scope,
     });
+    invalidateTauriInstalledCache();
     return {
       status: 'removed',
       name,
@@ -731,6 +910,7 @@ export async function linkInstalledSkillTargets(requestBody: {
       requestBody.targets.join(','),
       '--json',
     ]);
+    invalidateTauriInstalledCache();
     return JSON.parse(stdout) as {
       results: {
         target: string;
@@ -783,7 +963,7 @@ export async function exportInstalledSkill(requestBody: {
   });
   if (!response.ok) {
     await parseJson<never>(response);
-    return;
+    throw new Error('Export request failed');
   }
   const blob = await response.blob();
   const disposition = response.headers.get('content-disposition') ?? '';
@@ -819,6 +999,55 @@ export interface SkillFileContent {
   previewable: boolean;
   ext: string;
   size: number;
+}
+
+export interface InstalledSkillFileRequest {
+  name: string;
+  target: string;
+  scope: 'project' | 'global';
+}
+
+export interface InstalledSkillFileResetResult {
+  status: 'reset' | 'removed';
+  path: string;
+  file?: SkillFileContent;
+}
+
+export interface InstalledSkillResetResult {
+  status: 'reset';
+  name: string;
+  target: string;
+  scope: 'project' | 'global';
+  path: string;
+}
+
+export interface AiEditPreviewFile {
+  path: string;
+  beforeContent: string;
+  afterContent: string;
+}
+
+export interface AiEditPreviewResult {
+  provider: string;
+  mode: 'file' | 'skill';
+  summary: string;
+  files: AiEditPreviewFile[];
+}
+
+export interface ApplyAiEditResult {
+  status: 'applied';
+  files: string[];
+}
+
+function encodeUtf8ToBase64(text: string): string {
+  const bytes = new TextEncoder().encode(text);
+  let binary = '';
+  const chunkSize = 0x8000;
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    const slice = bytes.subarray(index, index + chunkSize);
+    binary += String.fromCharCode(...slice);
+  }
+  return btoa(binary);
 }
 
 export async function fetchSkillFiles(
@@ -857,6 +1086,223 @@ export async function fetchSkillFileContent(
   );
 }
 
+export async function fetchInstalledSkillFiles(
+  requestBody: InstalledSkillFileRequest,
+): Promise<{ files: SkillFileNode[] }> {
+  const tauri = await getTauriApi();
+  if (tauri) {
+    const args = [
+      'installed-skill-files',
+      requestBody.name,
+      '--target',
+      requestBody.target,
+      '--scope',
+      requestBody.scope,
+    ];
+    const stdout = await tauri.tauriRunCommand(args);
+    return JSON.parse(stdout.trim()) as { files: SkillFileNode[] };
+  }
+  return request(
+    withParams(`/api/installed/${encodeURIComponent(requestBody.name)}/files`, {
+      target: requestBody.target,
+      scope: requestBody.scope,
+    }),
+  );
+}
+
+export async function fetchInstalledSkillFileContent(
+  requestBody: InstalledSkillFileRequest & { filePath: string },
+): Promise<SkillFileContent> {
+  const tauri = await getTauriApi();
+  if (tauri) {
+    const args = [
+      'installed-skill-file-content',
+      requestBody.name,
+      '--target',
+      requestBody.target,
+      '--scope',
+      requestBody.scope,
+      '--file',
+      requestBody.filePath,
+    ];
+    const stdout = await tauri.tauriRunCommand(args);
+    return JSON.parse(stdout.trim()) as SkillFileContent;
+  }
+  const encodedPath = requestBody.filePath.split('/').map(encodeURIComponent).join('/');
+  return request(
+    withParams(`/api/installed/${encodeURIComponent(requestBody.name)}/files/${encodedPath}`, {
+      target: requestBody.target,
+      scope: requestBody.scope,
+    }),
+  );
+}
+
+export async function saveInstalledSkillFile(
+  requestBody: InstalledSkillFileRequest & { filePath: string; content: string },
+): Promise<SkillFileContent> {
+  const tauri = await getTauriApi();
+  if (tauri) {
+    const args = [
+      'save-installed-skill-file',
+      requestBody.name,
+      '--target',
+      requestBody.target,
+      '--scope',
+      requestBody.scope,
+      '--file',
+      requestBody.filePath,
+      '--content-base64',
+      encodeUtf8ToBase64(requestBody.content),
+    ];
+    const stdout = await tauri.tauriRunCommand(args);
+    return JSON.parse(stdout.trim()) as SkillFileContent;
+  }
+  const encodedPath = requestBody.filePath.split('/').map(encodeURIComponent).join('/');
+  return request(
+    `/api/installed/${encodeURIComponent(requestBody.name)}/files/${encodedPath}`,
+    {
+      method: 'PUT',
+      body: JSON.stringify({
+        target: requestBody.target,
+        scope: requestBody.scope,
+        content: requestBody.content,
+      }),
+    },
+  );
+}
+
+export async function resetInstalledSkillFile(
+  requestBody: InstalledSkillFileRequest & { filePath: string },
+): Promise<InstalledSkillFileResetResult> {
+  const tauri = await getTauriApi();
+  if (tauri) {
+    const args = [
+      'reset-installed-skill-file',
+      requestBody.name,
+      '--target',
+      requestBody.target,
+      '--scope',
+      requestBody.scope,
+      '--file',
+      requestBody.filePath,
+    ];
+    const stdout = await tauri.tauriRunCommand(args);
+    return JSON.parse(stdout.trim()) as InstalledSkillFileResetResult;
+  }
+  return request<InstalledSkillFileResetResult>(
+    `/api/installed/${encodeURIComponent(requestBody.name)}/reset-file`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        target: requestBody.target,
+        scope: requestBody.scope,
+        filePath: requestBody.filePath,
+      }),
+    },
+  );
+}
+
+export async function resetInstalledSkill(
+  requestBody: InstalledSkillFileRequest,
+): Promise<InstalledSkillResetResult> {
+  const tauri = await getTauriApi();
+  if (tauri) {
+    const args = [
+      'reset-installed-skill',
+      requestBody.name,
+      '--target',
+      requestBody.target,
+      '--scope',
+      requestBody.scope,
+    ];
+    const stdout = await tauri.tauriRunCommand(args);
+    return JSON.parse(stdout.trim()) as InstalledSkillResetResult;
+  }
+  return request<InstalledSkillResetResult>(
+    `/api/installed/${encodeURIComponent(requestBody.name)}/reset-skill`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        target: requestBody.target,
+        scope: requestBody.scope,
+      }),
+    },
+  );
+}
+
+export async function generateInstalledSkillAiEdit(
+  requestBody: InstalledSkillFileRequest & {
+    mode: 'file' | 'skill';
+    filePath?: string;
+    prompt: string;
+  },
+): Promise<AiEditPreviewResult> {
+  const tauri = await getTauriApi();
+  if (tauri) {
+    const args = [
+      'ai-edit-installed-skill',
+      requestBody.name,
+      '--target',
+      requestBody.target,
+      '--scope',
+      requestBody.scope,
+      '--mode',
+      requestBody.mode,
+      '--prompt-base64',
+      encodeUtf8ToBase64(requestBody.prompt),
+    ];
+    if (requestBody.filePath) {
+      args.push('--file', requestBody.filePath);
+    }
+    const stdout = await tauri.tauriRunCommand(args);
+    return JSON.parse(stdout.trim()) as AiEditPreviewResult;
+  }
+  return request<AiEditPreviewResult>(
+    `/api/installed/${encodeURIComponent(requestBody.name)}/ai-edit`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        target: requestBody.target,
+        scope: requestBody.scope,
+        mode: requestBody.mode,
+        filePath: requestBody.filePath,
+        prompt: requestBody.prompt,
+      }),
+    },
+  );
+}
+
+export async function applyInstalledSkillAiEdit(
+  requestBody: InstalledSkillFileRequest & { files: Array<{ path: string; content: string }> },
+): Promise<ApplyAiEditResult> {
+  const tauri = await getTauriApi();
+  if (tauri) {
+    const args = [
+      'apply-ai-edit-installed-skill',
+      requestBody.name,
+      '--target',
+      requestBody.target,
+      '--scope',
+      requestBody.scope,
+      '--payload-base64',
+      encodeUtf8ToBase64(JSON.stringify({ files: requestBody.files })),
+    ];
+    const stdout = await tauri.tauriRunCommand(args);
+    return JSON.parse(stdout.trim()) as ApplyAiEditResult;
+  }
+  return request<ApplyAiEditResult>(
+    `/api/installed/${encodeURIComponent(requestBody.name)}/apply-ai-edit`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        target: requestBody.target,
+        scope: requestBody.scope,
+        files: requestBody.files,
+      }),
+    },
+  );
+}
+
 // ---------------------------------------------------------------------------
 // 翻译
 // ---------------------------------------------------------------------------
@@ -878,12 +1324,55 @@ export interface TranslateResult {
 }
 
 export async function fetchTranslationConfig(): Promise<TranslationConfig> {
+  const tauri = await getTauriApi();
+  if (tauri) {
+    return normalizeTranslationConfig(
+      await tauri.tauriGetConfigValue('translation'),
+    );
+  }
   return request('/api/translation-config');
+}
+
+export async function fetchAiEditConfig(): Promise<AiEditConfig> {
+  const tauri = await getTauriApi();
+  if (tauri) {
+    return normalizeAiEditConfig(
+      await tauri.tauriGetConfigValue('aiEditing'),
+    );
+  }
+  return request('/api/ai-edit-config');
+}
+
+export async function updateAiEditConfig(
+  config: Partial<AiEditConfig>,
+): Promise<AiEditConfig> {
+  const tauri = await getTauriApi();
+  if (tauri) {
+    const current = normalizeAiEditConfig(
+      await tauri.tauriGetConfigValue('aiEditing'),
+    );
+    const next = normalizeAiEditConfig({ ...current, ...config });
+    await tauri.tauriSetConfigValue('aiEditing', next);
+    return next;
+  }
+  return request('/api/ai-edit-config', {
+    method: 'PATCH',
+    body: JSON.stringify(config),
+  });
 }
 
 export async function updateTranslationConfig(
   config: Partial<TranslationConfig>,
 ): Promise<TranslationConfig> {
+  const tauri = await getTauriApi();
+  if (tauri) {
+    const current = normalizeTranslationConfig(
+      await tauri.tauriGetConfigValue('translation'),
+    );
+    const next = normalizeTranslationConfig({ ...current, ...config });
+    await tauri.tauriSetConfigValue('translation', next);
+    return next;
+  }
   return request('/api/translation-config', {
     method: 'PATCH',
     body: JSON.stringify(config),

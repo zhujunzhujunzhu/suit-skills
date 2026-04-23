@@ -811,6 +811,32 @@ describe('阶段 9 CLI', () => {
     });
   });
 
+  describe('9.11 desktop bootstrap', () => {
+    it('desktop-bootstrap --json 输出聚合的桌面预加载数据', async () => {
+      const lines: string[] = [];
+      vi.mocked(console.log).mockImplementation((m: unknown) => {
+        lines.push(String(m));
+      });
+      const prog = createProgramForTest(ctx());
+      await runCliUserArgs(prog, ['desktop-bootstrap', '--json']);
+
+      const payload = JSON.parse(lines.join('\n')) as {
+        sources: { defaultSource: string; sources: Array<{ name: string }> };
+        settings: { themeMode: string };
+        installTargets: { targets: Array<{ id: string }> };
+        translationConfig: { provider: string };
+        aiEditConfig: { provider: string };
+      };
+
+      expect(payload.sources.defaultSource).toBe('default');
+      expect(payload.sources.sources.length).toBeGreaterThan(0);
+      expect(payload.settings.themeMode).toBe('default');
+      expect(payload.installTargets.targets.some((target) => target.id === 'agents')).toBe(true);
+      expect(payload.translationConfig.provider).toBe('none');
+      expect(payload.aiEditConfig.provider).toBe('none');
+    });
+  });
+
   describe('多环境 installTargets', () => {
     it('项目下已有 .cursor 时全局 install 写入 ~/.agents + 链接到 ~/.cursor', async () => {
       mkdirSync(join(projectDir, '.cursor'), { recursive: true });

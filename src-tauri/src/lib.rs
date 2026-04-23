@@ -68,6 +68,7 @@ pub fn run() {
             commands::get_skill_detail,
             commands::export_skill,
             commands::get_install_targets,
+            commands::get_desktop_bootstrap,
             commands::add_install_target,
         ])
         .run(tauri::generate_context!())
