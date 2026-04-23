@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   applyInstalledSkillAiEdit,
   generateInstalledSkillAiEdit,
+  fetchInstalledSkillBrowserBundle,
   fetchInstalledSkillFileContent,
   fetchInstalledSkillFiles,
   resetInstalledSkill,
@@ -204,6 +205,7 @@ export default function InstalledSkillEditorView({
   const [aiWorking, setAiWorking] = useState(false);
   const [aiPreview, setAiPreview] = useState<AiEditPreviewResult | null>(null);
   const [aiError, setAiError] = useState('');
+  const hydratedContentPathRef = useRef('');
 
   const isTextEditable =
     fileContent?.encoding === 'text' && fileContent.previewable === true;
@@ -264,16 +266,30 @@ export default function InstalledSkillEditorView({
       setLoadingFiles(true);
       setFilesError('');
       try {
-        const data = await fetchInstalledSkillFiles({
-          name: item.name,
-          target: item.target,
-          scope: item.scope,
-        });
-        const nextFiles = normalizeSkillFileList(data?.files);
+        let nextFiles: SkillFileNode[] = [];
+        let bundledContent: SkillFileContent | null = null;
+
+        if (!preferredPath && !forceReloadSelection) {
+          const bundle = await fetchInstalledSkillBrowserBundle({
+            name: item.name,
+            target: item.target,
+            scope: item.scope,
+          });
+          nextFiles = normalizeSkillFileList(bundle?.files);
+          bundledContent = bundle.initialContent ?? null;
+        } else {
+          const data = await fetchInstalledSkillFiles({
+            name: item.name,
+            target: item.target,
+            scope: item.scope,
+          });
+          nextFiles = normalizeSkillFileList(data?.files);
+        }
         setFiles(nextFiles);
 
         const nextPath =
           (preferredPath && hasFilePath(nextFiles, preferredPath) ? preferredPath : '') ||
+          bundledContent?.path ||
           findSkillMdInTree(nextFiles)?.path ||
           firstFilePath(nextFiles);
 
@@ -291,6 +307,7 @@ export default function InstalledSkillEditorView({
           setSelectedPath('');
           setFileContent(null);
           setDraft('');
+          hydratedContentPathRef.current = '';
           return;
         }
 
@@ -299,6 +316,15 @@ export default function InstalledSkillEditorView({
           return;
         }
 
+        if (bundledContent && bundledContent.path === nextPath) {
+          hydratedContentPathRef.current = bundledContent.path;
+          setFileContent(bundledContent);
+          setDraft(bundledContent.content ?? '');
+        } else {
+          hydratedContentPathRef.current = '';
+          setFileContent(null);
+          setDraft('');
+        }
         setSelectedPath(nextPath);
       } catch (err) {
         setFiles([]);
@@ -320,6 +346,7 @@ export default function InstalledSkillEditorView({
     setDraft('');
     setStatusText('');
     setExpandedDirs(new Set());
+    hydratedContentPathRef.current = '';
     void loadFiles();
   }, [loadFiles]);
 
@@ -330,6 +357,13 @@ export default function InstalledSkillEditorView({
 
   useEffect(() => {
     if (!selectedPath) return;
+    if (
+      hydratedContentPathRef.current === selectedPath &&
+      fileContent?.path === selectedPath
+    ) {
+      hydratedContentPathRef.current = '';
+      return;
+    }
     void loadFileContent(selectedPath);
   }, [loadFileContent, selectedPath]);
 

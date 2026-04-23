@@ -287,6 +287,38 @@ export async function tauriGetDesktopBootstrap(): Promise<{
       removable?: boolean;
     }>;
   };
+  skills?: {
+    items: Array<{
+      name: string;
+      version?: string;
+      description?: string;
+      author?: string;
+      tags?: string[];
+      sourceName: string;
+      installed?: boolean;
+      installedTargets?: string[];
+      metadataSource?: 'skill-md' | 'meta-json-fallback' | 'unknown';
+    }>;
+    warnings?: Array<{
+      sourceName: string;
+      url: string;
+      message: string;
+      usingCache: boolean;
+    }>;
+  };
+  installed?: {
+    items: Array<{
+      name: string;
+      version?: string;
+      description?: string;
+      tags?: string[];
+      target: string;
+      scope: 'project' | 'global';
+      path: string;
+      sourceName?: string;
+      metadataSource?: 'skill-md' | 'meta-json-fallback' | 'unknown';
+    }>;
+  };
   translationConfig: {
     provider?: 'openai' | 'cli' | 'none';
     apiBaseUrl?: string;

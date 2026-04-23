@@ -13,8 +13,8 @@ import type { ExtraProps } from 'react-markdown';
 import ReactMarkdown from 'react-markdown';
 import { useTranslation } from 'react-i18next';
 import {
+  fetchSkillBrowserBundle,
   fetchSkillFileContent,
-  fetchSkillFiles,
   translateText,
   type SkillFileContent,
   type SkillFileNode,
@@ -1303,6 +1303,7 @@ export default function SkillDetailView({
   const [pendingHash, setPendingHash] = useState('');
   const [fileContent, setFileContent] = useState<SkillFileContent | null>(null);
   const [loadingContent, setLoadingContent] = useState(false);
+  const hydratedContentPathRef = useRef('');
 
   const toggleDir = useCallback((path: string) => {
     setExpandedDirs((prev) => {
@@ -1326,15 +1327,19 @@ export default function SkillDetailView({
     setSelectedPath('');
     setPendingHash('');
     setExpandedDirs(new Set());
-    fetchSkillFiles(skillName, source !== 'all' ? source : undefined)
+    setFileContent(null);
+    hydratedContentPathRef.current = '';
+    fetchSkillBrowserBundle(skillName, source !== 'all' ? source : undefined)
       .then((data) => {
         const nextFiles = normalizeSkillFileList(data?.files);
         setFiles(nextFiles);
-        const skillMd = findSkillMdInTree(nextFiles);
-        if (skillMd) {
-          setExpandedDirs(new Set(ancestorDirPaths(skillMd.path)));
-          setSelectedPath(skillMd.path);
+        const preferredPath = data.initialPath || findSkillMdInTree(nextFiles)?.path || '';
+        if (preferredPath) {
+          setExpandedDirs(new Set(ancestorDirPaths(preferredPath)));
+          setSelectedPath(preferredPath);
           setPendingHash('');
+          setFileContent(data.initialContent ?? null);
+          hydratedContentPathRef.current = data.initialContent?.path ?? '';
         }
       })
       .catch((err: unknown) => {
@@ -1345,6 +1350,13 @@ export default function SkillDetailView({
 
   useEffect(() => {
     if (!selectedPath || !skillName) return;
+    if (
+      hydratedContentPathRef.current === selectedPath &&
+      fileContent?.path === selectedPath
+    ) {
+      hydratedContentPathRef.current = '';
+      return;
+    }
     setLoadingContent(true);
     setFileContent(null);
     fetchSkillFileContent(skillName, selectedPath, source !== 'all' ? source : undefined)

@@ -195,6 +195,18 @@ function nextSelectableSource(sources: Source[], current: string): string {
     : 'all';
 }
 
+function skillsRequestKey(source: string, query: string, tag: string): string {
+  return [source, query.trim(), tag.trim()].join('\0');
+}
+
+function installedRequestKey(
+  scope: ScopeFilter,
+  target: string,
+  query: string,
+): string {
+  return [scope, target.trim(), query.trim()].join('\0');
+}
+
 const VIEW_KEYS: Record<View, string> = {
   library: 'skills',
   installed: 'installed',
@@ -265,12 +277,15 @@ export default function App() {
   const [prevView, setPrevView] = useState<View>('library');
   const [translationConfig, setTranslationConfig] = useState<TranslationConfig>({ provider: 'none' });
   const [aiEditConfig, setAiEditConfig] = useState<AiEditConfig>({ provider: 'none' });
+  const [bootstrapReady, setBootstrapReady] = useState(false);
   const skillRequestId = useRef(0);
   const detailRequestId = useRef(0);
   const installedRequestId = useRef(0);
   const skillAbortController = useRef<AbortController | null>(null);
   const detailAbortController = useRef<AbortController | null>(null);
   const installedAbortController = useRef<AbortController | null>(null);
+  const lastLoadedSkillsKey = useRef('');
+  const lastLoadedInstalledKey = useRef('');
 
   function applySourcesData(data: { sources: Source[]; defaultSource: string }) {
     setSources(data.sources);
@@ -357,6 +372,7 @@ export default function App() {
       if (skillRequestId.current === requestId) {
         setSkills(data.items);
         setSourceWarnings(data.warnings ?? []);
+        lastLoadedSkillsKey.current = skillsRequestKey(nextSource, q, nextTag);
         setSelected((current) =>
           current && data.items.some((item) => item.name === current)
             ? current
@@ -400,6 +416,7 @@ export default function App() {
       }, { signal: controller.signal });
       if (installedRequestId.current === requestId) {
         setInstalled(data.items);
+        lastLoadedInstalledKey.current = installedRequestKey(nextScope, target, q);
       }
     } catch (err) {
       if (isAbortError(err)) {
@@ -579,6 +596,17 @@ export default function App() {
           setTranslationConfig(bootstrap.translationConfig);
           setAiEditConfig(bootstrap.aiEditConfig);
           applyInstallTargetsData(bootstrap.installTargets);
+          if (bootstrap.skills) {
+            setSkills(bootstrap.skills.items);
+            setSourceWarnings(bootstrap.skills.warnings);
+            setSelected(bootstrap.skills.items[0]?.name ?? '');
+            lastLoadedSkillsKey.current = skillsRequestKey('all', '', '');
+          }
+          if (bootstrap.installed) {
+            setInstalled(bootstrap.installed.items);
+            lastLoadedInstalledKey.current = installedRequestKey('all', '', '');
+          }
+          setBootstrapReady(true);
           return;
         }
       } catch {
@@ -594,6 +622,7 @@ export default function App() {
       void loadTranslationConfig();
       void loadAiEditConfig();
       void refreshInstallTargets();
+      setBootstrapReady(true);
     }
 
     void initializeApp();
@@ -682,11 +711,21 @@ export default function App() {
   }, [installedQuery]);
 
   useEffect(() => {
+    if (!bootstrapReady) {
+      return;
+    }
+    const nextKey = skillsRequestKey(source, debouncedQuery, tag);
+    if (lastLoadedSkillsKey.current === nextKey) {
+      return;
+    }
     void loadSkills();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [source, debouncedQuery, tag]);
+  }, [bootstrapReady, source, debouncedQuery, tag]);
 
   useEffect(() => {
+    if (view !== 'library' && view !== 'skill-detail') {
+      return;
+    }
     const requestId = detailRequestId.current + 1;
     detailRequestId.current = requestId;
     detailAbortController.current?.abort();
@@ -724,12 +763,22 @@ export default function App() {
       }
       controller.abort();
     };
-  }, [selected, source]);
+  }, [selected, source, view]);
 
   useEffect(() => {
+    if (!bootstrapReady) {
+      return;
+    }
+    if (view !== 'installed' && view !== 'installed-editor') {
+      return;
+    }
+    const nextKey = installedRequestKey(scope, installedTarget, debouncedInstalledQuery);
+    if (lastLoadedInstalledKey.current === nextKey) {
+      return;
+    }
     void loadInstalled();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scope, installedTarget, debouncedInstalledQuery]);
+  }, [bootstrapReady, view, scope, installedTarget, debouncedInstalledQuery]);
 
   const tags = useMemo(() => {
     const all = new Set<string>();
