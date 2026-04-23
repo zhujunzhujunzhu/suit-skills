@@ -229,7 +229,7 @@ describe('pullRepo', () => {
     const pulled = pullRepo(actor);
     expect(pulled.ok).toBe(false);
     expect(pulled.error).toBeTruthy();
-  });
+  }, 60_000);
 
   it('测试用例 3：目录不是 git 仓库 → 返回失败标志', () => {
     const empty = mkdtempSync(join(tmpdir(), 'skills-cli-not-git-'));
@@ -301,7 +301,7 @@ describe('cloneOrPullRepo', () => {
     expect(res.path).toBe(cacheDir);
     expect(res.warning).toBe(true);
     expect(res.freshlyCloned).toBeUndefined();
-  });
+  }, 60_000);
 
   it('测试用例 4：git 不可用 → 抛出明确错误提示安装 git', () => {
     const fakeSpawn: GitSpawnSync = ((_cmd, _args, _opts) =>

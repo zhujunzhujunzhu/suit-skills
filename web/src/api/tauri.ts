@@ -237,6 +237,108 @@ export async function tauriGetInstallTargets(): Promise<{
   return runCommand('get_install_targets', {});
 }
 
+export async function tauriGetDesktopBootstrap(): Promise<{
+  sources: {
+    sources: Array<{
+      name: string;
+      url: string;
+      enabled: boolean;
+      domesticMirror?: {
+        url: string;
+        enabled: boolean;
+      };
+      builtin?: boolean;
+      label?: string;
+      category?: string;
+      description?: string;
+      effectiveUrl?: string;
+    }>;
+    defaultSource: string;
+  };
+  settings: {
+    sourceRefreshIntervalMinutes?: number;
+    minimizeToTray?: boolean;
+    themeMode?: 'default' | 'custom';
+    themeColor?: string;
+  };
+  installTargets: {
+    library?: {
+      id: string;
+      label: string;
+      globalDir: string;
+      projectDir: string;
+      globalPath: string;
+      projectPath: string;
+      globalExists: boolean;
+      projectExists: boolean;
+    };
+    targets: Array<{
+      id: string;
+      label: string;
+      globalDir?: string;
+      projectDir?: string;
+      globalPath?: string;
+      projectPath?: string;
+      globalExists?: boolean;
+      projectExists?: boolean;
+      builtin?: boolean;
+      hidden?: boolean;
+      editable?: boolean;
+      removable?: boolean;
+    }>;
+  };
+  skills?: {
+    items: Array<{
+      name: string;
+      version?: string;
+      description?: string;
+      author?: string;
+      tags?: string[];
+      sourceName: string;
+      installed?: boolean;
+      installedTargets?: string[];
+      metadataSource?: 'skill-md' | 'meta-json-fallback' | 'unknown';
+    }>;
+    warnings?: Array<{
+      sourceName: string;
+      url: string;
+      message: string;
+      usingCache: boolean;
+    }>;
+  };
+  installed?: {
+    items: Array<{
+      name: string;
+      version?: string;
+      description?: string;
+      tags?: string[];
+      target: string;
+      scope: 'project' | 'global';
+      path: string;
+      sourceName?: string;
+      metadataSource?: 'skill-md' | 'meta-json-fallback' | 'unknown';
+    }>;
+  };
+  translationConfig: {
+    provider?: 'openai' | 'cli' | 'none';
+    apiBaseUrl?: string;
+    apiKey?: string;
+    model?: string;
+    cliCommand?: string;
+    cliArgs?: string[];
+  };
+  aiEditConfig: {
+    provider?: 'openai' | 'cli' | 'none';
+    apiBaseUrl?: string;
+    apiKey?: string;
+    model?: string;
+    cliCommand?: string;
+    cliArgs?: string[];
+  };
+}> {
+  return runCommand('get_desktop_bootstrap', {});
+}
+
 export async function tauriAddInstallTarget(options: {
   id: string;
   globalDir: string;

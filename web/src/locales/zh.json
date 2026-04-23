@@ -87,7 +87,25 @@
     "translationCliArgs": "\u9644\u52a0\u53c2\u6570",
     "translationCliArgsHint": "\u7a7a\u683c\u5206\u9694\uff0c\u5982 --model claude-opus-4-5",
     "translationSave": "\u4fdd\u5b58\u7ffb\u8bd1\u8bbe\u7f6e",
-    "translationSaving": "\u4fdd\u5b58\u4e2d\u2026"
+    "translationSaving": "\u4fdd\u5b58\u4e2d\u2026",
+    "aiEditTitle": "AI 修改",
+    "aiEditHint": "用于生成 skill 改写建议和预览。系统会先展示改动，再由你确认应用。",
+    "aiEditProvider": "AI 提供方",
+    "aiEditProviderHint": "选择用于本地已安装 skill 改写的服务",
+    "aiEditNone": "不启用",
+    "aiEditOpenai": "OpenAI 兼容 API",
+    "aiEditCli": "本地 AI CLI 命令",
+    "aiEditApiUrl": "API 地址",
+    "aiEditApiUrlHint": "留空使用 OpenAI 默认地址",
+    "aiEditApiKey": "API Key",
+    "aiEditModel": "模型",
+    "aiEditModelHint": "留空使用 gpt-4o-mini",
+    "aiEditCliCmd": "CLI 命令",
+    "aiEditCliCmdHint": "如 claude、openai 等，编辑请求会通过 stdin 传入",
+    "aiEditCliArgs": "附加参数",
+    "aiEditCliArgsHint": "空格分隔，如 --model gpt-5",
+    "aiEditSave": "保存 AI 修改设置",
+    "aiEditSaving": "保存中…"
   },
   "markdown": {
     "empty": "暂无 SKILL.md 内容。"
@@ -262,7 +280,8 @@
     "customTargetAdded": "已添加 Agent",
     "agentUpdated": "已更新 Agent",
     "agentRemoved": "已移除 Agent",
-    "translationSaved": "翻译配置已保存"
+    "translationSaved": "翻译配置已保存",
+    "aiEditSaved": "AI 修改配置已保存"
   },
   "share": {
     "skill": "技能",

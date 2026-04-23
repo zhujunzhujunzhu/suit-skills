@@ -1,7 +1,14 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir as nodeHomedir } from 'node:os';
 import { join, dirname } from 'node:path';
-import type { AgentMapping, AppSettings, Config, Source, TranslationConfig } from '../types/index.js';
+import type {
+  AgentMapping,
+  AiEditConfig,
+  AppSettings,
+  Config,
+  Source,
+  TranslationConfig,
+} from '../types/index.js';
 import { ensureDir } from '../utils/path.js';
 import { warn } from '../utils/output.js';
 
@@ -509,6 +516,39 @@ export function normalizeTranslationConfig(raw: unknown): TranslationConfig {
 
 export function getTranslationConfig(config: Config): TranslationConfig {
   return normalizeTranslationConfig(config.translation);
+}
+
+export function normalizeAiEditConfig(raw: unknown): AiEditConfig {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return { provider: 'none' };
+  }
+  const r = raw as Partial<AiEditConfig>;
+  const provider = r.provider === 'openai' || r.provider === 'cli' ? r.provider : 'none';
+  const base: AiEditConfig = { provider };
+  if (provider === 'openai') {
+    if (typeof r.apiBaseUrl === 'string' && r.apiBaseUrl.trim()) {
+      base.apiBaseUrl = r.apiBaseUrl.trim();
+    }
+    if (typeof r.apiKey === 'string' && r.apiKey.trim()) {
+      base.apiKey = r.apiKey.trim();
+    }
+    if (typeof r.model === 'string' && r.model.trim()) {
+      base.model = r.model.trim();
+    }
+  }
+  if (provider === 'cli') {
+    if (typeof r.cliCommand === 'string' && r.cliCommand.trim()) {
+      base.cliCommand = r.cliCommand.trim();
+    }
+    if (Array.isArray(r.cliArgs)) {
+      base.cliArgs = r.cliArgs.filter((a): a is string => typeof a === 'string');
+    }
+  }
+  return base;
+}
+
+export function getAiEditConfig(config: Config): AiEditConfig {
+  return normalizeAiEditConfig(config.aiEditing);
 }
 
 export function getSourceRefreshMaxAgeMs(config: Config): number {
