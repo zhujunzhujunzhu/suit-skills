@@ -3,7 +3,9 @@ import type { CliContext } from '../cli/context.js';
 import { getAiEditConfig, getTranslationConfig } from '../lib/config.js';
 import {
   getWebSettings,
+  listWebInstalledSkills,
   listWebInstallTargets,
+  listWebSkillsSnapshot,
   listWebSources,
 } from '../lib/web/api.js';
 
@@ -21,6 +23,8 @@ export function registerDesktopBootstrap(
         sources: listWebSources(ctx),
         settings: getWebSettings(ctx),
         installTargets: listWebInstallTargets(ctx),
+        skills: listWebSkillsSnapshot(ctx, { source: 'all' }),
+        installed: listWebInstalledSkills(ctx, { scope: 'all' }),
         translationConfig: getTranslationConfig(config),
         aiEditConfig: getAiEditConfig(config),
       };

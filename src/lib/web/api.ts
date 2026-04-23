@@ -253,6 +253,12 @@ export interface WebSkillsResponse {
   warnings: WebSourceWarning[];
 }
 
+export interface WebSkillBrowserBundle {
+  files: WebSkillFileNode[];
+  initialPath: string;
+  initialContent: WebSkillFileContent | null;
+}
+
 interface SkillSourceRow {
   meta: SkillMeta;
   sourceName: string;
@@ -875,9 +881,51 @@ export function listWebSkills(
     rows = rows.filter((row) => tagMatches(row.meta, options.tag!));
   }
 
+  return buildWebSkillsResponse(ctx, config, rows, result.warnings);
+}
+
+export function listWebSkillsSnapshot(
+  ctx: CliContext,
+  options: { source?: string; q?: string; tag?: string },
+): WebSkillsResponse {
+  const config = ctx.loadConfig();
+  const sourceFilter = options.source ?? 'all';
+  let rows = cachedRowsForSourceFilter(ctx, config, sourceFilter);
+
+  // If no local cache exists yet, fall back to the normal loader once.
+  if (rows.length === 0) {
+    return listWebSkills(ctx, {
+      ...options,
+      refresh: false,
+    });
+  }
+
+  if (options.q?.trim()) {
+    const found = new Set(
+      searchSkills(
+        rows.map((row) => row.meta),
+        options.q,
+      ).map((meta) => meta.name),
+    );
+    rows = rows.filter((row) => found.has(row.meta.name));
+  }
+
+  if (options.tag?.trim()) {
+    rows = rows.filter((row) => tagMatches(row.meta, options.tag!));
+  }
+
+  return buildWebSkillsResponse(ctx, config, rows, []);
+}
+
+function buildWebSkillsResponse(
+  ctx: CliContext,
+  config: Config,
+  rows: SkillSourceRow[],
+  warnings: WebSourceWarning[],
+): WebSkillsResponse {
   const installedTargetsIndex = getInstalledTargetsIndex(ctx, config);
   return {
-    warnings: result.warnings,
+    warnings,
     items: rows.map((row) => {
       const skillKey = basename(row.skillDir);
       const meta = normalizeWebMeta(row.meta);
@@ -894,6 +942,45 @@ export function listWebSkills(
       };
     }),
   };
+}
+
+function cachedRowsForSourceFilter(
+  ctx: CliContext,
+  config: Config,
+  sourceFilter: string,
+): SkillSourceRow[] {
+  try {
+    const sources = sourcesForFilter(config, sourceFilter);
+    const rows: SkillSourceRow[] = [];
+    const seenNames = new Set<string>();
+    const now = Date.now();
+    const cache = getRowsCacheForContext(ctx);
+
+    for (const source of sources) {
+      const cacheKey = `${source.name}\0${getEffectiveSourceUrl(source)}`;
+      const cached = cache.get(cacheKey);
+      const sourceRows =
+        cached && cached.expiresAt > now
+          ? cached.rows
+          : (findCachedRowsForSource(ctx, source)?.rows ?? []);
+
+      for (const row of sourceRows) {
+        if (seenNames.has(row.meta.name)) {
+          continue;
+        }
+        seenNames.add(row.meta.name);
+        rows.push(row);
+      }
+    }
+
+    return rows;
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (msg === 'Source not found') {
+      throw new WebApiError('SOURCE_NOT_FOUND', msg, 404);
+    }
+    throw e;
+  }
 }
 
 export function getWebSkillDetail(
@@ -1884,29 +1971,17 @@ export function getWebSkillFileTree(
   return { files: buildFileTree(hit.skillDir, '') };
 }
 
-export function getWebSkillFileContent(
-  ctx: CliContext,
-  skillName: string,
+function readWebSkillFileContentFromRoot(
+  rootDir: string,
   filePath: string,
-  options: { source?: string },
 ): WebSkillFileContent {
-  if (!validateSkillName(skillName)) {
-    throw new WebApiError('INVALID_SKILL_NAME', 'Invalid skill name', 400);
-  }
   if (!filePath || filePath.trim() === '') {
     throw new WebApiError('INVALID_FILE_PATH', 'File path is required', 400);
   }
 
-  const config = ctx.loadConfig();
-  const sourceFilter = options.source ?? 'all';
-  const hit = findSkillRow(ctx, config, sourceFilter, skillName);
-  if (!hit) {
-    throw new WebApiError('SKILL_NOT_FOUND', 'Skill not found', 404);
-  }
-
   const safePath = filePath.replace(/\\/g, '/').replace(/^\/+/, '');
-  const absolutePath = resolve(join(hit.skillDir, safePath));
-  if (!isInsidePath(hit.skillDir, absolutePath)) {
+  const absolutePath = resolve(join(rootDir, safePath));
+  if (!isInsidePath(rootDir, absolutePath)) {
     throw new WebApiError('PATH_NOT_ALLOWED', 'File path is outside skill directory', 403);
   }
   if (!existsSync(absolutePath) || !statSync(absolutePath).isFile()) {
@@ -1926,7 +2001,6 @@ export function getWebSkillFileContent(
     return { path: safePath, content, encoding, previewable: true, ext, size: stat.size };
   }
 
-  // base64 (image)
   const buf = readFileSync(absolutePath);
   return {
     path: safePath,
@@ -1935,6 +2009,82 @@ export function getWebSkillFileContent(
     previewable: true,
     ext,
     size: stat.size,
+  };
+}
+
+function findInitialFilePath(nodes: WebSkillFileNode[]): string {
+  for (const node of nodes) {
+    if (node.type === 'file' && node.name.toUpperCase() === 'SKILL.MD') {
+      return node.path;
+    }
+    if (node.type === 'dir') {
+      const found = findInitialFilePath(node.children ?? []);
+      if (found) {
+        return found;
+      }
+    }
+  }
+
+  for (const node of nodes) {
+    if (node.type === 'file') {
+      return node.path;
+    }
+    if (node.type === 'dir') {
+      const found = findInitialFilePath(node.children ?? []);
+      if (found) {
+        return found;
+      }
+    }
+  }
+
+  return '';
+}
+
+export function getWebSkillFileContent(
+  ctx: CliContext,
+  skillName: string,
+  filePath: string,
+  options: { source?: string },
+): WebSkillFileContent {
+  if (!validateSkillName(skillName)) {
+    throw new WebApiError('INVALID_SKILL_NAME', 'Invalid skill name', 400);
+  }
+  if (!filePath || filePath.trim() === '') {
+    throw new WebApiError('INVALID_FILE_PATH', 'File path is required', 400);
+  }
+
+  const config = ctx.loadConfig();
+  const sourceFilter = options.source ?? 'all';
+  const hit = findSkillRow(ctx, config, sourceFilter, skillName);
+  if (!hit) {
+    throw new WebApiError('SKILL_NOT_FOUND', 'Skill not found', 404);
+  }
+  return readWebSkillFileContentFromRoot(hit.skillDir, filePath);
+}
+
+export function getWebSkillBrowserBundle(
+  ctx: CliContext,
+  skillName: string,
+  options: { source?: string },
+): WebSkillBrowserBundle {
+  if (!validateSkillName(skillName)) {
+    throw new WebApiError('INVALID_SKILL_NAME', 'Invalid skill name', 400);
+  }
+  const config = ctx.loadConfig();
+  const sourceFilter = options.source ?? 'all';
+  const hit = findSkillRow(ctx, config, sourceFilter, skillName);
+  if (!hit) {
+    throw new WebApiError('SKILL_NOT_FOUND', 'Skill not found', 404);
+  }
+
+  const files = buildFileTree(hit.skillDir, '');
+  const initialPath = findInitialFilePath(files);
+  return {
+    files,
+    initialPath,
+    initialContent: initialPath
+      ? readWebSkillFileContentFromRoot(hit.skillDir, initialPath)
+      : null,
   };
 }
 
@@ -1970,41 +2120,29 @@ export function getWebInstalledSkillFileContent(
     skillName,
     request,
   );
+  return readWebSkillFileContentFromRoot(skillPath, filePath);
+}
 
-  const safePath = filePath.replace(/\\/g, '/').replace(/^\/+/, '');
-  const absolutePath = resolve(join(skillPath, safePath));
-  if (!isInsidePath(skillPath, absolutePath)) {
-    throw new WebApiError(
-      'PATH_NOT_ALLOWED',
-      'File path is outside skill directory',
-      403,
-    );
-  }
-  if (!existsSync(absolutePath) || !statSync(absolutePath).isFile()) {
-    throw new WebApiError('FILE_NOT_FOUND', 'File not found', 404);
-  }
-
-  const stat = statSync(absolutePath);
-  const ext = extname(absolutePath).toLowerCase();
-  const { encoding, previewable } = classifyFile(absolutePath, stat.size);
-
-  if (!previewable) {
-    return { path: safePath, encoding, previewable, ext, size: stat.size };
-  }
-
-  if (encoding === 'text') {
-    const content = readFileSync(absolutePath, 'utf8');
-    return { path: safePath, content, encoding, previewable: true, ext, size: stat.size };
-  }
-
-  const buf = readFileSync(absolutePath);
+export function getWebInstalledSkillBrowserBundle(
+  ctx: CliContext,
+  skillName: string,
+  request: WebInstalledSkillFileRequest,
+): WebSkillBrowserBundle {
+  const config = ctx.loadConfig();
+  const { skillPath } = resolveInstalledSkillDirectory(
+    ctx,
+    config,
+    skillName,
+    request,
+  );
+  const files = buildFileTree(skillPath, '');
+  const initialPath = findInitialFilePath(files);
   return {
-    path: safePath,
-    contentBase64: buf.toString('base64'),
-    encoding,
-    previewable: true,
-    ext,
-    size: stat.size,
+    files,
+    initialPath,
+    initialContent: initialPath
+      ? readWebSkillFileContentFromRoot(skillPath, initialPath)
+      : null,
   };
 }
 

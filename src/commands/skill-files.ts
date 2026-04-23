@@ -3,8 +3,10 @@ import type { CliContext } from '../cli/context.js';
 import {
   applyWebInstalledSkillAiEdit,
   generateWebInstalledSkillAiEdit,
+  getWebInstalledSkillBrowserBundle,
   getWebInstalledSkillFileContent,
   getWebInstalledSkillFileTree,
+  getWebSkillBrowserBundle,
   getWebSkillFileContent,
   getWebSkillFileTree,
   resetWebInstalledSkill,
@@ -39,6 +41,20 @@ export function registerSkillFilesCommands(program: Command, ctx: CliContext): v
     });
 
   program
+    .command('skill-browser-bundle')
+    .description('Print skill file tree and initial file payload as JSON (for desktop app)')
+    .argument('<name>', 'skill name')
+    .option('--source <name>', 'source name, or omit to search all enabled sources')
+    .action((name: string, opts: { source?: string }) => {
+      try {
+        const result = getWebSkillBrowserBundle(ctx, name.trim(), { source: opts.source });
+        process.stdout.write(JSON.stringify(result));
+      } catch (e) {
+        rethrowApi(e);
+      }
+    });
+
+  program
     .command('skill-file-content')
     .description('Print skill file payload as JSON (for desktop app)')
     .argument('<name>', 'skill name')
@@ -64,6 +80,24 @@ export function registerSkillFilesCommands(program: Command, ctx: CliContext): v
     .action((name: string, opts: { target: string; scope?: 'project' | 'global' }) => {
       try {
         const result = getWebInstalledSkillFileTree(ctx, name.trim(), {
+          target: opts.target,
+          scope: opts.scope,
+        });
+        process.stdout.write(JSON.stringify(result));
+      } catch (e) {
+        rethrowApi(e);
+      }
+    });
+
+  program
+    .command('installed-skill-browser-bundle')
+    .description('Print installed skill file tree and initial file payload as JSON (for desktop app)')
+    .argument('<name>', 'skill name')
+    .requiredOption('--target <target>', 'install target, e.g. agents/claude/cursor')
+    .option('--scope <scope>', 'project or global', 'project')
+    .action((name: string, opts: { target: string; scope?: 'project' | 'global' }) => {
+      try {
+        const result = getWebInstalledSkillBrowserBundle(ctx, name.trim(), {
           target: opts.target,
           scope: opts.scope,
         });

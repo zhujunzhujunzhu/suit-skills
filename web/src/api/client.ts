@@ -472,6 +472,13 @@ export async function fetchDesktopBootstrap(): Promise<{
     library?: SkillLibraryTarget;
     targets: InstallTargetOption[];
   };
+  skills?: {
+    items: SkillSummary[];
+    warnings: SourceWarning[];
+  };
+  installed?: {
+    items: InstalledSkill[];
+  };
   translationConfig: TranslationConfig;
   aiEditConfig: AiEditConfig;
 } | null> {
@@ -490,6 +497,22 @@ export async function fetchDesktopBootstrap(): Promise<{
       library: result.installTargets.library,
       targets: result.installTargets.targets,
     },
+    skills: result.skills
+      ? {
+          items: (result.skills.items ?? []).map(normalizeSkillSummary),
+          warnings: (result.skills.warnings ?? []).map((warning) => ({
+            sourceName: textField(warning.sourceName) ?? '',
+            url: textField(warning.url) ?? '',
+            message: textField(warning.message) ?? '',
+            usingCache: warning.usingCache === true,
+          })),
+        }
+      : undefined,
+    installed: result.installed
+      ? {
+          items: (result.installed.items ?? []).map(normalizeInstalledSkill),
+        }
+      : undefined,
     translationConfig: normalizeTranslationConfig(result.translationConfig),
     aiEditConfig: normalizeAiEditConfig(result.aiEditConfig),
   };
@@ -1001,6 +1024,38 @@ export interface SkillFileContent {
   size: number;
 }
 
+export interface SkillBrowserBundle {
+  files: SkillFileNode[];
+  initialPath: string;
+  initialContent: SkillFileContent | null;
+}
+
+function findPreferredSkillFilePath(nodes: SkillFileNode[] | undefined): string {
+  if (!Array.isArray(nodes)) return '';
+
+  for (const node of nodes) {
+    if (node.type === 'file' && node.name.toUpperCase() === 'SKILL.MD') {
+      return node.path;
+    }
+    if (node.type === 'dir') {
+      const nested = findPreferredSkillFilePath(node.children);
+      if (nested) return nested;
+    }
+  }
+
+  for (const node of nodes) {
+    if (node.type === 'file') {
+      return node.path;
+    }
+    if (node.type === 'dir') {
+      const nested = findPreferredSkillFilePath(node.children);
+      if (nested) return nested;
+    }
+  }
+
+  return '';
+}
+
 export interface InstalledSkillFileRequest {
   name: string;
   target: string;
@@ -1066,6 +1121,31 @@ export async function fetchSkillFiles(
   return request(withParams(`/api/skills/${encodeURIComponent(skillName)}/files`, { source }));
 }
 
+export async function fetchSkillBrowserBundle(
+  skillName: string,
+  source?: string,
+): Promise<SkillBrowserBundle> {
+  const tauri = await getTauriApi();
+  if (tauri) {
+    const args = ['skill-browser-bundle', skillName];
+    if (source) {
+      args.push('--source', source);
+    }
+    const stdout = await tauri.tauriRunCommand(args);
+    return JSON.parse(stdout.trim()) as SkillBrowserBundle;
+  }
+
+  const files = await fetchSkillFiles(skillName, source);
+  const initialPath = findPreferredSkillFilePath(files.files);
+  return {
+    files: files.files,
+    initialPath,
+    initialContent: initialPath
+      ? await fetchSkillFileContent(skillName, initialPath, source)
+      : null,
+  };
+}
+
 export async function fetchSkillFileContent(
   skillName: string,
   filePath: string,
@@ -1108,6 +1188,37 @@ export async function fetchInstalledSkillFiles(
       scope: requestBody.scope,
     }),
   );
+}
+
+export async function fetchInstalledSkillBrowserBundle(
+  requestBody: InstalledSkillFileRequest,
+): Promise<SkillBrowserBundle> {
+  const tauri = await getTauriApi();
+  if (tauri) {
+    const args = [
+      'installed-skill-browser-bundle',
+      requestBody.name,
+      '--target',
+      requestBody.target,
+      '--scope',
+      requestBody.scope,
+    ];
+    const stdout = await tauri.tauriRunCommand(args);
+    return JSON.parse(stdout.trim()) as SkillBrowserBundle;
+  }
+
+  const files = await fetchInstalledSkillFiles(requestBody);
+  const initialPath = findPreferredSkillFilePath(files.files);
+  return {
+    files: files.files,
+    initialPath,
+    initialContent: initialPath
+      ? await fetchInstalledSkillFileContent({
+          ...requestBody,
+          filePath: initialPath,
+        })
+      : null,
+  };
 }
 
 export async function fetchInstalledSkillFileContent(
