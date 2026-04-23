@@ -86,7 +86,25 @@
     "translationCliArgs": "Extra arguments",
     "translationCliArgsHint": "Space-separated, e.g. --model claude-opus-4-5",
     "translationSave": "Save translation settings",
-    "translationSaving": "Saving…"
+    "translationSaving": "Saving…",
+    "aiEditTitle": "AI editing",
+    "aiEditHint": "Used to generate skill rewrite suggestions and previews. Changes are only applied after confirmation.",
+    "aiEditProvider": "AI provider",
+    "aiEditProviderHint": "Service used to rewrite local installed skills",
+    "aiEditNone": "Disabled",
+    "aiEditOpenai": "OpenAI-compatible API",
+    "aiEditCli": "Local AI CLI",
+    "aiEditApiUrl": "API base URL",
+    "aiEditApiUrlHint": "Leave empty for default OpenAI URL",
+    "aiEditApiKey": "API key",
+    "aiEditModel": "Model",
+    "aiEditModelHint": "Leave empty for gpt-4o-mini",
+    "aiEditCliCmd": "CLI command",
+    "aiEditCliCmdHint": "e.g. claude; edit request is sent on stdin",
+    "aiEditCliArgs": "Extra arguments",
+    "aiEditCliArgsHint": "Space-separated, e.g. --model gpt-5",
+    "aiEditSave": "Save AI edit settings",
+    "aiEditSaving": "Saving…"
   },
   "markdown": {
     "empty": "No SKILL.md content."
@@ -262,7 +280,8 @@
     "agentUpdated": "Agent updated",
     "agentRemoved": "Agent removed",
     "settingsSaved": "Settings saved",
-    "translationSaved": "Translation settings saved"
+    "translationSaved": "Translation settings saved",
+    "aiEditSaved": "AI edit settings saved"
   },
   "share": {
     "skill": "Skill",

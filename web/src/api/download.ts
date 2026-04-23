@@ -112,3 +112,14 @@ export const PLATFORM_LABELS: Record<DesktopPlatform, { os: string; arch: string
   'darwin-aarch64': { os: 'macOS', arch: 'Apple Silicon (M1+)', ext: '.dmg' },
   'darwin-x86_64':  { os: 'macOS', arch: 'Intel (x64)', ext: '.dmg' },
 };
+
+export function getDesktopDownloadHref(
+  platform: DesktopPlatform,
+  asset: PlatformAsset,
+  isDesktopRuntime: boolean,
+): string {
+  if (isDesktopRuntime) {
+    return asset.url;
+  }
+  return `/api/desktop/download?platform=${encodeURIComponent(platform)}`;
+}

@@ -24,6 +24,15 @@ export function getCacheDir(options?: ConfigLocationOptions): string {
   return join(home, '.suit-skills', 'cache');
 }
 
+export function getBaselinesDir(options?: ConfigLocationOptions): string {
+  const envRoot = process.env.SUIT_SKILLS_HOME?.trim();
+  if (envRoot) {
+    return join(envRoot, 'baselines');
+  }
+  const home = options?.homedir ?? nodeHomedir();
+  return join(home, '.suit-skills', 'baselines');
+}
+
 export function getSourceCacheDir(
   sourceUrl: string,
   options?: ConfigLocationOptions,

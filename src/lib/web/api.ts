@@ -19,12 +19,19 @@ import {
 } from '../../cli/helpers.js';
 import { toAbsoluteInstallRoot } from '../../cli/paths.js';
 import { getInstalledSkills } from '../agents.js';
+import {
+  captureInstalledSkillBaseline,
+  restoreInstalledSkillFileFromBaseline,
+  restoreInstalledSkillFromBaseline,
+} from '../baseline.js';
 import { getSourceCacheDir } from '../cache.js';
 import {
+  getAiEditConfig,
   getEffectiveSourceUrl,
   getBuiltinSourceInfo,
   getSourceRefreshMaxAgeMs,
   getTranslationConfig,
+  normalizeAiEditConfig,
   normalizeAppSettings,
   normalizeTranslationConfig,
   restoreBuiltinSources,
@@ -49,6 +56,7 @@ import {
 } from '../skills.js';
 import type {
   AgentMapping,
+  AiEditConfig,
   AppSettings,
   Config,
   MetadataSource,
@@ -117,6 +125,68 @@ export interface WebExportRequest {
   scope?: 'project' | 'global';
 }
 
+export interface WebInstalledSkillFileRequest {
+  target: string;
+  scope?: 'project' | 'global';
+}
+
+export interface WebSaveInstalledSkillFileRequest
+  extends WebInstalledSkillFileRequest {
+  content: string;
+}
+
+export interface WebResetInstalledSkillFileRequest
+  extends WebInstalledSkillFileRequest {
+  filePath: string;
+}
+
+export interface WebResetInstalledSkillFileResult {
+  status: 'reset' | 'removed';
+  path: string;
+  file?: WebSkillFileContent;
+}
+
+export interface WebResetInstalledSkillResult {
+  status: 'reset';
+  name: string;
+  target: string;
+  scope: 'project' | 'global';
+  path: string;
+}
+
+export interface WebInstalledSkillAiEditRequest
+  extends WebInstalledSkillFileRequest {
+  mode: 'file' | 'skill';
+  filePath?: string;
+  prompt: string;
+}
+
+export interface WebInstalledSkillAiEditPreviewFile {
+  path: string;
+  beforeContent: string;
+  afterContent: string;
+}
+
+export interface WebInstalledSkillAiEditPreviewResult {
+  provider: string;
+  mode: 'file' | 'skill';
+  summary: string;
+  files: WebInstalledSkillAiEditPreviewFile[];
+}
+
+export interface WebApplyInstalledSkillAiEditRequest
+  extends WebInstalledSkillFileRequest {
+  files: Array<{
+    path: string;
+    content: string;
+  }>;
+}
+
+export interface WebApplyInstalledSkillAiEditResult {
+  status: 'applied';
+  files: string[];
+}
+
 export interface WebCopyPackageResult {
   status: 'copied';
   fileName: string;
@@ -181,6 +251,12 @@ export interface WebSourceWarning {
 export interface WebSkillsResponse {
   items: WebSkillSummary[];
   warnings: WebSourceWarning[];
+}
+
+export interface WebSkillBrowserBundle {
+  files: WebSkillFileNode[];
+  initialPath: string;
+  initialContent: WebSkillFileContent | null;
 }
 
 interface SkillSourceRow {
@@ -380,6 +456,43 @@ function getInstalledSkillPath(
   const skillPath = join(root, name);
   assertInstalledSkillPathAllowed(root, skillPath);
   return { root, skillPath };
+}
+
+function resolveInstalledSkillDirectory(
+  ctx: CliContext,
+  config: Config,
+  name: string,
+  request: WebInstalledSkillFileRequest,
+): {
+  root: string;
+  skillPath: string;
+  realSkillPath: string;
+  scope: 'project' | 'global';
+  target: string;
+} {
+  if (!validateSkillName(name)) {
+    throw new WebApiError('INVALID_SKILL_NAME', 'Invalid skill name', 400);
+  }
+  const scope = assertValidScope(request.scope);
+  const target = assertValidTarget(config, request.target);
+  const { root, skillPath } = getInstalledSkillPath(
+    ctx,
+    config,
+    name,
+    target,
+    scope,
+  );
+  if (!existsSync(skillPath) || !statSync(skillPath).isDirectory()) {
+    throw new WebApiError('SKILL_NOT_FOUND', 'Skill not installed', 404);
+  }
+  assertInstalledSkillPathAllowed(root, skillPath);
+  let realSkillPath = skillPath;
+  try {
+    realSkillPath = realpathSync.native(skillPath);
+  } catch {
+    // Fall back to the resolved install path when the platform cannot resolve a real path.
+  }
+  return { root, skillPath, realSkillPath, scope, target };
 }
 
 function getInstalledTargetsForSkill(
@@ -646,6 +759,38 @@ function rowsOnlyForSource(
   return rowsForSource(ctx, config, sourceFilter, forceRefresh).rows;
 }
 
+function cachedRowsOnlyForEnabledSources(
+  ctx: CliContext,
+  config: Config,
+): SkillSourceRow[] {
+  const rows: SkillSourceRow[] = [];
+  const seenNames = new Set<string>();
+  const now = Date.now();
+  const cache = getRowsCacheForContext(ctx);
+
+  for (const source of config.sources) {
+    if (!source.enabled) {
+      continue;
+    }
+    const cacheKey = `${source.name}\0${getEffectiveSourceUrl(source)}`;
+    const cached = cache.get(cacheKey);
+    const sourceRows =
+      cached && cached.expiresAt > now
+        ? cached.rows
+        : (findCachedRowsForSource(ctx, source)?.rows ?? []);
+
+    for (const row of sourceRows) {
+      if (seenNames.has(row.meta.name)) {
+        continue;
+      }
+      seenNames.add(row.meta.name);
+      rows.push(row);
+    }
+  }
+
+  return rows;
+}
+
 function findSkillRow(
   ctx: CliContext,
   config: Config,
@@ -679,16 +824,12 @@ function sourceNameIndexForInstalledSkills(
   ctx: CliContext,
   config: Config,
 ): Map<string, string> {
-  try {
-    return new Map(
-      rowsOnlyForSource(ctx, config, 'all').map((row) => [
-        row.meta.name,
-        row.sourceName,
-      ]),
-    );
-  } catch {
-    return new Map();
-  }
+  return new Map(
+    cachedRowsOnlyForEnabledSources(ctx, config).map((row) => [
+      row.meta.name,
+      row.sourceName,
+    ]),
+  );
 }
 
 function installedMatches(item: WebInstalledSkill, q: string): boolean {
@@ -740,9 +881,51 @@ export function listWebSkills(
     rows = rows.filter((row) => tagMatches(row.meta, options.tag!));
   }
 
+  return buildWebSkillsResponse(ctx, config, rows, result.warnings);
+}
+
+export function listWebSkillsSnapshot(
+  ctx: CliContext,
+  options: { source?: string; q?: string; tag?: string },
+): WebSkillsResponse {
+  const config = ctx.loadConfig();
+  const sourceFilter = options.source ?? 'all';
+  let rows = cachedRowsForSourceFilter(ctx, config, sourceFilter);
+
+  // If no local cache exists yet, fall back to the normal loader once.
+  if (rows.length === 0) {
+    return listWebSkills(ctx, {
+      ...options,
+      refresh: false,
+    });
+  }
+
+  if (options.q?.trim()) {
+    const found = new Set(
+      searchSkills(
+        rows.map((row) => row.meta),
+        options.q,
+      ).map((meta) => meta.name),
+    );
+    rows = rows.filter((row) => found.has(row.meta.name));
+  }
+
+  if (options.tag?.trim()) {
+    rows = rows.filter((row) => tagMatches(row.meta, options.tag!));
+  }
+
+  return buildWebSkillsResponse(ctx, config, rows, []);
+}
+
+function buildWebSkillsResponse(
+  ctx: CliContext,
+  config: Config,
+  rows: SkillSourceRow[],
+  warnings: WebSourceWarning[],
+): WebSkillsResponse {
   const installedTargetsIndex = getInstalledTargetsIndex(ctx, config);
   return {
-    warnings: result.warnings,
+    warnings,
     items: rows.map((row) => {
       const skillKey = basename(row.skillDir);
       const meta = normalizeWebMeta(row.meta);
@@ -759,6 +942,45 @@ export function listWebSkills(
       };
     }),
   };
+}
+
+function cachedRowsForSourceFilter(
+  ctx: CliContext,
+  config: Config,
+  sourceFilter: string,
+): SkillSourceRow[] {
+  try {
+    const sources = sourcesForFilter(config, sourceFilter);
+    const rows: SkillSourceRow[] = [];
+    const seenNames = new Set<string>();
+    const now = Date.now();
+    const cache = getRowsCacheForContext(ctx);
+
+    for (const source of sources) {
+      const cacheKey = `${source.name}\0${getEffectiveSourceUrl(source)}`;
+      const cached = cache.get(cacheKey);
+      const sourceRows =
+        cached && cached.expiresAt > now
+          ? cached.rows
+          : (findCachedRowsForSource(ctx, source)?.rows ?? []);
+
+      for (const row of sourceRows) {
+        if (seenNames.has(row.meta.name)) {
+          continue;
+        }
+        seenNames.add(row.meta.name);
+        rows.push(row);
+      }
+    }
+
+    return rows;
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (msg === 'Source not found') {
+      throw new WebApiError('SOURCE_NOT_FOUND', msg, 404);
+    }
+    throw e;
+  }
 }
 
 export function getWebSkillDetail(
@@ -1123,6 +1345,17 @@ export function installWebSkill(
   const centralSkillPath = centralResult.path;
   if (!centralSkillPath) {
     return { results };
+  }
+
+  try {
+    const metadata = readSkillMarkdownMetadata(centralSkillPath);
+    captureInstalledSkillBaseline(centralSkillPath, {
+      skillName: metadata.meta.name,
+      sourceName: source.name,
+      installedVersion: metadata.meta.version,
+    });
+  } catch {
+    // installSkillWithConflict already created a baseline snapshot. Metadata enrichment is best-effort.
   }
 
   const skillName = parsed.name;
@@ -1661,6 +1894,66 @@ function buildFileTree(dirPath: string, relBase: string): WebSkillFileNode[] {
   return nodes;
 }
 
+function normalizeRelativeFilePath(filePath: string): string {
+  return filePath.replace(/\\/g, '/').replace(/^\/+/, '');
+}
+
+function resolveSkillRelativeFilePath(
+  skillPath: string,
+  filePath: string,
+): { safePath: string; absolutePath: string } {
+  const safePath = normalizeRelativeFilePath(filePath);
+  const absolutePath = resolve(join(skillPath, safePath));
+  if (!isInsidePath(skillPath, absolutePath)) {
+    throw new WebApiError(
+      'PATH_NOT_ALLOWED',
+      'File path is outside skill directory',
+      403,
+    );
+  }
+  return { safePath, absolutePath };
+}
+
+function collectEditableTextFiles(
+  skillPath: string,
+  relBase = '',
+): Array<{ path: string; content: string }> {
+  const files: Array<{ path: string; content: string }> = [];
+  for (const entry of readdirSync(skillPath, { withFileTypes: true })) {
+    if (IGNORE_NAMES.has(entry.name)) continue;
+    const fullPath = join(skillPath, entry.name);
+    const relPath = relBase ? `${relBase}/${entry.name}` : entry.name;
+    let isDir = entry.isDirectory();
+    let isFile = entry.isFile();
+    if (entry.isSymbolicLink()) {
+      try {
+        const st = statSync(fullPath);
+        isDir = st.isDirectory();
+        isFile = st.isFile();
+      } catch {
+        continue;
+      }
+    }
+    if (isDir) {
+      files.push(...collectEditableTextFiles(fullPath, relPath));
+      continue;
+    }
+    if (!isFile) {
+      continue;
+    }
+    const stat = statSync(fullPath);
+    const { encoding, previewable } = classifyFile(fullPath, stat.size);
+    if (encoding !== 'text' || !previewable) {
+      continue;
+    }
+    files.push({
+      path: relPath,
+      content: readFileSync(fullPath, 'utf8'),
+    });
+  }
+  return files.sort((a, b) => a.path.localeCompare(b.path));
+}
+
 export function getWebSkillFileTree(
   ctx: CliContext,
   skillName: string,
@@ -1676,6 +1969,75 @@ export function getWebSkillFileTree(
     throw new WebApiError('SKILL_NOT_FOUND', 'Skill not found', 404);
   }
   return { files: buildFileTree(hit.skillDir, '') };
+}
+
+function readWebSkillFileContentFromRoot(
+  rootDir: string,
+  filePath: string,
+): WebSkillFileContent {
+  if (!filePath || filePath.trim() === '') {
+    throw new WebApiError('INVALID_FILE_PATH', 'File path is required', 400);
+  }
+
+  const safePath = filePath.replace(/\\/g, '/').replace(/^\/+/, '');
+  const absolutePath = resolve(join(rootDir, safePath));
+  if (!isInsidePath(rootDir, absolutePath)) {
+    throw new WebApiError('PATH_NOT_ALLOWED', 'File path is outside skill directory', 403);
+  }
+  if (!existsSync(absolutePath) || !statSync(absolutePath).isFile()) {
+    throw new WebApiError('FILE_NOT_FOUND', 'File not found', 404);
+  }
+
+  const stat = statSync(absolutePath);
+  const ext = extname(absolutePath).toLowerCase();
+  const { encoding, previewable } = classifyFile(absolutePath, stat.size);
+
+  if (!previewable) {
+    return { path: safePath, encoding, previewable, ext, size: stat.size };
+  }
+
+  if (encoding === 'text') {
+    const content = readFileSync(absolutePath, 'utf8');
+    return { path: safePath, content, encoding, previewable: true, ext, size: stat.size };
+  }
+
+  const buf = readFileSync(absolutePath);
+  return {
+    path: safePath,
+    contentBase64: buf.toString('base64'),
+    encoding,
+    previewable: true,
+    ext,
+    size: stat.size,
+  };
+}
+
+function findInitialFilePath(nodes: WebSkillFileNode[]): string {
+  for (const node of nodes) {
+    if (node.type === 'file' && node.name.toUpperCase() === 'SKILL.MD') {
+      return node.path;
+    }
+    if (node.type === 'dir') {
+      const found = findInitialFilePath(node.children ?? []);
+      if (found) {
+        return found;
+      }
+    }
+  }
+
+  for (const node of nodes) {
+    if (node.type === 'file') {
+      return node.path;
+    }
+    if (node.type === 'dir') {
+      const found = findInitialFilePath(node.children ?? []);
+      if (found) {
+        return found;
+      }
+    }
+  }
+
+  return '';
 }
 
 export function getWebSkillFileContent(
@@ -1697,38 +2059,230 @@ export function getWebSkillFileContent(
   if (!hit) {
     throw new WebApiError('SKILL_NOT_FOUND', 'Skill not found', 404);
   }
+  return readWebSkillFileContentFromRoot(hit.skillDir, filePath);
+}
+
+export function getWebSkillBrowserBundle(
+  ctx: CliContext,
+  skillName: string,
+  options: { source?: string },
+): WebSkillBrowserBundle {
+  if (!validateSkillName(skillName)) {
+    throw new WebApiError('INVALID_SKILL_NAME', 'Invalid skill name', 400);
+  }
+  const config = ctx.loadConfig();
+  const sourceFilter = options.source ?? 'all';
+  const hit = findSkillRow(ctx, config, sourceFilter, skillName);
+  if (!hit) {
+    throw new WebApiError('SKILL_NOT_FOUND', 'Skill not found', 404);
+  }
+
+  const files = buildFileTree(hit.skillDir, '');
+  const initialPath = findInitialFilePath(files);
+  return {
+    files,
+    initialPath,
+    initialContent: initialPath
+      ? readWebSkillFileContentFromRoot(hit.skillDir, initialPath)
+      : null,
+  };
+}
+
+export function getWebInstalledSkillFileTree(
+  ctx: CliContext,
+  skillName: string,
+  request: WebInstalledSkillFileRequest,
+): { files: WebSkillFileNode[] } {
+  const config = ctx.loadConfig();
+  const { skillPath } = resolveInstalledSkillDirectory(
+    ctx,
+    config,
+    skillName,
+    request,
+  );
+  return { files: buildFileTree(skillPath, '') };
+}
+
+export function getWebInstalledSkillFileContent(
+  ctx: CliContext,
+  skillName: string,
+  filePath: string,
+  request: WebInstalledSkillFileRequest,
+): WebSkillFileContent {
+  if (!filePath || filePath.trim() === '') {
+    throw new WebApiError('INVALID_FILE_PATH', 'File path is required', 400);
+  }
+
+  const config = ctx.loadConfig();
+  const { skillPath } = resolveInstalledSkillDirectory(
+    ctx,
+    config,
+    skillName,
+    request,
+  );
+  return readWebSkillFileContentFromRoot(skillPath, filePath);
+}
+
+export function getWebInstalledSkillBrowserBundle(
+  ctx: CliContext,
+  skillName: string,
+  request: WebInstalledSkillFileRequest,
+): WebSkillBrowserBundle {
+  const config = ctx.loadConfig();
+  const { skillPath } = resolveInstalledSkillDirectory(
+    ctx,
+    config,
+    skillName,
+    request,
+  );
+  const files = buildFileTree(skillPath, '');
+  const initialPath = findInitialFilePath(files);
+  return {
+    files,
+    initialPath,
+    initialContent: initialPath
+      ? readWebSkillFileContentFromRoot(skillPath, initialPath)
+      : null,
+  };
+}
+
+export function saveWebInstalledSkillFile(
+  ctx: CliContext,
+  skillName: string,
+  filePath: string,
+  request: WebSaveInstalledSkillFileRequest,
+): WebSkillFileContent {
+  if (!filePath || filePath.trim() === '') {
+    throw new WebApiError('INVALID_FILE_PATH', 'File path is required', 400);
+  }
+  if (typeof request.content !== 'string') {
+    throw new WebApiError('INVALID_FILE_CONTENT', 'File content must be a string', 400);
+  }
+
+  const config = ctx.loadConfig();
+  const { skillPath } = resolveInstalledSkillDirectory(
+    ctx,
+    config,
+    skillName,
+    request,
+  );
 
   const safePath = filePath.replace(/\\/g, '/').replace(/^\/+/, '');
-  const absolutePath = resolve(join(hit.skillDir, safePath));
-  if (!isInsidePath(hit.skillDir, absolutePath)) {
-    throw new WebApiError('PATH_NOT_ALLOWED', 'File path is outside skill directory', 403);
+  const absolutePath = resolve(join(skillPath, safePath));
+  if (!isInsidePath(skillPath, absolutePath)) {
+    throw new WebApiError(
+      'PATH_NOT_ALLOWED',
+      'File path is outside skill directory',
+      403,
+    );
   }
   if (!existsSync(absolutePath) || !statSync(absolutePath).isFile()) {
     throw new WebApiError('FILE_NOT_FOUND', 'File not found', 404);
   }
 
-  const stat = statSync(absolutePath);
-  const ext = extname(absolutePath).toLowerCase();
-  const { encoding, previewable } = classifyFile(absolutePath, stat.size);
-
-  if (!previewable) {
-    return { path: safePath, encoding, previewable, ext, size: stat.size };
+  const size = Buffer.byteLength(request.content, 'utf8');
+  const { encoding, previewable } = classifyFile(absolutePath, size);
+  if (encoding !== 'text' || !previewable) {
+    throw new WebApiError(
+      'FILE_NOT_EDITABLE',
+      'Only previewable text files can be edited',
+      400,
+      { path: safePath },
+    );
   }
 
-  if (encoding === 'text') {
-    const content = readFileSync(absolutePath, 'utf8');
-    return { path: safePath, content, encoding, previewable: true, ext, size: stat.size };
+  writeFileSync(absolutePath, request.content, 'utf8');
+  return getWebInstalledSkillFileContent(ctx, skillName, safePath, request);
+}
+
+export function resetWebInstalledSkillFile(
+  ctx: CliContext,
+  skillName: string,
+  request: WebResetInstalledSkillFileRequest,
+): WebResetInstalledSkillFileResult {
+  if (!request.filePath || request.filePath.trim() === '') {
+    throw new WebApiError('INVALID_FILE_PATH', 'File path is required', 400);
   }
 
-  // base64 (image)
-  const buf = readFileSync(absolutePath);
+  const config = ctx.loadConfig();
+  const { realSkillPath } = resolveInstalledSkillDirectory(
+    ctx,
+    config,
+    skillName,
+    request,
+  );
+  const safePath = request.filePath.replace(/\\/g, '/').replace(/^\/+/, '');
+
+  try {
+    const status = restoreInstalledSkillFileFromBaseline(
+      realSkillPath,
+      safePath,
+      ctx.configOptions,
+    );
+    if (status === 'removed') {
+      return { status, path: safePath };
+    }
+    return {
+      status,
+      path: safePath,
+      file: getWebInstalledSkillFileContent(ctx, skillName, safePath, request),
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (message === 'Baseline snapshot not found') {
+      throw new WebApiError(
+        'BASELINE_NOT_FOUND',
+        'No installation baseline is available for this skill',
+        404,
+      );
+    }
+    if (message.includes('outside skill directory')) {
+      throw new WebApiError(
+        'PATH_NOT_ALLOWED',
+        'File path is outside skill directory',
+        403,
+      );
+    }
+    if (message.includes('File not found')) {
+      throw new WebApiError('FILE_NOT_FOUND', 'File not found', 404);
+    }
+    throw new WebApiError('RESET_FILE_FAILED', message, 500);
+  }
+}
+
+export function resetWebInstalledSkill(
+  ctx: CliContext,
+  skillName: string,
+  request: WebInstalledSkillFileRequest,
+): WebResetInstalledSkillResult {
+  const config = ctx.loadConfig();
+  const { realSkillPath, scope, target } = resolveInstalledSkillDirectory(
+    ctx,
+    config,
+    skillName,
+    request,
+  );
+
+  try {
+    restoreInstalledSkillFromBaseline(realSkillPath, ctx.configOptions);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (message === 'Baseline snapshot not found') {
+      throw new WebApiError(
+        'BASELINE_NOT_FOUND',
+        'No installation baseline is available for this skill',
+        404,
+      );
+    }
+    throw new WebApiError('RESET_SKILL_FAILED', message, 500);
+  }
+
   return {
-    path: safePath,
-    contentBase64: buf.toString('base64'),
-    encoding,
-    previewable: true,
-    ext,
-    size: stat.size,
+    status: 'reset',
+    name: skillName,
+    target,
+    scope,
+    path: realSkillPath,
   };
 }
 
@@ -1746,15 +2300,85 @@ export interface WebTranslateResult {
   provider: string;
 }
 
-async function translateViaHttpApi(
-  text: string,
-  targetLang: string,
+function findJsonEnd(text: string, start: number): number | undefined {
+  const first = text[start];
+  const expectedClose = first === '{' ? '}' : first === '[' ? ']' : '';
+  if (!expectedClose) return undefined;
+
+  const stack = [expectedClose];
+  let inString = false;
+  let escaped = false;
+
+  for (let index = start + 1; index < text.length; index += 1) {
+    const char = text[index];
+
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === '\\') {
+        escaped = true;
+      } else if (char === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (char === '"') {
+      inString = true;
+      continue;
+    }
+
+    if (char === '{') {
+      stack.push('}');
+      continue;
+    }
+    if (char === '[') {
+      stack.push(']');
+      continue;
+    }
+    if (char === '}' || char === ']') {
+      if (stack.pop() !== char) {
+        return undefined;
+      }
+      if (stack.length === 0) {
+        return index + 1;
+      }
+    }
+  }
+
+  return undefined;
+}
+
+function extractJsonText(output?: string): string | undefined {
+  const text = output?.trim();
+  if (!text) return undefined;
+
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    if (char !== '{' && char !== '[') continue;
+
+    const end = findJsonEnd(text, index);
+    if (end === undefined) continue;
+
+    const candidate = text.slice(index, end);
+    try {
+      JSON.parse(candidate);
+      return candidate;
+    } catch {
+      // Try the next JSON-looking segment.
+    }
+  }
+
+  return undefined;
+}
+
+async function completeViaHttpApi(
+  prompt: string,
   apiBaseUrl: string,
   apiKey: string,
   model: string,
 ): Promise<string> {
   const url = `${apiBaseUrl.replace(/\/$/, '')}/chat/completions`;
-  const prompt = `Translate the following markdown content to ${targetLang}. Keep all markdown formatting, code blocks, and links intact. Output only the translated text without any extra explanation.\n\n${text}`;
   const res = await fetch(url, {
     method: 'POST',
     headers: {
@@ -1770,8 +2394,8 @@ async function translateViaHttpApi(
   if (!res.ok) {
     const body = await res.text().catch(() => '');
     throw new WebApiError(
-      'TRANSLATE_API_ERROR',
-      `Translation API returned ${res.status}: ${body.slice(0, 200)}`,
+      'MODEL_API_ERROR',
+      `Model API returned ${res.status}: ${body.slice(0, 200)}`,
       502,
     );
   }
@@ -1780,27 +2404,25 @@ async function translateViaHttpApi(
   };
   const result = data?.choices?.[0]?.message?.content;
   if (typeof result !== 'string' || !result.trim()) {
-    throw new WebApiError('TRANSLATE_EMPTY_RESPONSE', 'Translation API returned empty result', 502);
+    throw new WebApiError('AI_EMPTY_RESPONSE', 'AI API returned empty result', 502);
   }
   return result;
 }
 
-function translateViaCli(
-  text: string,
-  targetLang: string,
+function completeViaCli(
+  prompt: string,
   command: string,
   args: string[],
 ): Promise<string> {
   return new Promise((resolve, reject) => {
-    const prompt = `Translate the following markdown content to ${targetLang}. Keep all markdown formatting, code blocks, and links intact. Output only the translated text without any extra explanation.\n\n${text}`;
     const child = execFile(command, args, { timeout: 120_000 }, (err, stdout) => {
       if (err) {
-        reject(new WebApiError('TRANSLATE_CLI_ERROR', `CLI translation failed: ${err.message}`, 502));
+        reject(new WebApiError('AI_CLI_ERROR', `AI CLI failed: ${err.message}`, 502));
         return;
       }
       const result = stdout.trim();
       if (!result) {
-        reject(new WebApiError('TRANSLATE_EMPTY_RESPONSE', 'CLI translation returned empty result', 502));
+        reject(new WebApiError('AI_EMPTY_RESPONSE', 'AI CLI returned empty result', 502));
         return;
       }
       resolve(result);
@@ -1810,6 +2432,37 @@ function translateViaCli(
       child.stdin.end();
     }
   });
+}
+
+async function completeViaAiConfig(
+  config: AiEditConfig,
+  prompt: string,
+): Promise<{ output: string; provider: string }> {
+  if (config.provider === 'openai') {
+    const apiBaseUrl = config.apiBaseUrl || 'https://api.openai.com/v1';
+    const apiKey = config.apiKey || '';
+    const model = config.model || 'gpt-4o-mini';
+    if (!apiKey) {
+      throw new WebApiError('AI_EDIT_NO_API_KEY', 'API key is not configured', 400);
+    }
+    const output = await completeViaHttpApi(prompt, apiBaseUrl, apiKey, model);
+    return { output, provider: 'openai' };
+  }
+
+  if (config.provider === 'cli') {
+    const command = config.cliCommand || '';
+    if (!command) {
+      throw new WebApiError('AI_EDIT_NO_CLI_COMMAND', 'CLI command is not configured', 400);
+    }
+    const output = await completeViaCli(prompt, command, config.cliArgs ?? []);
+    return { output, provider: 'cli' };
+  }
+
+  throw new WebApiError(
+    'AI_EDIT_NOT_CONFIGURED',
+    'AI edit provider is not configured. Please configure it in Settings.',
+    400,
+  );
 }
 
 export async function translateWebText(
@@ -1832,28 +2485,12 @@ export async function translateWebText(
     );
   }
 
-  if (translationConfig.provider === 'openai') {
-    const apiBaseUrl = translationConfig.apiBaseUrl || 'https://api.openai.com/v1';
-    const apiKey = translationConfig.apiKey || '';
-    const model = translationConfig.model || 'gpt-4o-mini';
-    if (!apiKey) {
-      throw new WebApiError('TRANSLATION_NO_API_KEY', 'API key is not configured', 400);
-    }
-    const translated = await translateViaHttpApi(text, targetLang, apiBaseUrl, apiKey, model);
-    return { translated, provider: 'openai' };
-  }
-
-  if (translationConfig.provider === 'cli') {
-    const command = translationConfig.cliCommand || '';
-    if (!command) {
-      throw new WebApiError('TRANSLATION_NO_CLI_COMMAND', 'CLI command is not configured', 400);
-    }
-    const args = translationConfig.cliArgs ?? [];
-    const translated = await translateViaCli(text, targetLang, command, args);
-    return { translated, provider: 'cli' };
-  }
-
-  throw new WebApiError('UNKNOWN_PROVIDER', 'Unknown translation provider', 400);
+  const prompt = `Translate the following markdown content to ${targetLang}. Keep all markdown formatting, code blocks, and links intact. Output only the translated text without any extra explanation.\n\n${text}`;
+  const { output, provider } = await completeViaAiConfig(
+    translationConfig,
+    prompt,
+  );
+  return { translated: output, provider };
 }
 
 export function updateWebTranslationConfig(
@@ -1871,6 +2508,222 @@ export function getWebTranslationConfig(
   ctx: CliContext,
 ): import('../../types/index.js').TranslationConfig {
   return getTranslationConfig(ctx.loadConfig());
+}
+
+export function updateWebAiEditConfig(
+  ctx: CliContext,
+  request: Partial<AiEditConfig>,
+): AiEditConfig {
+  const config = ctx.loadConfig();
+  const merged = { ...(config.aiEditing ?? {}), ...request };
+  config.aiEditing = normalizeAiEditConfig(merged);
+  ctx.saveConfig(config);
+  return getAiEditConfig(config);
+}
+
+export function getWebAiEditConfig(
+  ctx: CliContext,
+): AiEditConfig {
+  return getAiEditConfig(ctx.loadConfig());
+}
+
+function aiEditableTextFilesForRequest(
+  skillPath: string,
+  request: WebInstalledSkillAiEditRequest,
+): Array<{ path: string; content: string }> {
+  const files = collectEditableTextFiles(skillPath);
+  if (request.mode === 'file') {
+    const selectedPath = normalizeRelativeFilePath(request.filePath ?? '');
+    if (!selectedPath) {
+      throw new WebApiError(
+        'INVALID_FILE_PATH',
+        'File path is required for file mode AI edit',
+        400,
+      );
+    }
+    const selected = files.find((file) => file.path === selectedPath);
+    if (!selected) {
+      throw new WebApiError(
+        'FILE_NOT_EDITABLE',
+        'Only previewable text files can be edited by AI',
+        400,
+      );
+    }
+    const skillMd = files.find(
+      (file) => file.path.toUpperCase() === 'SKILL.MD' && file.path !== selected.path,
+    );
+    return skillMd ? [selected, skillMd] : [selected];
+  }
+
+  const prioritized = [...files].sort((a, b) => {
+    if (a.path.toUpperCase() === 'SKILL.MD') return -1;
+    if (b.path.toUpperCase() === 'SKILL.MD') return 1;
+    return a.path.localeCompare(b.path);
+  });
+  return prioritized.slice(0, 8);
+}
+
+function buildAiEditPrompt(
+  request: WebInstalledSkillAiEditRequest,
+  files: Array<{ path: string; content: string }>,
+): string {
+  const modeInstruction =
+    request.mode === 'file'
+      ? `Focus on the current file: ${normalizeRelativeFilePath(request.filePath ?? '')}.`
+      : 'You may update any of the provided files, but only when necessary.';
+  const fileBlocks = files
+    .map((file) => `<file path="${file.path}">\n${file.content}\n</file>`)
+    .join('\n\n');
+  return [
+    'You are helping edit a locally installed coding skill.',
+    modeInstruction,
+    'Return JSON only.',
+    'Schema: {"summary":"short summary","files":[{"path":"relative/path","content":"full updated file content"}]}',
+    'Rules:',
+    '- Only modify files from the provided list.',
+    '- Do not add or delete files.',
+    '- Return only files whose contents changed.',
+    '- Preserve unrelated content.',
+    '- If no change is needed, return {"summary":"No changes needed","files":[]}.',
+    '',
+    `User request:\n${request.prompt.trim()}`,
+    '',
+    'Available files:',
+    fileBlocks,
+  ].join('\n');
+}
+
+function parseAiEditPreviewOutput(
+  output: string,
+): { summary: string; files: Array<{ path: string; content: string }> } {
+  const jsonText = extractJsonText(output);
+  if (!jsonText) {
+    throw new WebApiError(
+      'AI_EDIT_INVALID_RESPONSE',
+      'AI did not return a valid JSON payload',
+      502,
+    );
+  }
+  const parsed = JSON.parse(jsonText) as {
+    summary?: unknown;
+    files?: unknown;
+  };
+  const summary =
+    typeof parsed.summary === 'string' && parsed.summary.trim()
+      ? parsed.summary.trim()
+      : 'Generated AI edit preview';
+  const files = Array.isArray(parsed.files)
+    ? parsed.files
+        .map((item) => {
+          if (!item || typeof item !== 'object') return null;
+          const path =
+            typeof (item as { path?: unknown }).path === 'string'
+              ? normalizeRelativeFilePath((item as { path: string }).path)
+              : '';
+          const content =
+            typeof (item as { content?: unknown }).content === 'string'
+              ? (item as { content: string }).content
+              : '';
+          if (!path) return null;
+          return { path, content };
+        })
+        .filter((item): item is { path: string; content: string } => item !== null)
+    : [];
+  return { summary, files };
+}
+
+export async function generateWebInstalledSkillAiEdit(
+  ctx: CliContext,
+  skillName: string,
+  request: WebInstalledSkillAiEditRequest,
+): Promise<WebInstalledSkillAiEditPreviewResult> {
+  if (!request.prompt || !request.prompt.trim()) {
+    throw new WebApiError('INVALID_PROMPT', 'Prompt is required', 400);
+  }
+
+  const config = ctx.loadConfig();
+  const { skillPath } = resolveInstalledSkillDirectory(ctx, config, skillName, request);
+  const editableFiles = aiEditableTextFilesForRequest(skillPath, request);
+  if (editableFiles.length === 0) {
+    throw new WebApiError(
+      'AI_EDIT_NO_CONTEXT',
+      'No editable text files are available for AI editing',
+      400,
+    );
+  }
+
+  const prompt = buildAiEditPrompt(request, editableFiles);
+  const { output, provider } = await completeViaAiConfig(
+    getAiEditConfig(config),
+    prompt,
+  );
+  const preview = parseAiEditPreviewOutput(output);
+  const allowed = new Map(editableFiles.map((file) => [file.path, file.content]));
+
+  const files = preview.files
+    .map((file) => {
+      const beforeContent = allowed.get(file.path);
+      if (beforeContent === undefined) {
+        throw new WebApiError(
+          'AI_EDIT_PATH_NOT_ALLOWED',
+          `AI proposed a file outside the allowed context: ${file.path}`,
+          400,
+        );
+      }
+      return {
+        path: file.path,
+        beforeContent,
+        afterContent: file.content,
+      };
+    })
+    .filter((file) => file.beforeContent !== file.afterContent);
+
+  return {
+    provider,
+    mode: request.mode,
+    summary: preview.summary,
+    files,
+  };
+}
+
+export function applyWebInstalledSkillAiEdit(
+  ctx: CliContext,
+  skillName: string,
+  request: WebApplyInstalledSkillAiEditRequest,
+): WebApplyInstalledSkillAiEditResult {
+  const config = ctx.loadConfig();
+  const { skillPath } = resolveInstalledSkillDirectory(ctx, config, skillName, request);
+
+  const applied: string[] = [];
+  for (const file of request.files ?? []) {
+    if (!file || typeof file.path !== 'string' || typeof file.content !== 'string') {
+      throw new WebApiError(
+        'INVALID_AI_EDIT_PAYLOAD',
+        'Each AI edit file must include path and content',
+        400,
+      );
+    }
+
+    const { safePath, absolutePath } = resolveSkillRelativeFilePath(skillPath, file.path);
+    if (!existsSync(absolutePath) || !statSync(absolutePath).isFile()) {
+      throw new WebApiError('FILE_NOT_FOUND', `File not found: ${safePath}`, 404);
+    }
+
+    const size = Buffer.byteLength(file.content, 'utf8');
+    const { encoding, previewable } = classifyFile(absolutePath, size);
+    if (encoding !== 'text' || !previewable) {
+      throw new WebApiError(
+        'FILE_NOT_EDITABLE',
+        `Only previewable text files can be updated by AI: ${safePath}`,
+        400,
+      );
+    }
+
+    writeFileSync(absolutePath, file.content, 'utf8');
+    applied.push(safePath);
+  }
+
+  return { status: 'applied', files: applied };
 }
 
 export function toApiErrorPayload(error: unknown): {

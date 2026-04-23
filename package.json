@@ -1,6 +1,6 @@
 {
   "name": "suit-skills",
-  "version": "0.0.13",
+  "version": "0.0.14",
   "type": "module",
   "description": "A CLI tool for skills management with Web console and Desktop app",
   "main": "dist/index.js",
@@ -91,8 +91,16 @@
     "@tauri-apps/plugin-dialog": "^2.7.0",
     "commander": "^14.0.3",
     "i18next": "^26.0.5",
+    "mdast-util-to-string": "^4.0.0",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
-    "react-i18next": "^17.0.4"
+    "react-i18next": "^17.0.4",
+    "react-markdown": "^10.1.0",
+    "remark-breaks": "^4.0.0",
+    "remark-frontmatter": "^5.0.0",
+    "remark-gfm": "^4.0.1",
+    "remark-parse": "^11.0.0",
+    "unified": "^11.0.5",
+    "unist-util-visit": "^5.1.0"
   }
 }
