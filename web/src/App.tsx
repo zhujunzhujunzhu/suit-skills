@@ -1,8 +1,7 @@
-import {
-  type CSSProperties,
+﻿import {
+  Suspense,
   type MouseEvent,
-  type ReactNode,
-  type RefObject,
+  lazy,
   useCallback,
   useEffect,
   useMemo,
@@ -14,13 +13,13 @@ import {
   addInstallTarget,
   addSource,
   copyInstalledSkillPackage,
+  fetchAiEditConfig,
+  fetchDesktopBootstrap,
   exportInstalledSkill,
   fetchInstalled,
   fetchInstallTargets,
   fetchSettings,
   fetchSkillDetail,
-  fetchSkillFileContent,
-  fetchSkillFiles,
   fetchSkills,
   fetchSources,
   fetchTranslationConfig,
@@ -30,16 +29,15 @@ import {
   removeSource,
   removeInstalledSkill,
   restoreBuiltinSources,
-  translateText,
   updateSettings,
+  updateAiEditConfig,
   updateInstallTarget,
   updateSource,
   updateTranslationConfig,
+  type AiEditConfig,
   type AppSettings,
   type InstalledSkill,
   type InstallTargetOption,
-  type SkillFileContent,
-  type SkillFileNode,
   type SkillLibraryTarget,
   type SkillDetail,
   type SkillSummary,
@@ -53,14 +51,18 @@ import {
   fetchLatestRelease,
   fetchLatestWebRelease,
   compareSemver,
-  detectPlatform,
-  GITEE_REPO_URL,
-  PLATFORM_LABELS,
   type DesktopRelease,
-  type DesktopPlatform,
 } from './api/download';
+import { Icon, type IconName } from './ui/Icon';
 
-type View = 'library' | 'installed' | 'sources' | 'settings' | 'download' | 'skill-detail';
+type View =
+  | 'library'
+  | 'installed'
+  | 'sources'
+  | 'settings'
+  | 'download'
+  | 'skill-detail'
+  | 'installed-editor';
 type LocationScope = 'project' | 'global';
 type ScopeFilter = 'all' | LocationScope;
 type InstallStrategy = 'overwrite' | 'skip' | 'rename';
@@ -76,350 +78,35 @@ const DEFAULT_SETTINGS: AppSettings = {
   themeColor: '#b7e05a',
 };
 
-const DEFAULT_THEME_COLOR = '#b7e05a';
-
-type ThemeVariableMap = Record<string, string>;
-type ThemeDraft = Pick<AppSettings, 'themeMode' | 'themeColor'>;
-
-const CLASSIC_THEME_VARIABLES: ThemeVariableMap = {
-  '--surface': '#121411',
-  '--surface-lowest': '#0d0f0c',
-  '--surface-low': '#1a1d18',
-  '--surface-mid': '#22251f',
-  '--surface-high': '#2d3129',
-  '--surface-bright': '#3b4035',
-  '--surface-hover': 'rgba(183, 224, 90, 0.1)',
-  '--text': '#ece9dc',
-  '--foreground': '#ece9dc',
-  '--muted': '#c9c5b3',
-  '--text-secondary': '#a6a18f',
-  '--faint': '#898574',
-  '--outline': 'rgba(120, 126, 99, 0.42)',
-  '--outline-soft': 'rgba(120, 126, 99, 0.2)',
-  '--primary': '#b7e05a',
-  '--primary-strong': '#7ea32b',
-  '--primary-ink': '#161d0b',
-  '--secondary': '#efbd67',
-  '--tertiary': '#e9907b',
-  '--accent': '#b7e05a',
-  '--accent-muted': 'rgba(183, 224, 90, 0.18)',
-  '--warning': '#efbd67',
-  '--error': '#ff9d88',
-  '--danger': '#ff9d88',
-  '--shadow-soft': '0 18px 42px rgba(3, 10, 8, 0.22)',
-  '--shadow-strong': '0 28px 90px rgba(2, 8, 6, 0.3)',
-  '--panel-glow': 'inset 0 1px 0 rgba(255, 255, 255, 0.04)',
-};
-
-const THEME_VARIABLE_NAMES = Object.keys(CLASSIC_THEME_VARIABLES);
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
-}
-
-function normalizeHexColor(value: string | undefined, fallback = DEFAULT_THEME_COLOR): string {
-  if (!value) return fallback;
-  const trimmed = value.trim();
-  const match = trimmed.match(/^#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/);
-  if (!match) return fallback;
-  const hex = match[1].toLowerCase();
-  if (hex.length === 3) {
-    return `#${hex
-      .split('')
-      .map((char) => `${char}${char}`)
-      .join('')}`;
-  }
-  return `#${hex}`;
-}
-
-function hexToRgb(hex: string): { r: number; g: number; b: number } {
-  const normalized = normalizeHexColor(hex);
-  return {
-    r: Number.parseInt(normalized.slice(1, 3), 16),
-    g: Number.parseInt(normalized.slice(3, 5), 16),
-    b: Number.parseInt(normalized.slice(5, 7), 16),
-  };
-}
-
-function rgbToHex({ r, g, b }: { r: number; g: number; b: number }): string {
-  return `#${[r, g, b]
-    .map((value) => clamp(Math.round(value), 0, 255).toString(16).padStart(2, '0'))
-    .join('')}`;
-}
-
-function mixHex(colorA: string, colorB: string, weightB: number): string {
-  const a = hexToRgb(colorA);
-  const b = hexToRgb(colorB);
-  const weight = clamp(weightB, 0, 1);
-  return rgbToHex({
-    r: a.r + (b.r - a.r) * weight,
-    g: a.g + (b.g - a.g) * weight,
-    b: a.b + (b.b - a.b) * weight,
-  });
-}
-
-function toRgba(hex: string, alpha: number): string {
-  const { r, g, b } = hexToRgb(hex);
-  return `rgba(${r}, ${g}, ${b}, ${clamp(alpha, 0, 1)})`;
-}
-
-function rgbToHsl({
-  r,
-  g,
-  b,
-}: {
-  r: number;
-  g: number;
-  b: number;
-}): { h: number; s: number; l: number } {
-  const rn = r / 255;
-  const gn = g / 255;
-  const bn = b / 255;
-  const max = Math.max(rn, gn, bn);
-  const min = Math.min(rn, gn, bn);
-  const delta = max - min;
-  let h = 0;
-
-  if (delta !== 0) {
-    if (max === rn) {
-      h = ((gn - bn) / delta) % 6;
-    } else if (max === gn) {
-      h = (bn - rn) / delta + 2;
-    } else {
-      h = (rn - gn) / delta + 4;
-    }
-  }
-
-  const l = (max + min) / 2;
-  const s = delta === 0 ? 0 : delta / (1 - Math.abs(2 * l - 1));
-  return {
-    h: ((h * 60) + 360) % 360,
-    s: s * 100,
-    l: l * 100,
-  };
-}
-
-function hslToHex(h: number, s: number, l: number): string {
-  const hue = ((h % 360) + 360) % 360;
-  const sat = clamp(s, 0, 100) / 100;
-  const light = clamp(l, 0, 100) / 100;
-  const chroma = (1 - Math.abs(2 * light - 1)) * sat;
-  const x = chroma * (1 - Math.abs(((hue / 60) % 2) - 1));
-  const m = light - chroma / 2;
-  let r = 0;
-  let g = 0;
-  let b = 0;
-
-  if (hue < 60) {
-    r = chroma;
-    g = x;
-  } else if (hue < 120) {
-    r = x;
-    g = chroma;
-  } else if (hue < 180) {
-    g = chroma;
-    b = x;
-  } else if (hue < 240) {
-    g = x;
-    b = chroma;
-  } else if (hue < 300) {
-    r = x;
-    b = chroma;
-  } else {
-    r = chroma;
-    b = x;
-  }
-
-  return rgbToHex({
-    r: (r + m) * 255,
-    g: (g + m) * 255,
-    b: (b + m) * 255,
-  });
-}
-
-function buildCustomThemeVariables(themeColor: string): ThemeVariableMap {
-  const primary = normalizeHexColor(themeColor);
-  const primaryRgb = hexToRgb(primary);
-  const { h, s, l } = rgbToHsl(primaryRgb);
-  const surfaceBaseS = clamp(8 + s * 0.18, 8, 18);
-  const surface = hslToHex(h, surfaceBaseS, 8);
-  const surfaceLowest = hslToHex(h, surfaceBaseS * 0.9, 5);
-  const surfaceLow = hslToHex(h, surfaceBaseS, 10);
-  const surfaceMid = hslToHex(h, surfaceBaseS + 1, 15);
-  const surfaceHigh = hslToHex(h, surfaceBaseS + 2, 21);
-  const surfaceBright = hslToHex(h, surfaceBaseS + 3, 29);
-  const text = hslToHex(h, clamp(6 + s * 0.08, 6, 16), 93);
-  const muted = hslToHex(h, clamp(8 + s * 0.1, 8, 18), 78);
-  const textSecondary = hslToHex(h, clamp(7 + s * 0.08, 7, 16), 65);
-  const faint = hslToHex(h, clamp(6 + s * 0.07, 6, 14), 53);
-  const primaryStrong = hslToHex(h, clamp(28 + s * 0.28, 28, 72), clamp(l * 0.72, 28, 45));
-  const primaryInk = hslToHex(h, clamp(12 + s * 0.18, 12, 28), 10);
-  const secondary = hslToHex(h + 34, clamp(26 + s * 0.34, 26, 70), clamp(Math.max(l, 62), 62, 72));
-  const tertiary = hslToHex(h - 24, clamp(30 + s * 0.38, 30, 74), clamp(Math.max(l, 64), 64, 74));
-  const accent = hslToHex(h + 10, clamp(24 + s * 0.36, 24, 72), clamp(Math.max(l, 60), 60, 72));
-  const outlineBase = mixHex(primary, text, 0.34);
-  const shadowColor = mixHex(surfaceLowest, primaryStrong, 0.2);
-
-  return {
-    '--surface': surface,
-    '--surface-lowest': surfaceLowest,
-    '--surface-low': surfaceLow,
-    '--surface-mid': surfaceMid,
-    '--surface-high': surfaceHigh,
-    '--surface-bright': surfaceBright,
-    '--surface-hover': toRgba(primary, 0.1),
-    '--text': text,
-    '--foreground': text,
-    '--muted': muted,
-    '--text-secondary': textSecondary,
-    '--faint': faint,
-    '--outline': toRgba(outlineBase, 0.34),
-    '--outline-soft': toRgba(outlineBase, 0.18),
-    '--primary': primary,
-    '--primary-strong': primaryStrong,
-    '--primary-ink': primaryInk,
-    '--secondary': secondary,
-    '--tertiary': tertiary,
-    '--accent': accent,
-    '--accent-muted': toRgba(accent, 0.18),
-    '--warning': secondary,
-    '--error': tertiary,
-    '--danger': tertiary,
-    '--shadow-soft': `0 18px 42px ${toRgba(shadowColor, 0.24)}`,
-    '--shadow-strong': `0 28px 90px ${toRgba(shadowColor, 0.34)}`,
-    '--panel-glow': 'inset 0 1px 0 rgba(255, 255, 255, 0.04)',
-  };
-}
-
-function buildThemePreviewVariables(theme: ThemeDraft): ThemeVariableMap {
-  return theme.themeMode === 'custom'
-    ? buildCustomThemeVariables(theme.themeColor)
-    : CLASSIC_THEME_VARIABLES;
-}
-
-const icons = {
-  download: (
-    <>
-      <path d="M12 2v13" />
-      <path d="m7 11 5 5 5-5" />
-      <path d="M4 18h16" />
-    </>
-  ),
-  terminal: (
-    <>
-      <path d="M4 5h16v14H4z" />
-      <path d="m7 9 3 3-3 3" />
-      <path d="M12 15h5" />
-    </>
-  ),
-  database: (
-    <>
-      <ellipse cx="12" cy="6" rx="7" ry="3" />
-      <path d="M5 6v12c0 1.7 3.1 3 7 3s7-1.3 7-3V6" />
-      <path d="M5 12c0 1.7 3.1 3 7 3s7-1.3 7-3" />
-    </>
-  ),
-  check: (
-    <>
-      <circle cx="12" cy="12" r="9" />
-      <path d="m7.5 12 3 3L17 8" />
-    </>
-  ),
-  search: (
-    <>
-      <circle cx="11" cy="11" r="7" />
-      <path d="m16.5 16.5 4 4" />
-    </>
-  ),
-  copy: (
-    <>
-      <path d="M8 8h11v11H8z" />
-      <path d="M5 16H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h11a1 1 0 0 1 1 1v1" />
-    </>
-  ),
-  package: (
-    <>
-      <path d="m12 2 8 4.5v9L12 20l-8-4.5v-9L12 2z" />
-      <path d="m4.5 7 7.5 4.2L19.5 7" />
-      <path d="M12 20v-8.8" />
-    </>
-  ),
-  link: (
-    <>
-      <path d="M10 13a5 5 0 0 0 7.1 0l2-2a5 5 0 0 0-7.1-7.1l-1.1 1.1" />
-      <path d="M14 11a5 5 0 0 0-7.1 0l-2 2A5 5 0 0 0 12 20.1l1.1-1.1" />
-    </>
-  ),
-  trash: (
-    <>
-      <path d="M4 7h16" />
-      <path d="M9 7V4h6v3" />
-      <path d="M7 7l1 14h8l1-14" />
-    </>
-  ),
-  refresh: (
-    <>
-      <path d="M20 12a8 8 0 0 1-14.6 4.5" />
-      <path d="M4 12A8 8 0 0 1 18.6 7.5" />
-      <path d="M18 3v5h-5" />
-      <path d="M6 21v-5h5" />
-    </>
-  ),
-  settings: (
-    <>
-      <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z" />
-      <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2 3.4-.2-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6V22h-4v-.4a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.2.1-2-3.4.1-.1A1.7 1.7 0 0 0 4.6 15 1.7 1.7 0 0 0 3 14H2v-4h1a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7l2-3.4.2.1a1.7 1.7 0 0 0 1.9.3 1.7 1.7 0 0 0 1-1.6V2h4v.4a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.2-.1 2 3.4-.1.1A1.7 1.7 0 0 0 19.4 9 1.7 1.7 0 0 0 21 10h1v4h-1a1.7 1.7 0 0 0-1.6 1z" />
-    </>
-  ),
-  x: (
-    <>
-      <path d="M6 6l12 12" />
-      <path d="M18 6 6 18" />
-    </>
-  ),
-  translate: (
-    <>
-      <path d="M3 5h8" />
-      <path d="M7 3v2" />
-      <path d="M4 12c0-3.3 2.7-6 6-6s6 2.7 6 6" />
-      <path d="m7 12 2 2" />
-      <path d="M12 17h9" />
-      <path d="M16 13v8" />
-      <path d="m13 20 3-3 3 3" />
-    </>
-  ),
-  folder: (
-    <>
-      <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-    </>
-  ),
-  file: (
-    <>
-      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-      <path d="M14 2v6h6" />
-    </>
-  ),
-  'chevron-right': (
-    <path d="M9 18l6-6-6-6" />
-  ),
-  'chevron-down': (
-    <path d="M6 9l6 6 6-6" />
-  ),
-  'arrow-left': (
-    <>
-      <path d="m12 19-7-7 7-7" />
-      <path d="M19 12H5" />
-    </>
-  ),
-};
-
-function Icon({ name }: { name: keyof typeof icons }) {
-  return (
-    <svg className="icon" viewBox="0 0 24 24" aria-hidden="true">
-      {icons[name]}
-    </svg>
-  );
-}
+const THEME_VARIABLE_NAMES = [
+  '--surface',
+  '--surface-lowest',
+  '--surface-low',
+  '--surface-mid',
+  '--surface-high',
+  '--surface-bright',
+  '--surface-hover',
+  '--text',
+  '--foreground',
+  '--muted',
+  '--text-secondary',
+  '--faint',
+  '--outline',
+  '--outline-soft',
+  '--primary',
+  '--primary-strong',
+  '--primary-ink',
+  '--secondary',
+  '--tertiary',
+  '--accent',
+  '--accent-muted',
+  '--warning',
+  '--error',
+  '--danger',
+  '--shadow-soft',
+  '--shadow-strong',
+  '--panel-glow',
+] as const;
 
 function npxCommand(
   skill: SkillSummary | SkillDetail | null,
@@ -441,6 +128,10 @@ async function copyText(text: string): Promise<void> {
   textarea.select();
   document.execCommand('copy');
   textarea.remove();
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === 'AbortError';
 }
 
 async function windowCommand(
@@ -471,143 +162,8 @@ async function startWindowDrag(event: MouseEvent<HTMLElement>): Promise<void> {
   }
 }
 
-type MarkdownBlock =
-  | { kind: 'h1' | 'h2' | 'p' | 'pre'; text: string }
-  | { kind: 'ul'; items: string[] };
-
-function parseMarkdown(markdown: string, emptyText: string): MarkdownBlock[] {
-  const lines = markdown.split(/\r?\n/);
-  const blocks: MarkdownBlock[] = [];
-  let paragraph: string[] = [];
-  let list: string[] = [];
-  let code: string[] | null = null;
-
-  function flushParagraph() {
-    if (paragraph.length) {
-      blocks.push({ kind: 'p', text: paragraph.join(' ') });
-      paragraph = [];
-    }
-  }
-
-  function flushList() {
-    if (list.length) {
-      blocks.push({ kind: 'ul', items: list });
-      list = [];
-    }
-  }
-
-  for (const line of lines) {
-    if (line.startsWith('```')) {
-      if (code) {
-        blocks.push({ kind: 'pre', text: code.join('\n') });
-        code = null;
-      } else {
-        flushParagraph();
-        flushList();
-        code = [];
-      }
-      continue;
-    }
-    if (code) {
-      code.push(line);
-      continue;
-    }
-    if (!line.trim()) {
-      flushParagraph();
-      flushList();
-      continue;
-    }
-    if (line.startsWith('# ')) {
-      flushParagraph();
-      flushList();
-      blocks.push({ kind: 'h1', text: line.slice(2).trim() });
-      continue;
-    }
-    if (line.startsWith('## ')) {
-      flushParagraph();
-      flushList();
-      blocks.push({ kind: 'h2', text: line.slice(3).trim() });
-      continue;
-    }
-    if (line.startsWith('- ')) {
-      flushParagraph();
-      list.push(line.slice(2).trim());
-      continue;
-    }
-    paragraph.push(line.trim());
-  }
-  flushParagraph();
-  flushList();
-  if (code) blocks.push({ kind: 'pre', text: code.join('\n') });
-  return blocks.length ? blocks : [{ kind: 'p', text: emptyText }];
-}
-
-function MarkdownView({ markdown }: { markdown: string }) {
-  const { t } = useTranslation();
-  const blocks = useMemo(
-    () => parseMarkdown(markdown, t('markdown.empty')),
-    [markdown, t],
-  );
-  return (
-    <div className="markdown">
-      {blocks.map((block, index) => {
-        if (block.kind === 'h1') return <h1 key={index}>{block.text}</h1>;
-        if (block.kind === 'h2') return <h2 key={index}>{block.text}</h2>;
-        if (block.kind === 'pre') {
-          return (
-            <pre className="code-block" key={index}>
-              <code>{block.text}</code>
-            </pre>
-          );
-        }
-        if (block.kind === 'ul') {
-          return (
-            <ul key={index}>
-              {block.items.map((item) => (
-                <li key={item}>{item}</li>
-              ))}
-            </ul>
-          );
-        }
-        return <p key={index}>{block.text}</p>;
-      })}
-    </div>
-  );
-}
-
-function EmptyState({ children }: { children: string }) {
-  return <div className="state">{children}</div>;
-}
-
 function ErrorState({ message }: { message: string }) {
   return <div className="state error">{message}</div>;
-}
-
-function SourceWarnings({ warnings }: { warnings: SourceWarning[] }) {
-  const { t } = useTranslation();
-  if (warnings.length === 0) return null;
-  return (
-    <div className="source-warnings" role="status">
-      <strong>
-        {warnings.some((warning) => !warning.usingCache)
-          ? t('warnings.refreshFailed')
-          : t('warnings.usingCache')}
-      </strong>
-      <span>{t('warnings.hint')}</span>
-      <ul>
-        {warnings.map((warning) => (
-          <li key={`${warning.sourceName}:${warning.url}:${warning.message}`}>
-            <b>{warning.sourceName}</b>
-            <code>{warning.url}</code>
-            <em>
-              {warning.usingCache ? t('warnings.localCache') : t('warnings.unreachable')}
-            </em>
-            <span>{warning.message}</span>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
 }
 
 function installedSkillMatches(item: InstalledSkill, query: string): boolean {
@@ -632,38 +188,6 @@ function installedSkillMatches(item: InstalledSkill, query: string): boolean {
   return fields.some((value) => value.toLowerCase().includes(needle));
 }
 
-function highlightText(value: unknown, query: string): ReactNode {
-  const safe =
-    typeof value === 'string' ? value : value == null ? '' : String(value);
-  const needle = query.trim();
-  if (!needle) return safe;
-
-  const lowerValue = safe.toLowerCase();
-  const lowerNeedle = needle.toLowerCase();
-  const parts: ReactNode[] = [];
-  let cursor = 0;
-
-  while (cursor < safe.length) {
-    const index = lowerValue.indexOf(lowerNeedle, cursor);
-    if (index === -1) {
-      parts.push(safe.slice(cursor));
-      break;
-    }
-    if (index > cursor) {
-      parts.push(safe.slice(cursor, index));
-    }
-    const end = index + needle.length;
-    parts.push(
-      <mark className="search-hit" key={`${index}-${end}`}>
-        {safe.slice(index, end)}
-      </mark>,
-    );
-    cursor = end;
-  }
-
-  return parts;
-}
-
 function nextSelectableSource(sources: Source[], current: string): string {
   if (current === 'all') return current;
   return sources.some((item) => item.enabled && item.name === current)
@@ -678,6 +202,7 @@ const VIEW_KEYS: Record<View, string> = {
   settings: 'settings',
   download: 'download',
   'skill-detail': 'skills',
+  'installed-editor': 'installed',
 };
 
 function viewFromHash(): View {
@@ -688,6 +213,13 @@ function viewFromHash(): View {
 }
 
 const WEB_APP_VERSION = __APP_VERSION__;
+const LazyDownloadView = lazy(() => import('./views/DownloadView'));
+const LazyInstalledView = lazy(() => import('./views/InstalledView'));
+const LazyLibraryView = lazy(() => import('./views/LibraryView'));
+const LazySettingsView = lazy(() => import('./views/SettingsView'));
+const LazySkillDetailView = lazy(() => import('./views/SkillDetailView'));
+const LazyInstalledSkillEditorView = lazy(() => import('./views/InstalledSkillEditorView'));
+const LazySourcesView = lazy(() => import('./views/SourcesView'));
 
 export default function App() {
   const { t, i18n } = useTranslation();
@@ -729,15 +261,46 @@ export default function App() {
     useState<DesktopRelease | null | 'loading'>('loading');
   const [latestWebVersion, setLatestWebVersion] = useState<string | null | 'loading'>('loading');
   const [detailSkillName, setDetailSkillName] = useState('');
+  const [installedEditorSkill, setInstalledEditorSkill] = useState<InstalledSkill | null>(null);
   const [prevView, setPrevView] = useState<View>('library');
   const [translationConfig, setTranslationConfig] = useState<TranslationConfig>({ provider: 'none' });
+  const [aiEditConfig, setAiEditConfig] = useState<AiEditConfig>({ provider: 'none' });
   const skillRequestId = useRef(0);
   const detailRequestId = useRef(0);
   const installedRequestId = useRef(0);
+  const skillAbortController = useRef<AbortController | null>(null);
+  const detailAbortController = useRef<AbortController | null>(null);
+  const installedAbortController = useRef<AbortController | null>(null);
+
+  function applySourcesData(data: { sources: Source[]; defaultSource: string }) {
+    setSources(data.sources);
+    setDefaultSource(data.defaultSource);
+    setSource((current) => nextSelectableSource(data.sources, current));
+  }
+
+  function applyInstallTargetsData(data: {
+    library?: SkillLibraryTarget | null;
+    targets: InstallTargetOption[];
+  }) {
+    setSkillLibrary(data.library ?? null);
+    setInstallTargetRows(data.targets);
+    setInstallTargets((prev) => {
+      const visibleTargets = data.targets.filter((row) => !row.hidden);
+      const ids = new Set(visibleTargets.map((row) => row.id));
+      const kept = prev.filter((id) => ids.has(id));
+      if (kept.length > 0) {
+        return kept;
+      }
+      return visibleTargets
+        .filter((row) => row.globalExists || row.projectExists)
+        .map((row) => row.id);
+    });
+  }
 
   useEffect(() => {
     if (typeof document === 'undefined') return;
     const rootStyle = document.documentElement.style;
+    let disposed = false;
 
     for (const name of THEME_VARIABLE_NAMES) {
       rootStyle.removeProperty(name);
@@ -747,12 +310,18 @@ export default function App() {
       return;
     }
 
-    const themeVariables = buildCustomThemeVariables(settings.themeColor);
-    for (const [name, value] of Object.entries(themeVariables)) {
-      rootStyle.setProperty(name, value);
-    }
+    void import('./theme/customTheme').then(({ buildCustomThemeVariables }) => {
+      if (disposed) {
+        return;
+      }
+      const themeVariables = buildCustomThemeVariables(settings.themeColor);
+      for (const [name, value] of Object.entries(themeVariables)) {
+        rootStyle.setProperty(name, value);
+      }
+    });
 
     return () => {
+      disposed = true;
       for (const name of THEME_VARIABLE_NAMES) {
         rootStyle.removeProperty(name);
       }
@@ -772,6 +341,9 @@ export default function App() {
   ) {
     const requestId = skillRequestId.current + 1;
     skillRequestId.current = requestId;
+    skillAbortController.current?.abort();
+    const controller = new AbortController();
+    skillAbortController.current = controller;
     setLoading(true);
     setError('');
     setSourceWarnings([]);
@@ -781,7 +353,7 @@ export default function App() {
         q,
         tag: nextTag,
         refresh,
-      });
+      }, { signal: controller.signal });
       if (skillRequestId.current === requestId) {
         setSkills(data.items);
         setSourceWarnings(data.warnings ?? []);
@@ -792,11 +364,17 @@ export default function App() {
         );
       }
     } catch (err) {
+      if (isAbortError(err)) {
+        return;
+      }
       if (skillRequestId.current === requestId) {
         setError(err instanceof Error ? err.message : String(err));
         setSourceWarnings([]);
       }
     } finally {
+      if (skillAbortController.current === controller) {
+        skillAbortController.current = null;
+      }
       if (skillRequestId.current === requestId) {
         setLoading(false);
       }
@@ -810,21 +388,30 @@ export default function App() {
   ) {
     const requestId = installedRequestId.current + 1;
     installedRequestId.current = requestId;
+    installedAbortController.current?.abort();
+    const controller = new AbortController();
+    installedAbortController.current = controller;
     setInstalledLoading(true);
     try {
       const data = await fetchInstalled({
         scope: nextScope,
         target: target || undefined,
         q,
-      });
+      }, { signal: controller.signal });
       if (installedRequestId.current === requestId) {
         setInstalled(data.items);
       }
-    } catch {
+    } catch (err) {
+      if (isAbortError(err)) {
+        return;
+      }
       if (installedRequestId.current === requestId) {
         setInstalled([]);
       }
     } finally {
+      if (installedAbortController.current === controller) {
+        installedAbortController.current = null;
+      }
       if (installedRequestId.current === requestId) {
         setInstalledLoading(false);
       }
@@ -834,9 +421,7 @@ export default function App() {
   async function loadSources() {
     try {
       const data = await fetchSources();
-      setSources(data.sources);
-      setDefaultSource(data.defaultSource);
-      setSource((current) => nextSelectableSource(data.sources, current));
+      applySourcesData(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -868,6 +453,14 @@ export default function App() {
     }
   }
 
+  async function loadAiEditConfig() {
+    try {
+      setAiEditConfig(await fetchAiEditConfig());
+    } catch {
+      setAiEditConfig({ provider: 'none' });
+    }
+  }
+
   async function saveTranslationConfig(next: TranslationConfig) {
     try {
       const updated = await updateTranslationConfig(next);
@@ -878,10 +471,26 @@ export default function App() {
     }
   }
 
+  async function saveAiEditConfig(next: AiEditConfig) {
+    try {
+      const updated = await updateAiEditConfig(next);
+      setAiEditConfig(updated);
+      notify(t('toast.aiEditSaved', { defaultValue: 'AI 修改配置已保存' }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
   function openSkillDetail(name: string) {
     setPrevView(view);
     setDetailSkillName(name);
     setView('skill-detail');
+  }
+
+  function openInstalledEditor(item: InstalledSkill) {
+    setPrevView(view);
+    setInstalledEditorSkill(item);
+    setView('installed-editor');
   }
 
   function openSettings() {
@@ -896,22 +505,10 @@ export default function App() {
 
   async function refreshInstallTargets() {
     try {
-      const { library, targets } = await fetchInstallTargets();
-      setSkillLibrary(library ?? null);
-      setInstallTargetRows(targets);
-      setInstallTargets((prev) => {
-        const visibleTargets = targets.filter((row) => !row.hidden);
-        const ids = new Set(visibleTargets.map((row) => row.id));
-        const kept = prev.filter((id) => ids.has(id));
-        if (kept.length > 0) {
-          return kept;
-        }
-        return visibleTargets
-          .filter((row) => row.globalExists || row.projectExists)
-          .map((row) => row.id);
-      });
+      const data = await fetchInstallTargets();
+      applyInstallTargetsData(data);
     } catch {
-      /* Web API 或桌面 CLI 不可用时保持当前列表 */
+      /* Web API 鎴栨闈?CLI 涓嶅彲鐢ㄦ椂淇濇寔褰撳墠鍒楄〃 */
     }
   }
 
@@ -961,23 +558,48 @@ export default function App() {
     }
   }
 
-  useEffect(() => {
-    void loadSources();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => () => {
+    skillAbortController.current?.abort();
+    detailAbortController.current?.abort();
+    installedAbortController.current?.abort();
   }, []);
 
   useEffect(() => {
-    void loadSettings();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    let cancelled = false;
 
-  useEffect(() => {
-    void loadTranslationConfig();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    async function initializeApp() {
+      try {
+        const bootstrap = await fetchDesktopBootstrap();
+        if (cancelled) {
+          return;
+        }
+        if (bootstrap) {
+          applySourcesData(bootstrap.sources);
+          setSettings(bootstrap.settings);
+          setTranslationConfig(bootstrap.translationConfig);
+          setAiEditConfig(bootstrap.aiEditConfig);
+          applyInstallTargetsData(bootstrap.installTargets);
+          return;
+        }
+      } catch {
+        /* Tauri bootstrap failed; fall back to independent reads. */
+      }
 
-  useEffect(() => {
-    void refreshInstallTargets();
+      if (cancelled) {
+        return;
+      }
+
+      void loadSources();
+      void loadSettings();
+      void loadTranslationConfig();
+      void loadAiEditConfig();
+      void refreshInstallTargets();
+    }
+
+    void initializeApp();
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -1005,7 +627,7 @@ export default function App() {
     return () => { cancelled = true; };
   }, []);
 
-  // 桌面端自动检测新版本
+  // 妗岄潰绔嚜鍔ㄦ娴嬫柊鐗堟湰
   useEffect(() => {
     let cancelled = false;
     async function checkUpdate() {
@@ -1019,7 +641,7 @@ export default function App() {
           return;
         }
 
-        // 读取当前桌面应用版本
+        // 璇诲彇褰撳墠妗岄潰搴旂敤鐗堟湰
         const { getVersion } = await import('@tauri-apps/api/app');
         const currentVersion = await getVersion();
         if (cancelled) return;
@@ -1031,7 +653,7 @@ export default function App() {
           setUpdateAvailable(null);
         }
       } catch {
-        // 检测失败时静默处理
+        // 妫€娴嬪け璐ユ椂闈欓粯澶勭悊
         if (!cancelled) {
           setLatestDesktopRelease(null);
           setUpdateAvailable(null);
@@ -1067,14 +689,18 @@ export default function App() {
   useEffect(() => {
     const requestId = detailRequestId.current + 1;
     detailRequestId.current = requestId;
+    detailAbortController.current?.abort();
+    const controller = new AbortController();
+    detailAbortController.current = controller;
     if (!selected) {
       setDetail(null);
       setError((current) =>
         current === RAW_API.SKILL_NOT_FOUND ? '' : current,
       );
+      detailAbortController.current = null;
       return;
     }
-    fetchSkillDetail(selected, source)
+    fetchSkillDetail(selected, source, { signal: controller.signal })
       .then((nextDetail) => {
         if (detailRequestId.current === requestId) {
           setDetail(nextDetail);
@@ -1084,11 +710,20 @@ export default function App() {
         }
       })
       .catch((err: Error) => {
+        if (isAbortError(err)) {
+          return;
+        }
         if (detailRequestId.current === requestId) {
           setDetail(null);
           setError(err.message);
         }
       });
+    return () => {
+      if (detailAbortController.current === controller) {
+        detailAbortController.current = null;
+      }
+      controller.abort();
+    };
   }, [selected, source]);
 
   useEffect(() => {
@@ -1387,7 +1022,10 @@ export default function App() {
   }
 
   const shellNoRail =
-    view === 'skill-detail' || view === 'settings' || view === 'download';
+    view === 'skill-detail' ||
+    view === 'installed-editor' ||
+    view === 'settings' ||
+    view === 'download';
 
   return (
     <div className={shellNoRail ? 'app-shell app-shell--no-rail' : 'app-shell'}>
@@ -1418,16 +1056,18 @@ export default function App() {
                     ? t('crumb.viewSources')
                     : view === 'skill-detail'
                       ? t('crumb.viewSkillDetail', { defaultValue: '技能详情' })
+                      : view === 'installed-editor'
+                        ? t('crumb.viewInstalledEditor', { defaultValue: '本地技能编辑' })
                       : view === 'download'
-                        ? t('crumb.viewDownload', { defaultValue: '下载' })
-                        : t('crumb.viewSettings', { defaultValue: '设置' })}
+                        ? t('crumb.viewDownload', { defaultValue: '涓嬭浇' })
+                        : t('crumb.viewSettings', { defaultValue: '璁剧疆' })}
             </em>
           </div>
           <div className="topbar-actions">
             <TopbarDownloadEntry
               active={view === 'download'}
               currentVersion={runtimeCurrentVersion}
-              label={t('topbar.download', { defaultValue: '下载' })}
+              label={t('topbar.download', { defaultValue: '涓嬭浇' })}
               latestVersion={runtimeLatestVersion}
               runtimeLabel={runtimeChannelLabel}
               updateAvailable={runtimeUpdateAvailable}
@@ -1447,8 +1087,8 @@ export default function App() {
             </select>
             <button
               className="icon-button"
-              aria-label={t('topbar.settings', { defaultValue: '设置' })}
-              title={t('topbar.settings', { defaultValue: '设置' })}
+              aria-label={t('topbar.settings', { defaultValue: '璁剧疆' })}
+              title={t('topbar.settings', { defaultValue: '璁剧疆' })}
               onClick={openSettings}
             >
               <Icon name="settings" />
@@ -1522,110 +1162,135 @@ export default function App() {
         ) : null}
         {error ? <ErrorState message={translateApiError(t, error)} /> : null}
         {view === 'library' ? (
-          <LibraryView
-            detail={detail}
-            installScope={installScope}
-            installStrategy={installStrategy}
-            installTargets={installTargets}
-            installTargetRows={installTargetRows}
-            loading={loading}
-            onCopyCommand={copyCommand}
-            onInstall={installSelected}
-            onInstallScopeChange={setInstallScope}
-            onInstallStrategyChange={setInstallStrategy}
-            onInstallTargetsChange={setInstallTargets}
-            onManageAgents={openSettings}
-            onOpenDetail={openSkillDetail}
-            onQueryChange={setQuery}
-            onSelect={setSelected}
-            onShare={shareCommand}
-            onSourceChange={setSource}
-            onTagChange={setTag}
-            query={query}
-            selected={selected}
-            selectedSummary={selectedSummary}
-            skills={skills}
-            source={source}
-            sourceWarnings={sourceWarnings}
-            sources={enabledSources}
-            tag={tag}
-            tags={tags}
-            translationConfig={translationConfig}
-          />
+          <Suspense fallback={<div className="state">加载技能库中…</div>}>
+            <LazyLibraryView
+              detail={detail}
+              installScope={installScope}
+              installStrategy={installStrategy}
+              installTargets={installTargets}
+              installTargetRows={installTargetRows}
+              loading={loading}
+              onCopyCommand={copyCommand}
+              onInstall={installSelected}
+              onInstallScopeChange={setInstallScope}
+              onInstallStrategyChange={setInstallStrategy}
+              onInstallTargetsChange={setInstallTargets}
+              onManageAgents={openSettings}
+              onOpenDetail={openSkillDetail}
+              onQueryChange={setQuery}
+              onSelect={setSelected}
+              onShare={shareCommand}
+              onSourceChange={setSource}
+              onTagChange={setTag}
+              query={query}
+              selected={selected}
+              selectedSummary={selectedSummary}
+              skills={skills}
+              source={source}
+              sourceWarnings={sourceWarnings}
+              sources={enabledSources}
+              tag={tag}
+              tags={tags}
+              translationConfig={translationConfig}
+            />
+          </Suspense>
         ) : null}
 
         {view === 'skill-detail' ? (
-          <SkillDetailView
-            skillName={detailSkillName}
-            source={source}
-            translationConfig={translationConfig}
-            onBack={() => setView(prevView)}
-          />
+          <Suspense fallback={<div className="state">加载技能详情中…</div>}>
+            <LazySkillDetailView
+              skillName={detailSkillName}
+              source={source}
+              translationConfig={translationConfig}
+              onBack={() => setView(prevView)}
+            />
+          </Suspense>
         ) : null}
 
         {view === 'installed' ? (
-          <InstalledView
-            confirmRemove={confirmRemove}
-            installTargetRows={installTargetRows}
-            installed={visibleInstalled}
-            loading={installedLoading}
-            onConfirmRemove={setConfirmRemove}
-            onCopyPackage={copyPackage}
-            onExport={exportSkill}
-            onLinkTargets={linkToolTargets}
-            onQueryChange={setInstalledQuery}
-            onRemove={removeSkill}
-            onScopeChange={setScope}
-            onTargetChange={setInstalledTarget}
-            query={installedQuery}
-            scope={scope}
-            target={installedTarget}
-          />
+          <Suspense fallback={<div className="state">加载已安装列表中…</div>}>
+            <LazyInstalledView
+              confirmRemove={confirmRemove}
+              installTargetRows={installTargetRows}
+              installed={visibleInstalled}
+              loading={installedLoading}
+              onConfirmRemove={setConfirmRemove}
+              onCopyPackage={copyPackage}
+              onOpenEditor={openInstalledEditor}
+              onExport={exportSkill}
+              onLinkTargets={linkToolTargets}
+              onQueryChange={setInstalledQuery}
+              onRemove={removeSkill}
+              onScopeChange={setScope}
+              onTargetChange={setInstalledTarget}
+              query={installedQuery}
+              scope={scope}
+              target={installedTarget}
+            />
+          </Suspense>
+        ) : null}
+
+        {view === 'installed-editor' && installedEditorSkill ? (
+          <Suspense fallback={<div className="state">加载本地技能编辑器中…</div>}>
+            <LazyInstalledSkillEditorView
+              aiEditConfig={aiEditConfig}
+              item={installedEditorSkill}
+              onBack={() => setView(prevView)}
+            />
+          </Suspense>
         ) : null}
 
         {view === 'sources' ? (
-          <SourcesView
-            defaultSource={defaultSource}
-            name={sourceName}
-            onAdd={addSourceFromForm}
-            onDelete={deleteSource}
-            onNameChange={setSourceName}
-            onRestore={restoreBuiltinsFromCatalog}
-            onToggleAllMirrors={toggleAllSourceMirrors}
-            onToggleMirror={toggleSourceMirror}
-            onToggle={toggleSource}
-            onUrlChange={setSourceUrl}
-            refreshing={loading}
-            sources={sources}
-            url={sourceUrl}
-          />
+          <Suspense fallback={<div className="state">加载来源配置中…</div>}>
+            <LazySourcesView
+              defaultSource={defaultSource}
+              name={sourceName}
+              onAdd={addSourceFromForm}
+              onDelete={deleteSource}
+              onNameChange={setSourceName}
+              onRestore={restoreBuiltinsFromCatalog}
+              onToggleAllMirrors={toggleAllSourceMirrors}
+              onToggleMirror={toggleSourceMirror}
+              onToggle={toggleSource}
+              onUrlChange={setSourceUrl}
+              refreshing={loading}
+              sources={sources}
+              url={sourceUrl}
+            />
+          </Suspense>
         ) : null}
 
         {view === 'settings' ? (
-          <SettingsView
-            installTargetRows={installTargetRows}
-            library={skillLibrary}
-            onAdd={submitCustomInstallTarget}
-            onBack={() => setView(prevView)}
-            onDelete={deleteAgent}
-            onRefresh={refreshInstallTargets}
-            onSettingsChange={saveSettings}
-            onTranslationSave={saveTranslationConfig}
-            onUpdate={submitAgentUpdate}
-            settings={settings}
-            translationConfig={translationConfig}
-          />
+          <Suspense fallback={<div className="state">加载设置中…</div>}>
+            <LazySettingsView
+              installTargetRows={installTargetRows}
+              library={skillLibrary}
+              onAdd={submitCustomInstallTarget}
+              onBack={() => setView(prevView)}
+              onDelete={deleteAgent}
+              onRefresh={refreshInstallTargets}
+              onAiEditSave={saveAiEditConfig}
+              onSettingsChange={saveSettings}
+              onTranslationSave={saveTranslationConfig}
+              onUpdate={submitAgentUpdate}
+              aiEditConfig={aiEditConfig}
+              settings={settings}
+              translationConfig={translationConfig}
+            />
+          </Suspense>
         ) : null}
 
         {view === 'download' ? (
-          <DownloadView
-            currentVersion={currentAppVersion}
-            isDesktop={isDesktop}
-            latestDesktopRelease={latestDesktopRelease}
-            latestWebVersion={latestWebVersion}
-            onBack={() => setView(prevView)}
-            webVersion={WEB_APP_VERSION}
-          />
+          <Suspense fallback={<div className="state">加载下载信息中…</div>}>
+            <LazyDownloadView
+              currentVersion={currentAppVersion}
+              isDesktop={isDesktop}
+              latestDesktopRelease={latestDesktopRelease}
+              latestWebVersion={latestWebVersion}
+              onBack={() => setView(prevView)}
+              webVersion={WEB_APP_VERSION}
+            />
+          </Suspense>
         ) : null}
       </main>
 
@@ -1643,7 +1308,7 @@ function NavButton({
 }: {
   active: boolean;
   badge?: boolean;
-  icon: keyof typeof icons;
+  icon: IconName;
   label: string;
   onClick: () => void;
 }) {
@@ -1698,16 +1363,16 @@ function TopbarDownloadEntry({
       </button>
       <span
         className={`topbar-version-chip ${updateAvailable ? 'topbar-version-chip--warn' : ''}`}
-        title={`${runtimeLabel} v${currentVersion ?? '—'}`}
+        title={`${runtimeLabel} v${currentVersion ?? '-'}`}
       >
         <em>{runtimeLabel}</em>
-        <strong>v{currentVersion ?? '—'}</strong>
+        <strong>v{currentVersion ?? '-'}</strong>
       </span>
       {updateAvailable && latestVersion ? (
         <span
           className="topbar-version-chip topbar-version-chip--update"
           title={t('topbar.updateAvailableTitle', {
-            defaultValue: '可更新到 v{{version}}',
+            defaultValue: '鍙洿鏂板埌 v{{version}}',
             version: latestVersion,
           })}
         >
@@ -1721,1655 +1386,7 @@ function TopbarDownloadEntry({
   );
 }
 
-function useResponsiveSkillColumns(): number {
-  const [columns, setColumns] = useState(3);
-
-  useEffect(() => {
-    function updateColumns() {
-      if (window.innerWidth <= 760) {
-        setColumns(1);
-      } else if (window.innerWidth <= 1180) {
-        setColumns(2);
-      } else {
-        setColumns(3);
-      }
-    }
-
-    updateColumns();
-    window.addEventListener('resize', updateColumns);
-    return () => window.removeEventListener('resize', updateColumns);
-  }, []);
-
-  return columns;
-}
-
-function useVirtualRows(
-  scrollRef: RefObject<HTMLElement | null>,
-  contentRef: RefObject<HTMLElement | null>,
-  options: {
-    columns: number;
-    gap: number;
-    itemCount: number;
-    overscanRows?: number;
-    resetKey: string;
-    rowHeight: number;
-  },
-) {
-  const {
-    columns,
-    gap,
-    itemCount,
-    overscanRows = VIRTUAL_OVERSCAN_ROWS,
-    resetKey,
-    rowHeight,
-  } = options;
-  const [viewport, setViewport] = useState({ height: 720, scrollTop: 0 });
-
-  useEffect(() => {
-    const scrollEl = scrollRef.current;
-    if (!scrollEl) return;
-
-    function updateViewport() {
-      const scrollStyle = window.getComputedStyle(scrollEl);
-      const usesPageScroll = scrollStyle.overflowY === 'visible';
-      const contentEl = contentRef.current;
-      const next = usesPageScroll
-        ? {
-            height: window.innerHeight,
-            scrollTop: Math.max(0, -(contentEl?.getBoundingClientRect().top ?? 0)),
-          }
-        : {
-            height: scrollEl.clientHeight,
-            scrollTop: Math.max(0, scrollEl.scrollTop - (contentEl?.offsetTop ?? 0)),
-          };
-      setViewport((current) =>
-        current.height === next.height && current.scrollTop === next.scrollTop
-          ? current
-          : next,
-      );
-    }
-
-    updateViewport();
-    scrollEl.addEventListener('scroll', updateViewport, { passive: true });
-    window.addEventListener('scroll', updateViewport, { passive: true });
-    const observer =
-      typeof ResizeObserver === 'undefined'
-        ? null
-        : new ResizeObserver(updateViewport);
-    observer?.observe(scrollEl);
-    if (contentRef.current) {
-      observer?.observe(contentRef.current);
-    }
-    window.addEventListener('resize', updateViewport);
-    return () => {
-      scrollEl.removeEventListener('scroll', updateViewport);
-      window.removeEventListener('scroll', updateViewport);
-      observer?.disconnect();
-      window.removeEventListener('resize', updateViewport);
-    };
-  }, [contentRef, resetKey, scrollRef]);
-
-  useEffect(() => {
-    const scrollEl = scrollRef.current;
-    if (!scrollEl) return;
-    scrollEl.scrollTop = 0;
-    setViewport((current) => ({ ...current, scrollTop: 0 }));
-  }, [resetKey, scrollRef]);
-
-  const totalRows = Math.ceil(itemCount / columns);
-  const rowStride = rowHeight + gap;
-  const totalHeight =
-    totalRows === 0 ? 0 : totalRows * rowHeight + (totalRows - 1) * gap;
-  const startRow =
-    totalRows === 0
-      ? 0
-      : Math.max(0, Math.floor(viewport.scrollTop / rowStride) - overscanRows);
-  const endRow =
-    totalRows === 0
-      ? 0
-      : Math.min(
-          totalRows,
-          Math.ceil((viewport.scrollTop + viewport.height) / rowStride) +
-            overscanRows,
-        );
-
-  return {
-    endRow,
-    startRow,
-    totalHeight,
-    translateY: startRow * rowStride,
-  };
-}
-
-function LibraryView(props: {
-  detail: SkillDetail | null;
-  installScope: LocationScope;
-  installStrategy: InstallStrategy;
-  installTargets: string[];
-  installTargetRows: InstallTargetOption[];
-  loading: boolean;
-  onCopyCommand: () => void;
-  onInstall: () => void;
-  onInstallScopeChange: (value: LocationScope) => void;
-  onInstallStrategyChange: (value: InstallStrategy) => void;
-  onInstallTargetsChange: (value: string[]) => void;
-  onManageAgents: () => void;
-  onOpenDetail: (name: string) => void;
-  onQueryChange: (value: string) => void;
-  onSelect: (value: string) => void;
-  onShare: () => void;
-  onSourceChange: (value: string) => void;
-  onTagChange: (value: string) => void;
-  query: string;
-  selected: string;
-  selectedSummary: SkillSummary | null;
-  skills: SkillSummary[];
-  source: string;
-  sourceWarnings: SourceWarning[];
-  sources: Source[];
-  tag: string;
-  tags: string[];
-  translationConfig: TranslationConfig;
-}) {
-  const { t } = useTranslation();
-  const activeSkill = props.detail ?? props.selectedSummary;
-  const unknown = t('common.unknown');
-  const visibleInstallTargets = props.installTargetRows.filter((row) => !row.hidden);
-  const targetRows =
-    visibleInstallTargets.length > 0
-      ? visibleInstallTargets
-      : [
-          { id: 'claude', label: 'Claude Code' },
-          { id: 'cursor', label: 'Cursor' },
-          { id: 'codex', label: 'OpenAI Codex' },
-        ];
-  const scrollRef = useRef<HTMLDivElement | null>(null);
-  const virtualRef = useRef<HTMLDivElement | null>(null);
-  const columnCount = useResponsiveSkillColumns();
-  const virtual = useVirtualRows(scrollRef, virtualRef, {
-    columns: columnCount,
-    gap: SKILL_GRID_GAP,
-    itemCount: props.skills.length,
-    resetKey: `${props.query}\0${props.source}\0${props.tag}\0${props.skills.length}`,
-    rowHeight: SKILL_CARD_HEIGHT,
-  });
-  const virtualRows: number[] = [];
-  for (let row = virtual.startRow; row < virtual.endRow; row += 1) {
-    virtualRows.push(row);
-  }
-
-  return (
-    <section className="console-grid">
-      <div className="library">
-        <div className="library-controls">
-          <div className="toolbar">
-            <label className="search">
-              <Icon name="search" />
-              <input
-                value={props.query}
-                onChange={(event) => props.onQueryChange(event.target.value)}
-                placeholder={t('library.searchPlaceholder')}
-              />
-            </label>
-            <select
-              value={props.source}
-              onChange={(event) => props.onSourceChange(event.target.value)}
-            >
-              <option value="all">{t('library.allEnabled')}</option>
-              {props.sources.map((item) => (
-                <option key={item.name} value={item.name}>
-                  {item.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <TagRow active={props.tag} tags={props.tags} onChange={props.onTagChange} />
-        </div>
-
-        <div className="library-scroll" ref={scrollRef}>
-          <SourceWarnings warnings={props.sourceWarnings} />
-          {props.loading ? (
-            <EmptyState>{t('library.loading')}</EmptyState>
-          ) : null}
-          {!props.loading && props.skills.length === 0 ? (
-            <EmptyState>
-              {props.sources.length === 0
-                ? t('library.emptyNoSources')
-                : props.sourceWarnings.length > 0
-                  ? t('library.emptyUnreachable')
-                  : t('library.emptyNoMatch')}
-            </EmptyState>
-          ) : null}
-
-          <div
-            className="skill-virtual-space"
-            ref={virtualRef}
-            style={{ height: virtual.totalHeight }}
-          >
-            <div
-              className="skill-virtual-items"
-              style={{ transform: `translateY(${virtual.translateY}px)` }}
-            >
-              {virtualRows.map((row) => {
-                const rowSkills = props.skills.slice(
-                  row * columnCount,
-                  row * columnCount + columnCount,
-                );
-                return (
-                  <div
-                    className="skill-grid skill-virtual-row"
-                    key={row}
-                    style={{
-                      gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))`,
-                    }}
-                  >
-                    {rowSkills.map((skill) => {
-                      const skillTags = Array.isArray(skill.tags)
-                        ? skill.tags
-                        : [];
-                      return (
-                        <button
-                          className={`skill-card ${props.selected === skill.name ? 'selected' : ''}`}
-                          key={`${skill.sourceName}:${skill.name}`}
-                          onClick={() => props.onSelect(skill.name)}
-                        >
-                          <span className="skill-card-head">
-                            <span className="skill-icon">
-                              <Icon name={skill.installed ? 'check' : 'database'} />
-                            </span>
-                            <em>
-                              {highlightText(
-                                skill.installed
-                                  ? t('library.installedBadge')
-                                  : t('library.versionPrefix', {
-                                      version: skill.version ?? unknown,
-                                    }),
-                                props.query,
-                              )}
-                            </em>
-                          </span>
-                          <strong>{highlightText(skill.name, props.query)}</strong>
-                          <span>
-                            {highlightText(
-                              skill.description || t('library.noDescription'),
-                              props.query,
-                            )}
-                          </span>
-                          <span className="card-tags">
-                            {skillTags.slice(0, 4).map((item) => (
-                              <i key={item}>{highlightText(item, props.query)}</i>
-                            ))}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <aside className="detail">
-        <div className="detail-hero">
-          <h1>{activeSkill?.name ?? t('library.detailTitle')}</h1>
-          <p>{activeSkill?.description ?? t('library.selectSkill')}</p>
-        </div>
-        <div className="detail-body">
-          <div className="action-row">
-            <button className="button primary" onClick={props.onInstall} disabled={!activeSkill}>
-              <Icon name="package" />
-              {t('library.install')}
-            </button>
-            <button className="button" onClick={props.onCopyCommand} disabled={!activeSkill}>
-              <Icon name="copy" />
-              {t('library.copy')}
-            </button>
-            <button className="button" onClick={props.onShare} disabled={!activeSkill}>
-              {t('library.share')}
-            </button>
-            <button
-              className="button"
-              onClick={() => activeSkill && props.onOpenDetail(activeSkill.name)}
-              disabled={!activeSkill}
-              title="查看完整详情（文件浏览器）"
-            >
-              <Icon name="folder" />
-              详情
-            </button>
-          </div>
-          <div className="install-options">
-            <div className="target-checkboxes">
-              {targetRows.map((row) => (
-                <label key={row.id} className="target-checkbox">
-                  <input
-                    type="checkbox"
-                    checked={props.installTargets.includes(row.id)}
-                    onChange={(event) => {
-                      if (event.target.checked) {
-                        props.onInstallTargetsChange([...props.installTargets, row.id]);
-                      } else {
-                        props.onInstallTargetsChange(
-                          props.installTargets.filter((x) => x !== row.id),
-                        );
-                      }
-                    }}
-                  />
-                  <span>
-                    {t(`installTarget.${row.id}`, { defaultValue: row.label })}
-                  </span>
-                </label>
-              ))}
-            </div>
-            <button
-              type="button"
-              className="button block"
-              onClick={props.onManageAgents}
-            >
-              <Icon name="settings" />
-              {t('library.manageAgents')}
-            </button>
-            <p className="install-options-hint">{t('library.installTargetHint')}</p>
-            <div className="install-options-selects">
-              <select
-                value={props.installScope}
-                onChange={(event) =>
-                  props.onInstallScopeChange(event.target.value as LocationScope)
-                }
-              >
-                <option value="global">{t('library.scopeGlobal')}</option>
-                <option value="project">{t('library.scopeProject')}</option>
-              </select>
-              <select
-                value={props.installStrategy}
-                onChange={(event) =>
-                  props.onInstallStrategyChange(event.target.value as InstallStrategy)
-                }
-              >
-                <option value="skip">{t('library.strategySkip')}</option>
-                <option value="overwrite">{t('library.strategyOverwrite')}</option>
-                <option value="rename">{t('library.strategyRename')}</option>
-              </select>
-            </div>
-          </div>
-          <div className="meta-table">
-            <Info label={t('library.metaVersion')} value={activeSkill?.version} />
-            <Info label={t('library.metaAuthor')} value={activeSkill?.author} />
-            <Info label={t('library.metaSource')} value={activeSkill?.sourceName} />
-            <Info
-              label={t('library.metaTargets')}
-              value={
-                props.detail?.installedTargets.join(', ') || t('library.notInstalled')
-              }
-            />
-            <Info
-              label={t('library.metaMetadata')}
-              value={
-                activeSkill?.metadataSource
-                  ? t(`metadataSource.${activeSkill.metadataSource}`, {
-                      defaultValue: activeSkill.metadataSource,
-                    })
-                  : undefined
-              }
-            />
-          </div>
-          <TranslateMarkdownView
-            markdown={props.detail?.markdown ?? ''}
-            cacheKey={activeSkill ? `translate:skill:${activeSkill.name}:SKILL.md` : ''}
-            translationConfig={props.translationConfig}
-          />
-        </div>
-      </aside>
-    </section>
-  );
-}
-
-function TagRow({
-  active,
-  tags,
-  onChange,
-}: {
-  active: string;
-  tags: string[];
-  onChange: (value: string) => void;
-}) {
-  const { t } = useTranslation();
-  const orderedTags =
-    active && tags.includes(active)
-      ? [active, ...tags.filter((item) => item !== active)]
-      : tags;
-  const visibleLimit = 4;
-  const visibleTags = orderedTags.slice(0, visibleLimit);
-  const overflowTags = orderedTags.slice(visibleLimit);
-  const isCollapsible = overflowTags.length > 0;
-
-  return (
-    <div className={`tag-row-frame ${isCollapsible ? 'is-collapsible' : ''}`}>
-      <div className="tag-row">
-        <button className={active === '' ? 'active' : ''} onClick={() => onChange('')}>
-          {t('common.all')}
-        </button>
-        {visibleTags.map((item) => (
-          <button
-            className={active === item ? 'active' : ''}
-            key={item}
-            onClick={() => onChange(item)}
-          >
-            {item}
-          </button>
-        ))}
-        {isCollapsible ? (
-          <button
-            aria-haspopup="true"
-            aria-label={t('tags.showMore', { count: overflowTags.length })}
-            className="tag-overflow-trigger"
-            type="button"
-          >
-            +{overflowTags.length}
-          </button>
-        ) : null}
-      </div>
-      {isCollapsible ? (
-        <div className="tag-overflow-panel">
-          {overflowTags.map((item) => (
-            <button
-              className={active === item ? 'active' : ''}
-              key={item}
-              onClick={() => onChange(item)}
-            >
-              {item}
-            </button>
-          ))}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function InstalledView(props: {
-  confirmRemove: string | null;
-  installTargetRows: InstallTargetOption[];
-  installed: InstalledSkill[];
-  loading: boolean;
-  onConfirmRemove: (value: string | null) => void;
-  onCopyPackage: (item: InstalledSkill) => void;
-  onExport: (item: InstalledSkill) => void;
-  onLinkTargets: (item: InstalledSkill, targets: string[]) => void;
-  onQueryChange: (value: string) => void;
-  onRemove: (item: InstalledSkill) => void;
-  onScopeChange: (value: ScopeFilter) => void;
-  onTargetChange: (value: string) => void;
-  query: string;
-  scope: ScopeFilter;
-  target: string;
-}) {
-  const { t } = useTranslation();
-  const unknown = t('common.unknown');
-  const [linkTargetKey, setLinkTargetKey] = useState<string | null>(null);
-  const [linkSelections, setLinkSelections] = useState<Record<string, string[]>>({});
-  const visibleInstallTargets = props.installTargetRows.filter((row) => !row.hidden);
-  const linkTargetIds =
-    visibleInstallTargets.length > 0
-      ? visibleInstallTargets.map((row) => row.id)
-      : ['claude', 'cursor', 'codex'];
-
-  function linkOptionsFor(item: InstalledSkill): string[] {
-    return linkTargetIds.filter((target) => target !== item.target);
-  }
-
-  function defaultLinkTargets(item: InstalledSkill): string[] {
-    const preferred = ['cursor', 'codex'].filter(
-      (target) => target !== item.target && linkTargetIds.includes(target),
-    );
-    return preferred.length > 0 ? preferred : linkOptionsFor(item).slice(0, 1);
-  }
-
-  function selectedLinkTargets(key: string, item: InstalledSkill): string[] {
-    return linkSelections[key] ?? defaultLinkTargets(item);
-  }
-
-  function toggleLinkTarget(key: string, item: InstalledSkill, target: string): void {
-    const selected = selectedLinkTargets(key, item);
-    const next = selected.includes(target)
-      ? selected.filter((entry) => entry !== target)
-      : [...selected, target];
-    setLinkSelections((current) => ({ ...current, [key]: next }));
-  }
-
-  function openLinkPicker(key: string, item: InstalledSkill): void {
-    if (linkTargetKey === key) {
-      setLinkTargetKey(null);
-      return;
-    }
-    setLinkTargetKey(key);
-    setLinkSelections((current) => ({
-      ...current,
-      [key]: current[key] ?? defaultLinkTargets(item),
-    }));
-    props.onConfirmRemove(null);
-  }
-
-  return (
-    <section className="installed-page">
-      <div className="page-head">
-        <h1>{t('installed.title')}</h1>
-      </div>
-      <div className="toolbar installed-toolbar">
-        <label className="search">
-          <Icon name="search" />
-          <input
-            value={props.query}
-            onChange={(event) => props.onQueryChange(event.target.value)}
-            placeholder={t('installed.searchPlaceholder')}
-          />
-        </label>
-        <select
-          value={props.target}
-          onChange={(event) => props.onTargetChange(event.target.value)}
-        >
-          <option value="">{t('installed.allTargets')}</option>
-          {linkTargetIds.map((targetId) => (
-            <option key={targetId} value={targetId}>
-              {t(`installTarget.${targetId}`, {
-                defaultValue:
-                  props.installTargetRows.find((r) => r.id === targetId)?.label ??
-                  targetId,
-              })}
-            </option>
-          ))}
-        </select>
-        <select
-          value={props.scope}
-          onChange={(event) => props.onScopeChange(event.target.value as ScopeFilter)}
-        >
-          <option value="all">{t('installed.allLocations')}</option>
-          <option value="project">{t('installed.scopeWorkspace')}</option>
-          <option value="global">{t('installed.scopeUser')}</option>
-        </select>
-      </div>
-
-      {props.loading ? <EmptyState>{t('installed.scanning')}</EmptyState> : null}
-      {!props.loading && props.installed.length === 0 ? (
-        <EmptyState>{t('installed.empty')}</EmptyState>
-      ) : null}
-
-      <div className="installed-scroll">
-        <div className="installed-list">
-          {props.installed.map((item) => {
-            const key = `${item.scope}:${item.target}:${item.name}`;
-            const confirming = props.confirmRemove === key;
-            const pickingTargets = linkTargetKey === key;
-            const linkOptions = linkOptionsFor(item);
-            const selectedTargets = selectedLinkTargets(key, item);
-            return (
-              <article key={key}>
-                <div className="installed-main">
-                  <strong>{highlightText(item.name, props.query)}</strong>
-                  <span>
-                    {highlightText(item.description || t('library.noDescription'), props.query)}
-                  </span>
-                  <code>{highlightText(item.path, props.query)}</code>
-                </div>
-                <div className="installed-meta">
-                  <b>{highlightText(item.target, props.query)}</b>
-                  <span>
-                    {highlightText(
-                      t(`installed.scope.${item.scope}` as 'installed.scope.global'),
-                      props.query,
-                    )}
-                  </span>
-                  <span>{highlightText(item.version ?? unknown, props.query)}</span>
-                </div>
-                <div className="installed-actions">
-                  <button
-                    className="icon-button"
-                    title={t('installed.copyZipTitle')}
-                    onClick={() => props.onCopyPackage(item)}
-                  >
-                    <Icon name="copy" />
-                  </button>
-                  <button
-                    className="icon-button"
-                    title={t('installed.linkTargetsTitle')}
-                    onClick={() => openLinkPicker(key, item)}
-                  >
-                    <Icon name="link" />
-                  </button>
-                  <button
-                    className="icon-button"
-                    title={t('installed.exportZipTitle')}
-                    onClick={() => props.onExport(item)}
-                  >
-                    <Icon name="package" />
-                  </button>
-                  <button
-                    className="icon-button danger"
-                    title={t('installed.confirmRemoveTitle')}
-                    onClick={() => {
-                      setLinkTargetKey(null);
-                      props.onConfirmRemove(confirming ? null : key);
-                    }}
-                  >
-                    <Icon name="trash" />
-                  </button>
-                </div>
-                {pickingTargets ? (
-                  <div className="choice-strip">
-                    <span>{t('installed.enableIn')}</span>
-                    <div className="choice-options">
-                      {linkOptions.map((target) => (
-                        <label key={target} className="target-checkbox">
-                          <input
-                            type="checkbox"
-                            checked={selectedTargets.includes(target)}
-                            onChange={() => toggleLinkTarget(key, item, target)}
-                          />
-                          <span>
-                            {t(`installTarget.${target}`, {
-                              defaultValue:
-                                props.installTargetRows.find((r) => r.id === target)
-                                  ?.label ?? target,
-                            })}
-                          </span>
-                        </label>
-                      ))}
-                    </div>
-                    <button
-                      className="button primary"
-                      disabled={selectedTargets.length === 0}
-                      onClick={() => {
-                        props.onLinkTargets(item, selectedTargets);
-                        setLinkTargetKey(null);
-                      }}
-                    >
-                      {t('installed.apply')}
-                    </button>
-                    <button className="button" onClick={() => setLinkTargetKey(null)}>
-                      {t('installed.cancel')}
-                    </button>
-                  </div>
-                ) : null}
-                {confirming ? (
-                  <div className="confirm-strip">
-                    <span>
-                      {t('installed.confirmDelete', {
-                        name: item.name,
-                        target: item.target,
-                        scope: t(`installed.scope.${item.scope}` as 'installed.scope.global'),
-                        path: item.path,
-                      })}
-                    </span>
-                    <button className="button danger" onClick={() => props.onRemove(item)}>
-                      {t('installed.delete')}
-                    </button>
-                    <button className="button" onClick={() => props.onConfirmRemove(null)}>
-                      {t('installed.cancel')}
-                    </button>
-                  </div>
-                ) : null}
-              </article>
-            );
-          })}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function AgentsView({
-  installTargetRows,
-  library,
-  onAdd,
-  onDelete,
-  onRefresh,
-  onUpdate,
-}: {
-  installTargetRows: InstallTargetOption[];
-  library: SkillLibraryTarget | null;
-  onAdd: (id: string, globalDir: string, projectDir: string) => Promise<void>;
-  onDelete: (id: string) => Promise<void>;
-  onRefresh: () => Promise<void>;
-  onUpdate: (id: string, globalDir: string, projectDir: string) => Promise<void>;
-}) {
-  const { t } = useTranslation();
-  const [newId, setNewId] = useState('');
-  const [newGlobalDir, setNewGlobalDir] = useState('~/.my-agent/skills');
-  const [newProjectDir, setNewProjectDir] = useState('./.my-agent/skills');
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editGlobalDir, setEditGlobalDir] = useState('');
-  const [editProjectDir, setEditProjectDir] = useState('');
-  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
-  const visibleRows = installTargetRows.filter((row) => row.id !== 'agents');
-
-  function beginEdit(row: InstallTargetOption) {
-    setConfirmDelete(null);
-    setEditingId(row.id);
-    setEditGlobalDir(row.globalDir ?? '');
-    setEditProjectDir(row.projectDir ?? '');
-  }
-
-  async function submitNewAgent() {
-    await onAdd(newId.trim(), newGlobalDir.trim(), newProjectDir.trim());
-    setNewId('');
-  }
-
-  async function submitEdit(id: string) {
-    await onUpdate(id, editGlobalDir.trim(), editProjectDir.trim());
-    setEditingId(null);
-  }
-
-  return (
-    <section className="installed-page agents-page">
-      <div className="page-head">
-        <div>
-          <h1>{t('agents.title')}</h1>
-          <p>{t('agents.subtitle')}</p>
-        </div>
-        <button className="button" onClick={() => void onRefresh()}>
-          <Icon name="refresh" />
-          {t('agents.rescan')}
-        </button>
-      </div>
-
-      <div className="library-location">
-        <span className="library-location-icon">
-          <Icon name="database" />
-        </span>
-        <div>
-          <strong>{t('agents.libraryTitle')}</strong>
-          <p>{t('agents.libraryHint')}</p>
-        </div>
-        <div className="agent-paths">
-          <span>
-            <b>{t('agents.globalDir')}</b>
-            <code>{library?.globalDir ?? '~/.agents/skills'}</code>
-            <i>{library?.globalExists ? t('agents.pathReady') : t('agents.pathMissing')}</i>
-          </span>
-          <span>
-            <b>{t('agents.projectDir')}</b>
-            <code>{library?.projectDir ?? './.agents/skills'}</code>
-            <i>{library?.projectExists ? t('agents.pathReady') : t('agents.pathMissing')}</i>
-          </span>
-        </div>
-      </div>
-
-      <div className="source-form agent-form">
-        <label>
-          <span>{t('agents.idLabel')}</span>
-          <input
-            value={newId}
-            onChange={(event) => setNewId(event.target.value)}
-            placeholder={t('agents.idPlaceholder')}
-          />
-        </label>
-        <label>
-          <span>{t('agents.globalDir')}</span>
-          <input
-            value={newGlobalDir}
-            onChange={(event) => setNewGlobalDir(event.target.value)}
-            placeholder="~/.my-agent/skills"
-          />
-        </label>
-        <label>
-          <span>{t('agents.projectDir')}</span>
-          <input
-            value={newProjectDir}
-            onChange={(event) => setNewProjectDir(event.target.value)}
-            placeholder="./.my-agent/skills"
-          />
-        </label>
-        <button
-          className="button primary"
-          disabled={!newId.trim()}
-          onClick={() => void submitNewAgent()}
-        >
-          {t('agents.add')}
-        </button>
-      </div>
-
-      <div className="source-list agent-list">
-        {visibleRows.map((row) => {
-          const editing = editingId === row.id;
-          const deleting = confirmDelete === row.id;
-          return (
-            <article key={row.id}>
-              <div className="source-main">
-                <strong>
-                  <span>{t(`installTarget.${row.id}`, { defaultValue: row.label })}</span>
-                  <span className="source-tags">
-                    <i>{row.builtin ? t('agents.builtin') : t('agents.custom')}</i>
-                    {row.hidden ? <i>{t('agents.hidden')}</i> : null}
-                    <i>
-                      {row.globalExists || row.projectExists
-                        ? t('agents.detected')
-                        : t('agents.configured')}
-                    </i>
-                  </span>
-                </strong>
-                <span className="source-description">
-                  {t('agents.agentHint', { id: row.id })}
-                </span>
-                <div className="agent-paths">
-                  <span>
-                    <b>{t('agents.globalDir')}</b>
-                    <code>{row.globalDir ?? '-'}</code>
-                    <i>{row.globalExists ? t('agents.pathReady') : t('agents.pathMissing')}</i>
-                  </span>
-                  <span>
-                    <b>{t('agents.projectDir')}</b>
-                    <code>{row.projectDir ?? '-'}</code>
-                    <i>{row.projectExists ? t('agents.pathReady') : t('agents.pathMissing')}</i>
-                  </span>
-                </div>
-                <span className="source-key">{row.id}</span>
-              </div>
-              <span className={row.globalExists || row.projectExists ? 'source-status on' : 'source-status'}>
-                {row.globalExists || row.projectExists
-                  ? t('agents.detected')
-                  : t('agents.configured')}
-              </span>
-              <div className="source-actions">
-                <button className="button" onClick={() => beginEdit(row)}>
-                  {t('agents.edit')}
-                </button>
-                <button
-                  className="button danger"
-                  disabled={!row.removable}
-                  onClick={() => {
-                    setEditingId(null);
-                    setConfirmDelete(deleting ? null : row.id);
-                  }}
-                  title={!row.removable ? t('agents.deleteDisabled') : undefined}
-                >
-                  {t('agents.delete')}
-                </button>
-              </div>
-
-              {editing ? (
-                <div className="agent-edit-strip">
-                  <label>
-                    <span>{t('agents.globalDir')}</span>
-                    <input
-                      value={editGlobalDir}
-                      onChange={(event) => setEditGlobalDir(event.target.value)}
-                    />
-                  </label>
-                  <label>
-                    <span>{t('agents.projectDir')}</span>
-                    <input
-                      value={editProjectDir}
-                      onChange={(event) => setEditProjectDir(event.target.value)}
-                    />
-                  </label>
-                  <button className="button primary" onClick={() => void submitEdit(row.id)}>
-                    {t('agents.save')}
-                  </button>
-                  <button className="button" onClick={() => setEditingId(null)}>
-                    {t('installed.cancel')}
-                  </button>
-                </div>
-              ) : null}
-
-              {deleting ? (
-                <div className="confirm-strip source-confirm-strip">
-                  <span>{t('agents.confirmDelete', { name: row.label })}</span>
-                  <button
-                    className="button danger"
-                    onClick={async () => {
-                      await onDelete(row.id);
-                      setConfirmDelete(null);
-                    }}
-                  >
-                    {t('agents.delete')}
-                  </button>
-                  <button className="button" onClick={() => setConfirmDelete(null)}>
-                    {t('installed.cancel')}
-                  </button>
-                </div>
-              ) : null}
-            </article>
-          );
-        })}
-      </div>
-    </section>
-  );
-}
-
-function SettingsView({
-  installTargetRows,
-  library,
-  onAdd,
-  onBack,
-  onDelete,
-  onRefresh,
-  onSettingsChange,
-  onTranslationSave,
-  onUpdate,
-  settings,
-  translationConfig,
-}: {
-  installTargetRows: InstallTargetOption[];
-  library: SkillLibraryTarget | null;
-  onAdd: (id: string, globalDir: string, projectDir: string) => Promise<void>;
-  onBack: () => void;
-  onDelete: (id: string) => Promise<void>;
-  onRefresh: () => Promise<void>;
-  onSettingsChange: (settings: Partial<AppSettings>) => Promise<void>;
-  onTranslationSave: (config: TranslationConfig) => Promise<void>;
-  onUpdate: (id: string, globalDir: string, projectDir: string) => Promise<void>;
-  settings: AppSettings;
-  translationConfig: TranslationConfig;
-}) {
-  const { t } = useTranslation();
-  const tt = (key: string, defaultValue: string) => t(key, { defaultValue });
-  const [translationDraft, setTranslationDraft] =
-    useState<TranslationConfig>(translationConfig);
-  const [translationSaving, setTranslationSaving] = useState(false);
-  const [themeDraft, setThemeDraft] = useState<ThemeDraft>({
-    themeMode: settings.themeMode,
-    themeColor: settings.themeColor,
-  });
-  const [themeSaving, setThemeSaving] = useState(false);
-
-  useEffect(() => {
-    setTranslationDraft(translationConfig);
-  }, [translationConfig]);
-
-  useEffect(() => {
-    setThemeDraft({
-      themeMode: settings.themeMode,
-      themeColor: settings.themeColor,
-    });
-  }, [settings.themeColor, settings.themeMode]);
-
-  const themePreviewVariables = useMemo(
-    () => buildThemePreviewVariables(themeDraft),
-    [themeDraft],
-  );
-  const themePreviewStyle = themePreviewVariables as CSSProperties;
-  const themeSwatches = [
-    themePreviewVariables['--surface-high'],
-    themePreviewVariables['--primary'],
-    themePreviewVariables['--secondary'],
-    themePreviewVariables['--tertiary'],
-  ];
-
-  return (
-    <section className="settings-page" aria-label={tt('settings.title', '\u8bbe\u7f6e')}>
-      <div className="settings-sheet">
-        <div className="settings-head">
-          <button type="button" className="button settings-back-btn" onClick={onBack}>
-            <Icon name="arrow-left" />
-            {tt('settings.back', '\u8fd4\u56de')}
-          </button>
-          <div className="settings-head-text">
-            <h1>{tt('settings.title', '\u8bbe\u7f6e')}</h1>
-            <p>
-              {tt(
-                'settings.subtitle',
-                '\u7ba1\u7406\u6e90\u7f13\u5b58\u3001\u684c\u9762\u884c\u4e3a\u548c Agent \u76ee\u6807\u4f4d\u7f6e\u3002',
-              )}
-            </p>
-          </div>
-        </div>
-
-        <div className="settings-group">
-          <h2>{tt('settings.refreshTitle', '\u6e90\u7f13\u5b58')}</h2>
-          <label className="settings-row">
-            <span>
-              <b>{tt('settings.refreshInterval', '\u68c0\u67e5\u95f4\u9694')}</b>
-              <em>
-                {tt(
-                  'settings.refreshHint',
-                  '\u641c\u7d22\u4f1a\u4f18\u5148\u4f7f\u7528\u672c\u5730\u7f13\u5b58\uff0c\u8d85\u8fc7\u95f4\u9694\u624d\u68c0\u67e5\u8fdc\u7aef\uff1b\u624b\u52a8\u5237\u65b0\u59cb\u7ec8\u7acb\u5373\u68c0\u67e5\u3002',
-                )}
-              </em>
-            </span>
-            <select
-              value={settings.sourceRefreshIntervalMinutes}
-              onChange={(event) =>
-                void onSettingsChange({
-                  sourceRefreshIntervalMinutes: Number(event.target.value),
-                })
-              }
-            >
-              <option value={0}>{tt('settings.refreshAlways', '\u6bcf\u6b21\u641c\u7d22')}</option>
-              <option value={5}>{tt('settings.refresh5', '\u6bcf 5 \u5206\u949f')}</option>
-              <option value={15}>{tt('settings.refresh15', '\u6bcf 15 \u5206\u949f')}</option>
-              <option value={60}>{tt('settings.refresh60', '\u6bcf\u5c0f\u65f6')}</option>
-            </select>
-          </label>
-        </div>
-
-        <div className="settings-group">
-          <h2>{tt('settings.desktopTitle', '\u684c\u9762\u7aef')}</h2>
-          <label className="settings-row">
-            <span>
-              <b>{tt('settings.minimizeToTray', '\u5173\u95ed\u5230\u6258\u76d8')}</b>
-              <em>
-                {tt(
-                  'settings.minimizeToTrayHint',
-                  '\u70b9\u51fb\u5173\u95ed\u6309\u94ae\u65f6\u9690\u85cf\u7a97\u53e3\uff0c\u53ef\u4ece\u6258\u76d8\u56fe\u6807\u6062\u590d\u3002',
-                )}
-              </em>
-            </span>
-            <input
-              type="checkbox"
-              checked={settings.minimizeToTray}
-              onChange={(event) =>
-                void onSettingsChange({ minimizeToTray: event.target.checked })
-              }
-            />
-          </label>
-        </div>
-
-        <div className="settings-group">
-          <h2>{tt('settings.themeTitle', '主题')}</h2>
-          <p className="settings-hint">
-            {tt(
-              'settings.themeHint',
-              '默认保留经典主题色，也可以切换为自定义主色；系统会自动生成整套深色主题。',
-            )}
-          </p>
-          <div className="settings-theme-grid">
-            <button
-              type="button"
-              className={`theme-card ${themeDraft.themeMode === 'default' ? 'active' : ''}`}
-              onClick={() =>
-                setThemeDraft((current) => ({ ...current, themeMode: 'default' }))
-              }
-            >
-              <span className="theme-card-head">
-                <strong>{tt('settings.themeDefault', '默认主题')}</strong>
-                <em>{tt('settings.themeDefaultHint', '经典黄绿配色')}</em>
-              </span>
-              <span className="theme-preview-strip">
-                {[
-                  CLASSIC_THEME_VARIABLES['--surface-high'],
-                  CLASSIC_THEME_VARIABLES['--primary'],
-                  CLASSIC_THEME_VARIABLES['--secondary'],
-                  CLASSIC_THEME_VARIABLES['--tertiary'],
-                ].map((color, index) => (
-                  <i
-                    key={`${color}-${index}`}
-                    className="theme-preview-swatch"
-                    style={{ background: color }}
-                  />
-                ))}
-              </span>
-            </button>
-
-            <button
-              type="button"
-              className={`theme-card ${themeDraft.themeMode === 'custom' ? 'active' : ''}`}
-              onClick={() =>
-                setThemeDraft((current) => ({ ...current, themeMode: 'custom' }))
-              }
-            >
-              <span className="theme-card-head">
-                <strong>{tt('settings.themeCustom', '自定义主题')}</strong>
-                <em>{tt('settings.themeCustomHint', '用主色自动派生整套配色')}</em>
-              </span>
-              <span className="theme-preview-strip">
-                {themeSwatches.map((color, index) => (
-                  <i
-                    key={`${color}-${index}`}
-                    className="theme-preview-swatch"
-                    style={{ background: color }}
-                  />
-                ))}
-              </span>
-            </button>
-          </div>
-
-          <label className="settings-row">
-            <span>
-              <b>{tt('settings.themeColor', '主题主色')}</b>
-              <em>{tt('settings.themeColorHint', '选择后会影响按钮、高亮、卡片强调色和整体氛围')}</em>
-            </span>
-            <div className="theme-color-control">
-              <input
-                type="color"
-                className="theme-color-input"
-                value={normalizeHexColor(themeDraft.themeColor)}
-                disabled={themeDraft.themeMode !== 'custom'}
-                onChange={(event) =>
-                  setThemeDraft((current) => ({
-                    ...current,
-                    themeColor: normalizeHexColor(event.target.value),
-                  }))
-                }
-              />
-              <code className="theme-color-value">
-                {normalizeHexColor(themeDraft.themeColor)}
-              </code>
-            </div>
-          </label>
-
-          <div className="theme-preview-panel" style={themePreviewStyle}>
-            <div className="theme-preview-panel-top">
-              <strong>{tt('settings.themePreview', '主题预览')}</strong>
-              <span>{tt('settings.themePreviewHint', '保存后会立即应用到整个界面')}</span>
-            </div>
-            <div className="theme-preview-panel-body">
-              <div className="theme-preview-surface">
-                <span>{tt('settings.themePreviewSurface', '面板')}</span>
-                <button type="button" className="button primary">
-                  {tt('settings.themePreviewPrimary', '主按钮')}
-                </button>
-              </div>
-              <div className="theme-preview-meta">
-                <i style={{ background: 'var(--primary)' }} />
-                <i style={{ background: 'var(--secondary)' }} />
-                <i style={{ background: 'var(--tertiary)' }} />
-              </div>
-            </div>
-          </div>
-
-          <div className="settings-row settings-row-actions">
-            <button
-              type="button"
-              className="button primary"
-              disabled={themeSaving}
-              onClick={() => {
-                setThemeSaving(true);
-                void onSettingsChange({
-                  themeMode: themeDraft.themeMode,
-                  themeColor: normalizeHexColor(themeDraft.themeColor),
-                }).finally(() => {
-                  setThemeSaving(false);
-                });
-              }}
-            >
-              {themeSaving
-                ? tt('settings.themeSaving', '保存中…')
-                : tt('settings.themeSave', '保存主题设置')}
-            </button>
-          </div>
-        </div>
-
-        <div className="settings-group">
-          <h2>{tt('settings.translationTitle', '翻译服务')}</h2>
-          <p className="settings-hint">
-            {tt(
-              'settings.translationHint',
-              '修改后请点击「保存翻译设置」写入配置文件，不会在输入时自动保存。',
-            )}
-          </p>
-          <label className="settings-row">
-            <span>
-              <b>{tt('settings.translationProvider', '翻译提供商')}</b>
-              <em>{tt('settings.translationProviderHint', '选择翻译英文 Skill 内容所使用的服务')}</em>
-            </span>
-            <select
-              value={translationDraft.provider}
-              onChange={(event) =>
-                setTranslationDraft((d) => ({
-                  ...d,
-                  provider: event.target.value as TranslationConfig['provider'],
-                }))
-              }
-            >
-              <option value="none">{tt('settings.translationNone', '不启用')}</option>
-              <option value="openai">{tt('settings.translationOpenai', 'OpenAI 兼容 API')}</option>
-              <option value="cli">{tt('settings.translationCli', '本地 AI CLI 命令')}</option>
-            </select>
-          </label>
-
-          {translationDraft.provider === 'openai' ? (
-            <>
-              <label className="settings-row">
-                <span>
-                  <b>{tt('settings.translationApiUrl', 'API 地址')}</b>
-                  <em>{tt('settings.translationApiUrlHint', '留空使用 OpenAI 默认地址')}</em>
-                </span>
-                <input
-                  type="text"
-                  placeholder="https://api.openai.com/v1"
-                  value={translationDraft.apiBaseUrl ?? ''}
-                  onChange={(event) =>
-                    setTranslationDraft((d) => ({ ...d, apiBaseUrl: event.target.value }))
-                  }
-                />
-              </label>
-              <label className="settings-row">
-                <span><b>{tt('settings.translationApiKey', 'API Key')}</b></span>
-                <input
-                  type="password"
-                  placeholder="sk-..."
-                  value={translationDraft.apiKey ?? ''}
-                  onChange={(event) =>
-                    setTranslationDraft((d) => ({ ...d, apiKey: event.target.value }))
-                  }
-                />
-              </label>
-              <label className="settings-row">
-                <span>
-                  <b>{tt('settings.translationModel', '模型')}</b>
-                  <em>{tt('settings.translationModelHint', '留空使用 gpt-4o-mini')}</em>
-                </span>
-                <input
-                  type="text"
-                  placeholder="gpt-4o-mini"
-                  value={translationDraft.model ?? ''}
-                  onChange={(event) =>
-                    setTranslationDraft((d) => ({ ...d, model: event.target.value }))
-                  }
-                />
-              </label>
-            </>
-          ) : null}
-
-          {translationDraft.provider === 'cli' ? (
-            <>
-              <label className="settings-row">
-                <span>
-                  <b>{tt('settings.translationCliCmd', 'CLI 命令')}</b>
-                  <em>
-                    {tt(
-                      'settings.translationCliCmdHint',
-                      '如 claude、openai 等，内容通过 stdin 传入',
-                    )}
-                  </em>
-                </span>
-                <input
-                  type="text"
-                  placeholder="claude"
-                  value={translationDraft.cliCommand ?? ''}
-                  onChange={(event) =>
-                    setTranslationDraft((d) => ({ ...d, cliCommand: event.target.value }))
-                  }
-                />
-              </label>
-              <label className="settings-row">
-                <span>
-                  <b>{tt('settings.translationCliArgs', '附加参数')}</b>
-                  <em>{tt('settings.translationCliArgsHint', '空格分隔，如 --model claude-opus-4-5')}</em>
-                </span>
-                <input
-                  type="text"
-                  placeholder="--model claude-opus-4-5"
-                  value={(translationDraft.cliArgs ?? []).join(' ')}
-                  onChange={(event) =>
-                    setTranslationDraft((d) => ({
-                      ...d,
-                      cliArgs: event.target.value.trim()
-                        ? event.target.value.trim().split(/\s+/)
-                        : [],
-                    }))
-                  }
-                />
-              </label>
-            </>
-          ) : null}
-
-          <div className="settings-row settings-row-actions">
-            <button
-              type="button"
-              className="button primary"
-              disabled={translationSaving}
-              onClick={() => {
-                setTranslationSaving(true);
-                void onTranslationSave(translationDraft).finally(() => {
-                  setTranslationSaving(false);
-                });
-              }}
-            >
-              {translationSaving
-                ? tt('settings.translationSaving', '保存中…')
-                : tt('settings.translationSave', '保存翻译设置')}
-            </button>
-          </div>
-        </div>
-
-        <div className="settings-agents">
-          <AgentsView
-            installTargetRows={installTargetRows}
-            library={library}
-            onAdd={onAdd}
-            onDelete={onDelete}
-            onRefresh={onRefresh}
-            onUpdate={onUpdate}
-          />
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function SettingsPanel({
-  installTargetRows,
-  library,
-  onAdd,
-  onClose,
-  onDelete,
-  onRefresh,
-  onSettingsChange,
-  onUpdate,
-  settings,
-}: {
-  installTargetRows: InstallTargetOption[];
-  library: SkillLibraryTarget | null;
-  onAdd: (id: string, globalDir: string, projectDir: string) => Promise<void>;
-  onClose: () => void;
-  onDelete: (id: string) => Promise<void>;
-  onRefresh: () => Promise<void>;
-  onSettingsChange: (settings: Partial<AppSettings>) => Promise<void>;
-  onUpdate: (id: string, globalDir: string, projectDir: string) => Promise<void>;
-  settings: AppSettings;
-}) {
-  const { t } = useTranslation();
-  const tt = (key: string, defaultValue: string) => t(key, { defaultValue });
-  return (
-    <aside className="settings-panel" aria-label={tt('settings.title', '设置')}>
-      <div className="settings-backdrop" onClick={onClose} />
-      <section className="settings-sheet">
-        <div className="settings-head">
-          <div>
-            <h1>{tt('settings.title', '设置')}</h1>
-            <p>{tt('settings.subtitle', '管理源缓存、桌面行为和 Agent 目标位置。')}</p>
-          </div>
-          <button className="icon-button" title={tt('settings.close', '关闭设置')} onClick={onClose}>
-            <Icon name="x" />
-          </button>
-        </div>
-
-        <div className="settings-group">
-          <h2>{tt('settings.refreshTitle', '源缓存')}</h2>
-          <label className="settings-row">
-            <span>
-              <b>{tt('settings.refreshInterval', '检查间隔')}</b>
-              <em>{tt('settings.refreshHint', '搜索会优先使用本地缓存，超过间隔才检查远端；手动刷新始终立即检查。')}</em>
-            </span>
-            <select
-              value={settings.sourceRefreshIntervalMinutes}
-              onChange={(event) =>
-                void onSettingsChange({
-                  sourceRefreshIntervalMinutes: Number(event.target.value),
-                })
-              }
-            >
-              <option value={0}>{tt('settings.refreshAlways', '每次搜索')}</option>
-              <option value={5}>{tt('settings.refresh5', '每 5 分钟')}</option>
-              <option value={15}>{tt('settings.refresh15', '每 15 分钟')}</option>
-              <option value={60}>{tt('settings.refresh60', '每小时')}</option>
-            </select>
-          </label>
-        </div>
-
-        <div className="settings-group">
-          <h2>{tt('settings.desktopTitle', '桌面端')}</h2>
-          <label className="settings-row">
-            <span>
-              <b>{tt('settings.minimizeToTray', '关闭到托盘')}</b>
-              <em>{tt('settings.minimizeToTrayHint', '点击关闭按钮时隐藏窗口，可从托盘图标恢复。')}</em>
-            </span>
-            <input
-              type="checkbox"
-              checked={settings.minimizeToTray}
-              onChange={(event) =>
-                void onSettingsChange({ minimizeToTray: event.target.checked })
-              }
-            />
-          </label>
-        </div>
-
-        <div className="settings-agents">
-          <AgentsView
-            installTargetRows={installTargetRows}
-            library={library}
-            onAdd={onAdd}
-            onDelete={onDelete}
-            onRefresh={onRefresh}
-            onUpdate={onUpdate}
-          />
-        </div>
-      </section>
-    </aside>
-  );
-}
-
-function SourcesView({
-  defaultSource,
-  name,
-  onAdd,
-  onDelete,
-  onNameChange,
-  onRestore,
-  onToggle,
-  onToggleAllMirrors,
-  onToggleMirror,
-  onUrlChange,
-  refreshing,
-  sources,
-  url,
-}: {
-  defaultSource: string;
-  name: string;
-  onAdd: () => void;
-  onDelete: (name: string) => Promise<void> | void;
-  onNameChange: (value: string) => void;
-  onRestore: () => void;
-  onToggle: (source: Source) => void;
-  onToggleAllMirrors: () => void;
-  onToggleMirror: (source: Source) => void;
-  onUrlChange: (value: string) => void;
-  refreshing: boolean;
-  sources: Source[];
-  url: string;
-}) {
-  const { t } = useTranslation();
-  const [confirmDeleteSource, setConfirmDeleteSource] = useState<string | null>(
-    null,
-  );
-  const enabledCount = sources.filter((source) => source.enabled).length;
-  const mirrorSources = sources.filter((source) => source.domesticMirror);
-  const allMirrorsEnabled =
-    mirrorSources.length > 0 &&
-    mirrorSources.every((source) => source.domesticMirror?.enabled);
-
-  function sourceDisplayLabel(source: Source): string {
-    return t(`builtinSources.${source.name}.label`, { defaultValue: source.label });
-  }
-
-  function sourceDisplayDescription(source: Source): string {
-    return t(`builtinSources.${source.name}.description`, {
-      defaultValue: source.description,
-    });
-  }
-
-  return (
-    <section className="installed-page">
-      <div className="page-head">
-        <h1>{t('sources.title')}</h1>
-        <div className="source-head-actions">
-          <button
-            className={allMirrorsEnabled ? 'button source-mirror-global active' : 'button source-mirror-global'}
-            disabled={refreshing || mirrorSources.length === 0}
-            onClick={onToggleAllMirrors}
-            title={
-              mirrorSources.length === 0
-                ? t('sources.mirrorAllTitleNone')
-                : allMirrorsEnabled
-                  ? t('sources.mirrorAllTitleOn')
-                  : t('sources.mirrorAllTitleOff')
-            }
-          >
-            {t('sources.mirrorAllButton')}
-          </button>
-          <button className="button" disabled={refreshing} onClick={onRestore}>
-            <Icon name="database" />
-            {t('sources.addBuiltin')}
-          </button>
-        </div>
-      </div>
-      <div className="source-form">
-        <label>
-          <span>{t('sources.nameLabel')}</span>
-          <input
-            value={name}
-            onChange={(event) => onNameChange(event.target.value)}
-            placeholder={t('sources.namePlaceholder')}
-          />
-        </label>
-        <label>
-          <span>{t('sources.urlLabel')}</span>
-          <input
-            value={url}
-            onChange={(event) => onUrlChange(event.target.value)}
-            placeholder={t('sources.urlPlaceholder')}
-          />
-        </label>
-        <button className="button primary" disabled={refreshing} onClick={onAdd}>
-          {t('sources.addSource')}
-        </button>
-      </div>
-      <div className="source-list" aria-busy={refreshing}>
-        {sources.map((source) => {
-          const isLastEnabledSource = source.enabled && enabledCount <= 1;
-          const cannotDelete =
-            source.name === defaultSource ||
-            source.name === 'default' ||
-            isLastEnabledSource;
-          const deleteTitle =
-            source.name === defaultSource || source.name === 'default'
-              ? t('sources.deleteTitleDefault')
-              : isLastEnabledSource
-                ? t('sources.deleteTitleLast')
-                : undefined;
-          const confirming = confirmDeleteSource === source.name;
-          return (
-            <article key={source.name}>
-              <div className="source-main">
-                <strong>
-                  <span>{sourceDisplayLabel(source)}</span>
-                  <span className="source-tags">
-                    {source.name === defaultSource ? <i>{t('sources.tagDefault')}</i> : null}
-                    <i>
-                      {source.builtin ? t('sources.tagBuiltin') : t('sources.tagCustom')}
-                    </i>
-                    <i>
-                      {t(`sourceCategory.${source.category}`, {
-                        defaultValue: source.category,
-                      })}
-                    </i>
-                    {source.domesticMirror ? (
-                      <i>
-                        {source.domesticMirror.enabled
-                          ? t('sources.mirrorOn')
-                          : t('sources.mirrorOff')}
-                      </i>
-                    ) : null}
-                  </span>
-                </strong>
-                <span className="source-description">
-                  {sourceDisplayDescription(source)}
-                </span>
-                <span className="source-url-row">
-                  <b>{t('sources.upstream')}</b>
-                  <code>{source.url}</code>
-                </span>
-                <span className="source-url-row">
-                  <b>{t('sources.current')}</b>
-                  <code>{source.effectiveUrl}</code>
-                </span>
-                <span className="source-key">{source.name}</span>
-              </div>
-              <span className={source.enabled ? 'source-status on' : 'source-status'}>
-                {source.enabled ? t('sources.statusEnabled') : t('sources.statusDisabled')}
-              </span>
-              <div className="source-actions">
-                <button
-                  className="button"
-                  disabled={refreshing || isLastEnabledSource}
-                  onClick={() => onToggle(source)}
-                  title={
-                    isLastEnabledSource
-                      ? t('sources.toggleTitleLast')
-                      : undefined
-                  }
-                >
-                  {source.enabled ? t('sources.disable') : t('sources.enable')}
-                </button>
-                {source.domesticMirror ? (
-                  <button
-                    className="button"
-                    disabled={refreshing}
-                    onClick={() => onToggleMirror(source)}
-                    title={
-                      source.domesticMirror.enabled
-                        ? t('sources.mirrorRowTitleOn')
-                        : t('sources.mirrorRowTitleOff')
-                    }
-                  >
-                    {source.domesticMirror.enabled
-                      ? t('sources.mirrorToggleOn')
-                      : t('sources.mirrorToggleOff')}
-                  </button>
-                ) : null}
-                <button
-                  className="button danger"
-                  disabled={refreshing || cannotDelete}
-                  onClick={() =>
-                    setConfirmDeleteSource(confirming ? null : source.name)
-                  }
-                  title={deleteTitle}
-                >
-                  {t('sources.delete')}
-                </button>
-              </div>
-              {confirming ? (
-                <div className="confirm-strip source-confirm-strip">
-                  <span>
-                    {t('sources.confirmDelete', {
-                      name: source.name,
-                      description: sourceDisplayDescription(source),
-                    })}
-                  </span>
-                  <button
-                    className="button danger"
-                    onClick={async () => {
-                      await onDelete(source.name);
-                      setConfirmDeleteSource(null);
-                    }}
-                  >
-                    {t('sources.delete')}
-                  </button>
-                  <button
-                    className="button"
-                    onClick={() => setConfirmDeleteSource(null)}
-                  >
-                    {t('installed.cancel')}
-                  </button>
-                </div>
-              ) : null}
-            </article>
-          );
-        })}
-      </div>
-      {refreshing ? (
-        <div className="source-sync-status" role="status" aria-live="polite">
-          <span className="source-sync-spinner" />
-          <strong>{t('sources.syncingTitle')}</strong>
-          <em>{t('sources.syncingHint')}</em>
-        </div>
-      ) : null}
-    </section>
-  );
-}
-
-function Info({ label, value }: { label: string; value?: string }) {
-  return (
-    <div>
-      <span>{label}</span>
-      <strong>{value || '-'}</strong>
-    </div>
-  );
-}
-
-// ─── 更新提示条 ────────────────────────────────────────────────────────────────
+// 鈹€鈹€鈹€ 鏇存柊鎻愮ず鏉?鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
 function UpdateBanner({
   currentVersion,
@@ -3386,15 +1403,15 @@ function UpdateBanner({
     <div className="update-banner" role="status">
       <span className="update-banner-dot" />
       <span className="update-banner-text">
-        发现新版本 <strong>v{release.version}</strong>
-        {currentVersion ? <>，当前版本 v{currentVersion}</> : null}
+        鍙戠幇鏂扮増鏈?<strong>v{release.version}</strong>
+        {currentVersion ? <>锛屽綋鍓嶇増鏈?v{currentVersion}</> : null}
       </span>
       <button className="button primary update-banner-btn" onClick={onGoDownload}>
-        查看下载
+        鏌ョ湅涓嬭浇
       </button>
       <button
         className="icon-button update-banner-close"
-        aria-label="关闭提示"
+        aria-label="鍏抽棴鎻愮ず"
         onClick={onDismiss}
       >
         <Icon name="x" />
@@ -3403,1058 +1420,6 @@ function UpdateBanner({
   );
 }
 
-// ─── 下载页面 ──────────────────────────────────────────────────────────────────
+// 鈹€鈹€鈹€ 涓嬭浇椤甸潰 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
-// ─── 翻译 MarkdownView ──────────────────────────────────────────────────────
-
-const TRANSLATE_CACHE_PREFIX = 'suit-skills-translate:';
-
-function getTranslateCache(key: string): string | null {
-  try {
-    return localStorage.getItem(TRANSLATE_CACHE_PREFIX + key);
-  } catch {
-    return null;
-  }
-}
-
-function setTranslateCache(key: string, value: string): void {
-  try {
-    localStorage.setItem(TRANSLATE_CACHE_PREFIX + key, value);
-  } catch {
-    // ignore
-  }
-}
-
-function LegacyTranslateMarkdownView({
-  markdown,
-  cacheKey,
-  translationConfig,
-}: {
-  markdown: string;
-  cacheKey: string;
-  translationConfig: TranslationConfig;
-}) {
-  const [state, setState] = useState<'original' | 'loading' | 'translated'>('original');
-  const [translated, setTranslated] = useState('');
-  const [error, setError] = useState('');
-  const canTranslate = translationConfig.provider !== 'none';
-
-  const handleToggle = useCallback(async () => {
-    if (state === 'translated') {
-      setState('original');
-      return;
-    }
-    if (!markdown.trim()) return;
-
-    const cached = cacheKey ? getTranslateCache(cacheKey) : null;
-    if (cached) {
-      setTranslated(cached);
-      setState('translated');
-      return;
-    }
-
-    setState('loading');
-    setError('');
-    try {
-      const result = await translateText(markdown);
-      if (cacheKey) setTranslateCache(cacheKey, result.translated);
-      setTranslated(result.translated);
-      setState('translated');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '翻译失败');
-      setState('original');
-    }
-  }, [state, markdown, cacheKey]);
-
-  // 当 markdown 变化时重置状态
-  useEffect(() => {
-    setState('original');
-    setError('');
-  }, [markdown]);
-
-  return (
-    <div className="translate-markdown-view">
-      {canTranslate ? (
-        <div className="translate-toolbar">
-          <button
-            className={`button translate-btn ${state === 'translated' ? 'active' : ''}`}
-            onClick={() => void handleToggle()}
-            disabled={state === 'loading' || !markdown.trim()}
-            title={state === 'translated' ? '显示原文' : '翻译为中文'}
-          >
-            <Icon name="translate" />
-            {state === 'loading' ? '翻译中…' : state === 'translated' ? '原文' : '中文'}
-          </button>
-          {error ? <span className="translate-error">{error}</span> : null}
-        </div>
-      ) : null}
-      <MarkdownView markdown={state === 'translated' ? translated : markdown} />
-    </div>
-  );
-}
-
-const TRANSLATE_CACHE_VERSION = 'v2';
-const TRANSLATE_TARGET_LANG = '简体中文';
-const TRANSLATE_CONCURRENCY = 4;
-
-type TranslationDisplayMode = 'original' | 'replace' | 'compare';
-
-interface TranslateTask {
-  key: string;
-  text: string;
-}
-
-interface CachedTranslationEntry {
-  source: string;
-  targetLang: string;
-  translated: string;
-  provider: string;
-  createdAt: number;
-}
-
-const translateMemoryCache = new Map<string, CachedTranslationEntry>();
-const translateInflightCache = new Map<string, Promise<CachedTranslationEntry>>();
-
-function fingerprintText(text: string): string {
-  let hashA = 2166136261;
-  let hashB = 1315423911;
-  for (let index = 0; index < text.length; index += 1) {
-    const code = text.charCodeAt(index);
-    hashA ^= code;
-    hashA = Math.imul(hashA, 16777619);
-    hashB ^= code + 0x9e3779b9 + (hashB << 6) + (hashB >> 2);
-  }
-  return `${text.length}:${(hashA >>> 0).toString(16)}:${(hashB >>> 0).toString(16)}`;
-}
-
-function getBlockTranslateStorageKey(text: string, targetLang: string): string {
-  return `${TRANSLATE_CACHE_PREFIX}${TRANSLATE_CACHE_VERSION}:block:${fingerprintText(text)}:${targetLang}`;
-}
-
-function readBlockTranslationCache(
-  text: string,
-  targetLang: string,
-): CachedTranslationEntry | null {
-  const storageKey = getBlockTranslateStorageKey(text, targetLang);
-  const memoryHit = translateMemoryCache.get(storageKey);
-  if (memoryHit && memoryHit.source === text && memoryHit.targetLang === targetLang) {
-    return memoryHit;
-  }
-  try {
-    const raw = localStorage.getItem(storageKey);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as Partial<CachedTranslationEntry>;
-    if (
-      parsed.source !== text ||
-      parsed.targetLang !== targetLang ||
-      typeof parsed.translated !== 'string' ||
-      !parsed.translated.trim()
-    ) {
-      return null;
-    }
-    const entry: CachedTranslationEntry = {
-      source: text,
-      targetLang,
-      translated: parsed.translated,
-      provider: typeof parsed.provider === 'string' ? parsed.provider : 'cache',
-      createdAt: typeof parsed.createdAt === 'number' ? parsed.createdAt : Date.now(),
-    };
-    translateMemoryCache.set(storageKey, entry);
-    return entry;
-  } catch {
-    return null;
-  }
-}
-
-function writeBlockTranslationCache(
-  text: string,
-  targetLang: string,
-  translated: string,
-  provider: string,
-): CachedTranslationEntry {
-  const storageKey = getBlockTranslateStorageKey(text, targetLang);
-  const entry: CachedTranslationEntry = {
-    source: text,
-    targetLang,
-    translated,
-    provider,
-    createdAt: Date.now(),
-  };
-  translateMemoryCache.set(storageKey, entry);
-  try {
-    localStorage.setItem(storageKey, JSON.stringify(entry));
-  } catch {
-    // ignore quota errors
-  }
-  return entry;
-}
-
-async function resolveBlockTranslation(
-  text: string,
-  targetLang: string,
-): Promise<CachedTranslationEntry> {
-  const cached = readBlockTranslationCache(text, targetLang);
-  if (cached) return cached;
-
-  const storageKey = getBlockTranslateStorageKey(text, targetLang);
-  const inflight = translateInflightCache.get(storageKey);
-  if (inflight) return inflight;
-
-  const request = translateText(text, targetLang)
-    .then((result) =>
-      writeBlockTranslationCache(text, targetLang, result.translated, result.provider),
-    )
-    .finally(() => {
-      translateInflightCache.delete(storageKey);
-    });
-
-  translateInflightCache.set(storageKey, request);
-  return request;
-}
-
-function isProbablyEnglishText(text: string): boolean {
-  const normalized = text
-    .replace(/`[^`]*`/g, ' ')
-    .replace(/https?:\/\/\S+/g, ' ')
-    .replace(/\b[a-zA-Z]:\\[^\s]*/g, ' ')
-    .trim();
-  if (!normalized) return false;
-  const latinRuns = normalized.match(/[A-Za-z]{3,}/g) ?? [];
-  if (latinRuns.length === 0) return false;
-  const latinLength = latinRuns.reduce((sum, item) => sum + item.length, 0);
-  const cjkLength = (normalized.match(/[\u4e00-\u9fff]/g) ?? []).length;
-  return latinLength >= Math.max(6, cjkLength * 2);
-}
-
-function getTranslateTaskKey(blockIndex: number, itemIndex?: number): string {
-  return itemIndex === undefined ? `block:${blockIndex}` : `block:${blockIndex}:item:${itemIndex}`;
-}
-
-function collectTranslateTasks(markdown: string, blocks: MarkdownBlock[]): TranslateTask[] {
-  if (!markdown.trim()) return [];
-  const tasks: TranslateTask[] = [];
-  blocks.forEach((block, blockIndex) => {
-    if (block.kind === 'pre') return;
-    if (block.kind === 'ul') {
-      block.items.forEach((item, itemIndex) => {
-        if (isProbablyEnglishText(item)) {
-          tasks.push({ key: getTranslateTaskKey(blockIndex, itemIndex), text: item });
-        }
-      });
-      return;
-    }
-    if (isProbablyEnglishText(block.text)) {
-      tasks.push({ key: getTranslateTaskKey(blockIndex), text: block.text });
-    }
-  });
-  return tasks;
-}
-
-function renderTranslationHint(
-  translated: string | undefined,
-  pending: boolean,
-  failed: boolean,
-  onRetry?: () => void,
-): ReactNode {
-  if (translated) return <p className="translation-line">{translated}</p>;
-  if (pending) return <p className="translation-line pending">翻译中…</p>;
-  if (failed) {
-    return (
-      <div className="translation-line error">
-        <span>翻译失败</span>
-        {onRetry ? (
-          <button
-            className="button translation-retry-btn"
-            onClick={onRetry}
-            type="button"
-          >
-            重试
-          </button>
-        ) : null}
-      </div>
-    );
-  }
-  return null;
-}
-
-function TranslateMarkdownView({
-  markdown,
-  cacheKey,
-  translationConfig,
-}: {
-  markdown: string;
-  cacheKey: string;
-  translationConfig: TranslationConfig;
-}) {
-  const { t } = useTranslation();
-  const blocks = useMemo(
-    () => parseMarkdown(markdown, t('markdown.empty')),
-    [markdown, t],
-  );
-  const tasks = useMemo(
-    () => collectTranslateTasks(markdown, blocks),
-    [blocks, markdown],
-  );
-  const taskKeySet = useMemo(() => new Set(tasks.map((task) => task.key)), [tasks]);
-  const contentIdentity = useMemo(
-    () => `${cacheKey}:${fingerprintText(markdown)}`,
-    [cacheKey, markdown],
-  );
-  const [mode, setMode] = useState<TranslationDisplayMode>('original');
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [translatedByKey, setTranslatedByKey] = useState<Record<string, string>>({});
-  const [failedByKey, setFailedByKey] = useState<Record<string, string>>({});
-  const runIdRef = useRef(0);
-  const canTranslate = translationConfig.provider !== 'none';
-  const canTranslateCurrent = canTranslate && tasks.length > 0;
-  const failedTaskKeys = useMemo(
-    () => tasks.filter((task) => failedByKey[task.key]).map((task) => task.key),
-    [failedByKey, tasks],
-  );
-
-  const progress = useMemo(() => {
-    let completed = 0;
-    let failed = 0;
-    tasks.forEach((task) => {
-      if (translatedByKey[task.key]) completed += 1;
-      else if (failedByKey[task.key]) failed += 1;
-    });
-    return {
-      total: tasks.length,
-      completed,
-      failed,
-    };
-  }, [failedByKey, tasks, translatedByKey]);
-
-  const ensureTranslations = useCallback(async (requestedTaskKeys?: Set<string>) => {
-    const targetTasks = requestedTaskKeys
-      ? tasks.filter((task) => requestedTaskKeys.has(task.key))
-      : tasks;
-    if (!targetTasks.length) return;
-
-    const runId = runIdRef.current + 1;
-    runIdRef.current = runId;
-    setIsLoading(true);
-    setError('');
-    setFailedByKey((prev) => {
-      if (!requestedTaskKeys) return {};
-      const next = { ...prev };
-      requestedTaskKeys.forEach((taskKey) => {
-        delete next[taskKey];
-      });
-      return next;
-    });
-
-    const cachedTranslations: Record<string, string> = {};
-    const groupedTasks = new Map<string, TranslateTask[]>();
-
-    targetTasks.forEach((task) => {
-      const cached = readBlockTranslationCache(task.text, TRANSLATE_TARGET_LANG);
-      if (cached) {
-        cachedTranslations[task.key] = cached.translated;
-        return;
-      }
-      const group = groupedTasks.get(task.text);
-      if (group) group.push(task);
-      else groupedTasks.set(task.text, [task]);
-    });
-
-    if (Object.keys(cachedTranslations).length > 0) {
-      setTranslatedByKey((prev) => ({ ...prev, ...cachedTranslations }));
-      setFailedByKey((prev) => {
-        const next = { ...prev };
-        Object.keys(cachedTranslations).forEach((key) => {
-          delete next[key];
-        });
-        return next;
-      });
-    }
-
-    const queue = Array.from(groupedTasks.entries()).map(([text, relatedTasks]) => ({
-      text,
-      relatedTasks,
-    }));
-
-    if (queue.length === 0) {
-      if (runIdRef.current === runId) setIsLoading(false);
-      return;
-    }
-
-    let hadFailure = false;
-    let cursor = 0;
-
-    const worker = async () => {
-      while (cursor < queue.length) {
-        const currentIndex = cursor;
-        cursor += 1;
-        const current = queue[currentIndex];
-        try {
-          const result = await resolveBlockTranslation(current.text, TRANSLATE_TARGET_LANG);
-          if (runIdRef.current !== runId) return;
-          setTranslatedByKey((prev) => {
-            const next = { ...prev };
-            current.relatedTasks.forEach((task) => {
-              next[task.key] = result.translated;
-            });
-            return next;
-          });
-          setFailedByKey((prev) => {
-            const next = { ...prev };
-            current.relatedTasks.forEach((task) => {
-              delete next[task.key];
-            });
-            return next;
-          });
-        } catch (err) {
-          if (runIdRef.current !== runId) return;
-          hadFailure = true;
-          const message = err instanceof Error ? err.message : '翻译失败';
-          setFailedByKey((prev) => {
-            const next = { ...prev };
-            current.relatedTasks.forEach((task) => {
-              next[task.key] = message;
-            });
-            return next;
-          });
-        }
-      }
-    };
-
-    await Promise.all(
-      Array.from({ length: Math.min(TRANSLATE_CONCURRENCY, queue.length) }, () => worker()),
-    );
-
-    if (runIdRef.current !== runId) return;
-    setIsLoading(false);
-    setError(hadFailure ? '部分内容翻译失败，可重试失败项' : '');
-  }, [tasks]);
-
-  const activateMode = useCallback(
-    async (nextMode: TranslationDisplayMode) => {
-      if (nextMode === 'original') {
-        runIdRef.current += 1;
-        setMode('original');
-        setIsLoading(false);
-        setError('');
-        return;
-      }
-      if (!canTranslateCurrent) return;
-      setMode(nextMode);
-      await ensureTranslations();
-    },
-    [canTranslateCurrent, ensureTranslations],
-  );
-
-  const retryFailedTranslations = useCallback(async () => {
-    if (!failedTaskKeys.length) return;
-    await ensureTranslations(new Set(failedTaskKeys));
-  }, [ensureTranslations, failedTaskKeys]);
-
-  const retrySingleTranslation = useCallback(
-    async (taskKey: string) => {
-      await ensureTranslations(new Set([taskKey]));
-    },
-    [ensureTranslations],
-  );
-
-  useEffect(() => {
-    runIdRef.current += 1;
-    setMode('original');
-    setIsLoading(false);
-    setError('');
-    setTranslatedByKey({});
-    setFailedByKey({});
-  }, [contentIdentity]);
-
-  useEffect(() => () => {
-    runIdRef.current += 1;
-  }, []);
-
-  return (
-    <div className="translate-markdown-view">
-      {canTranslate ? (
-        <div className="translate-toolbar">
-          <button
-            className={`button translate-btn ${mode === 'replace' ? 'active' : ''}`}
-            onClick={() => void activateMode('replace')}
-            disabled={!canTranslateCurrent}
-            title="翻译后直接替换原文"
-            type="button"
-          >
-            <Icon name="translate" />
-            中文替换
-          </button>
-          <button
-            className={`button translate-btn ${mode === 'compare' ? 'active' : ''}`}
-            onClick={() => void activateMode('compare')}
-            disabled={!canTranslateCurrent}
-            title="保留原文并显示中文对照"
-            type="button"
-          >
-            中英对照
-          </button>
-          <button
-            className={`button translate-btn ${mode === 'original' ? 'active' : ''}`}
-            onClick={() => void activateMode('original')}
-            disabled={mode === 'original' && !isLoading}
-            type="button"
-          >
-            原文
-          </button>
-          {progress.failed ? (
-            <button
-              className="button translate-btn"
-              onClick={() => void retryFailedTranslations()}
-              disabled={isLoading}
-              type="button"
-            >
-              重试失败 {progress.failed}
-            </button>
-          ) : null}
-          <span className="translate-progress">
-            {!tasks.length
-              ? '当前内容无需翻译'
-              : isLoading
-                ? `翻译中 ${progress.completed}/${progress.total}`
-                : `已就绪 ${progress.completed}/${progress.total}${progress.failed ? `，失败 ${progress.failed}` : ''}`}
-          </span>
-          {error ? <span className="translate-error">{error}</span> : null}
-        </div>
-      ) : null}
-      <div className="markdown">
-        {blocks.map((block, blockIndex) => {
-          if (block.kind === 'pre') {
-            return (
-              <pre className="code-block" key={blockIndex}>
-                <code>{block.text}</code>
-              </pre>
-            );
-          }
-          if (block.kind === 'ul') {
-            return (
-              <ul key={blockIndex}>
-                {block.items.map((item, itemIndex) => {
-                  const taskKey = getTranslateTaskKey(blockIndex, itemIndex);
-                  const translated = translatedByKey[taskKey];
-                  const failed = Boolean(failedByKey[taskKey]);
-                  const pending =
-                    mode !== 'original' &&
-                    isLoading &&
-                    taskKeySet.has(taskKey) &&
-                    !translated &&
-                    !failed;
-                  const displayText = mode === 'replace' ? translated ?? item : item;
-                  return (
-                    <li key={taskKey}>
-                      <span>{displayText}</span>
-                      {mode === 'compare'
-                        ? renderTranslationHint(
-                            translated,
-                            pending,
-                            failed,
-                            failed ? () => void retrySingleTranslation(taskKey) : undefined,
-                          )
-                        : null}
-                    </li>
-                  );
-                })}
-              </ul>
-            );
-          }
-
-          const taskKey = getTranslateTaskKey(blockIndex);
-          const translated = translatedByKey[taskKey];
-          const failed = Boolean(failedByKey[taskKey]);
-          const pending =
-            mode !== 'original' &&
-            isLoading &&
-            taskKeySet.has(taskKey) &&
-            !translated &&
-            !failed;
-          const displayText = mode === 'replace' ? translated ?? block.text : block.text;
-
-          if (mode === 'compare') {
-            const Tag = block.kind;
-            return (
-              <div className="markdown-compare-block" key={taskKey}>
-                <Tag>{block.text}</Tag>
-                {renderTranslationHint(
-                  translated,
-                  pending,
-                  failed,
-                  failed ? () => void retrySingleTranslation(taskKey) : undefined,
-                )}
-              </div>
-            );
-          }
-
-          if (block.kind === 'h1') return <h1 key={taskKey}>{displayText}</h1>;
-          if (block.kind === 'h2') return <h2 key={taskKey}>{displayText}</h2>;
-          return <p key={taskKey}>{displayText}</p>;
-        })}
-      </div>
-    </div>
-  );
-}
-
-function FileContentViewer({
-  content,
-  translationConfig,
-  skillName,
-}: {
-  content: SkillFileContent | null;
-  translationConfig: TranslationConfig;
-  skillName: string;
-}) {
-  if (!content) {
-    return <div className="file-content-empty">暂无内容</div>;
-  }
-  if (!content.previewable) {
-    return (
-      <div className="file-content-empty">
-        <Icon name="file" />
-        <span>无法预览此文件（{content.ext || '二进制'}，{(content.size / 1024).toFixed(1)} KB）</span>
-      </div>
-    );
-  }
-  if (content.encoding === 'base64' && content.contentBase64) {
-    const mimeMap: Record<string, string> = {
-      '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
-      '.gif': 'image/gif', '.webp': 'image/webp', '.svg': 'image/svg+xml',
-    };
-    const mime = mimeMap[content.ext] ?? 'image/png';
-    return (
-      <div className="file-content-image">
-        <img src={`data:${mime};base64,${content.contentBase64}`} alt={content.path} />
-      </div>
-    );
-  }
-  const text = content.content ?? '';
-  if (content.ext === '.md') {
-    return (
-      <div className="file-content-markdown">
-        <TranslateMarkdownView
-          markdown={text}
-          cacheKey={`translate:skill:${skillName}:${content.path}`}
-          translationConfig={translationConfig}
-        />
-      </div>
-    );
-  }
-  return (
-    <div className="file-content-code">
-      <pre className="code-block"><code>{text}</code></pre>
-    </div>
-  );
-}
-
-/** 将 API / 缓存等来源的树数据规整为数组，避免 `files` 或 `children` 非数组导致 for…of / .map 抛错 */
-function normalizeSkillFileList(raw: unknown): SkillFileNode[] {
-  if (!Array.isArray(raw)) return [];
-  const out: SkillFileNode[] = [];
-  for (const item of raw) {
-    const node = normalizeSkillFileNode(item);
-    if (node) out.push(node);
-  }
-  return out;
-}
-
-function normalizeSkillFileNode(item: unknown): SkillFileNode | null {
-  if (!item || typeof item !== 'object') return null;
-  const o = item as Record<string, unknown>;
-  const name = typeof o.name === 'string' ? o.name : String(o.name ?? '');
-  const path = typeof o.path === 'string' ? o.path : String(o.path ?? '');
-  if (o.type === 'dir') {
-    return {
-      name,
-      path,
-      type: 'dir',
-      children: normalizeSkillFileList(o.children),
-    };
-  }
-  if (o.type === 'file') {
-    return { name, path, type: 'file' };
-  }
-  return null;
-}
-
-function findSkillMdInTree(nodes: SkillFileNode[] | undefined): SkillFileNode | undefined {
-  if (!Array.isArray(nodes)) return undefined;
-  for (const node of nodes) {
-    if (node.type === 'file' && node.name.toUpperCase() === 'SKILL.MD') {
-      return node;
-    }
-    if (node.type === 'dir') {
-      const kids = node.children;
-      if (Array.isArray(kids) && kids.length > 0) {
-        const found = findSkillMdInTree(kids);
-        if (found) return found;
-      }
-    }
-  }
-  return undefined;
-}
-
-/** 文件路径的所有祖先目录路径（用于默认展开，便于看到子目录中的 SKILL.md） */
-function ancestorDirPaths(filePath: string): string[] {
-  const parts = filePath.split('/').filter(Boolean);
-  if (parts.length <= 1) return [];
-  const dirs: string[] = [];
-  for (let i = 0; i < parts.length - 1; i++) {
-    dirs.push(parts.slice(0, i + 1).join('/'));
-  }
-  return dirs;
-}
-
-function FileTreeNode({
-  node,
-  depth,
-  selectedPath,
-  expandedDirs,
-  onSelectFile,
-  onToggleDir,
-}: {
-  node: SkillFileNode;
-  depth: number;
-  selectedPath: string;
-  expandedDirs: Set<string>;
-  onSelectFile: (path: string) => void;
-  onToggleDir: (path: string) => void;
-}) {
-  const isSelected = node.type === 'file' && node.path === selectedPath;
-
-  if (node.type === 'dir') {
-    const open = expandedDirs.has(node.path);
-    const children = Array.isArray(node.children) ? node.children : [];
-    return (
-      <div className="file-tree-dir">
-        <button
-          type="button"
-          className="file-tree-item file-tree-dir-btn"
-          style={{ paddingLeft: `${8 + depth * 14}px` }}
-          onClick={() => onToggleDir(node.path)}
-        >
-          <Icon name={open ? 'chevron-down' : 'chevron-right'} />
-          <Icon name="folder" />
-          <span>{node.name}</span>
-        </button>
-        {open && children.length > 0 ? (
-          <div className="file-tree-children">
-            {children.map((child) => (
-              <FileTreeNode
-                key={child.path}
-                node={child}
-                depth={depth + 1}
-                selectedPath={selectedPath}
-                expandedDirs={expandedDirs}
-                onSelectFile={onSelectFile}
-                onToggleDir={onToggleDir}
-              />
-            ))}
-          </div>
-        ) : null}
-      </div>
-    );
-  }
-
-  return (
-    <button
-      type="button"
-      className={`file-tree-item file-tree-file-btn ${isSelected ? 'selected' : ''}`}
-      style={{ paddingLeft: `${8 + depth * 14}px` }}
-      onClick={() => onSelectFile(node.path)}
-    >
-      <Icon name="file" />
-      <span>{node.name}</span>
-    </button>
-  );
-}
-
-function SkillDetailView({
-  skillName,
-  source,
-  translationConfig,
-  onBack,
-}: {
-  skillName: string;
-  source: string;
-  translationConfig: TranslationConfig;
-  onBack: () => void;
-}) {
-  const [files, setFiles] = useState<SkillFileNode[]>([]);
-  const [loadingFiles, setLoadingFiles] = useState(true);
-  const [filesError, setFilesError] = useState('');
-  const [expandedDirs, setExpandedDirs] = useState<Set<string>>(() => new Set());
-  const [selectedPath, setSelectedPath] = useState('');
-  const [fileContent, setFileContent] = useState<SkillFileContent | null>(null);
-  const [loadingContent, setLoadingContent] = useState(false);
-
-  const toggleDir = useCallback((path: string) => {
-    setExpandedDirs((prev) => {
-      const next = new Set(prev);
-      if (next.has(path)) next.delete(path);
-      else next.add(path);
-      return next;
-    });
-  }, []);
-
-  useEffect(() => {
-    if (!skillName) return;
-    setLoadingFiles(true);
-    setFilesError('');
-    setFiles([]);
-    setSelectedPath('');
-    setExpandedDirs(new Set());
-    fetchSkillFiles(skillName, source !== 'all' ? source : undefined)
-      .then((data) => {
-        const files = normalizeSkillFileList(data?.files);
-        setFiles(files);
-        const skillMd = findSkillMdInTree(files);
-        if (skillMd) {
-          setExpandedDirs(new Set(ancestorDirPaths(skillMd.path)));
-          setSelectedPath(skillMd.path);
-        }
-      })
-      .catch((err: unknown) => {
-        setFilesError(err instanceof Error ? err.message : '加载文件列表失败');
-      })
-      .finally(() => setLoadingFiles(false));
-  }, [skillName, source]);
-
-  useEffect(() => {
-    if (!selectedPath || !skillName) return;
-    setLoadingContent(true);
-    setFileContent(null);
-    fetchSkillFileContent(skillName, selectedPath, source !== 'all' ? source : undefined)
-      .then(setFileContent)
-      .catch((err: unknown) => {
-        setFileContent({
-          path: selectedPath,
-          encoding: 'binary',
-          previewable: false,
-          ext: '',
-          size: 0,
-          content: err instanceof Error ? err.message : '加载失败',
-        });
-      })
-      .finally(() => setLoadingContent(false));
-  }, [selectedPath, skillName, source]);
-
-  return (
-    <section className="skill-detail-page">
-      <div className="skill-detail-topbar">
-        <button type="button" className="button" onClick={onBack}>
-          <Icon name="arrow-left" />
-          返回
-        </button>
-        <span className="skill-detail-breadcrumb">
-          <Icon name="database" />
-          {skillName}
-        </span>
-      </div>
-      <div className="skill-detail-body">
-        <aside className="skill-detail-tree">
-          {loadingFiles ? (
-            <div className="state">加载文件树…</div>
-          ) : filesError ? (
-            <div className="state error">{filesError}</div>
-          ) : (
-            <div className="file-tree-root">
-              {files.map((node) => (
-                <FileTreeNode
-                  key={node.path}
-                  node={node}
-                  depth={0}
-                  selectedPath={selectedPath}
-                  expandedDirs={expandedDirs}
-                  onSelectFile={setSelectedPath}
-                  onToggleDir={toggleDir}
-                />
-              ))}
-            </div>
-          )}
-        </aside>
-        <main className="skill-detail-content">
-          {loadingFiles ? (
-            <div className="state">加载中…</div>
-          ) : filesError ? (
-            <div className="state error">{filesError}</div>
-          ) : !selectedPath ? (
-            <div className="file-content-empty">← 从左侧选择文件查看内容</div>
-          ) : loadingContent ? (
-            <div className="state">加载文件内容…</div>
-          ) : (
-            <FileContentViewer
-              content={fileContent}
-              translationConfig={translationConfig}
-              skillName={skillName}
-            />
-          )}
-        </main>
-      </div>
-    </section>
-  );
-}
-
-function DownloadView({
-  currentVersion,
-  isDesktop,
-  latestDesktopRelease,
-  latestWebVersion,
-  onBack,
-  webVersion,
-}: {
-  currentVersion: string | null;
-  isDesktop: boolean;
-  latestDesktopRelease: DesktopRelease | null | 'loading';
-  latestWebVersion: string | null | 'loading';
-  onBack: () => void;
-  webVersion: string;
-}) {
-  const detectedPlatform = useMemo(() => detectPlatform(), []);
-  const release = latestDesktopRelease;
-  const currentRuntimeVersion = isDesktop ? currentVersion : webVersion;
-  const currentRuntimeLabel = isDesktop ? '桌面端' : 'Web 端';
-  const latestRuntimeVersion = isDesktop
-    ? release !== 'loading' && release ? release.version : null
-    : latestWebVersion !== 'loading'
-      ? latestWebVersion
-      : null;
-  const runtimeUpdateAvailable =
-    currentRuntimeVersion && latestRuntimeVersion
-      ? compareSemver(latestRuntimeVersion, currentRuntimeVersion) > 0
-      : false;
-
-  const platformOrder: DesktopPlatform[] = [
-    'windows-x86_64',
-    'darwin-aarch64',
-    'darwin-x86_64',
-  ];
-
-  return (
-    <section className="download-page">
-      <div className="download-topbar">
-        <button type="button" className="button" onClick={onBack}>
-          <Icon name="arrow-left" />
-          返回
-        </button>
-      </div>
-      <div className="download-hero">
-        <span className="download-hero-icon">
-          <Icon name="download" />
-        </span>
-        <div>
-          <h1>
-            {isDesktop ? '检查更新' : '下载桌面版'}
-          </h1>
-          <p>
-            {isDesktop
-              ? `当前桌面版本 v${currentVersion ?? '—'}，以下是 Gitee 上的最新构建。`
-              : `当前 Web 版本 v${webVersion}${latestWebVersion && latestWebVersion !== 'loading'
-                ? runtimeUpdateAvailable
-                  ? `，npm 最新版本为 v${latestWebVersion}。`
-                  : '，当前已是 npm 最新版本。'
-                : '。'} 下载 Suit Skills 桌面应用，获得更流畅的本地体验。`}
-          </p>
-        </div>
-      </div>
-
-      {release === 'loading' ? (
-        <div className="state">正在获取最新版本信息…</div>
-      ) : release === null ? (
-        <div className="download-error">
-          <p>无法获取版本信息，请稍后重试或直接前往 Gitee 仓库查看。</p>
-          <a
-            href={GITEE_REPO_URL}
-            target="_blank"
-            rel="noreferrer"
-            className="button"
-          >
-            前往 Gitee 仓库
-          </a>
-        </div>
-      ) : (
-        <>
-          <div className="download-version-badge download-version-badge--current">
-            当前{currentRuntimeLabel}
-            <strong>v{currentRuntimeVersion ?? '—'}</strong>
-            <span
-              className={
-                runtimeUpdateAvailable
-                  ? 'download-status-tag download-status-tag--update'
-                  : 'download-status-tag'
-              }
-            >
-              {runtimeUpdateAvailable ? '可更新' : '已最新'}
-            </span>
-          </div>
-          <div className="download-version-badge">
-            最新版本 <strong>v{release.version}</strong>
-            <span className="download-date">
-              {new Date(release.pub_date).toLocaleDateString('zh-CN')}
-            </span>
-          </div>
-
-          <div className="download-platforms">
-            {platformOrder.map((key) => {
-              const asset = release.platforms[key];
-              const meta = PLATFORM_LABELS[key];
-              const isCurrent = key === detectedPlatform;
-              return (
-                <div
-                  key={key}
-                  className={`download-card ${isCurrent ? 'recommended' : ''}`}
-                >
-                  {isCurrent ? (
-                    <span className="download-card-badge">推荐</span>
-                  ) : null}
-                  <div className="download-card-info">
-                    <strong>{meta.os}</strong>
-                    <span>{meta.arch}</span>
-                    <code>{asset?.filename ?? meta.ext}</code>
-                  </div>
-                  {asset ? (
-                    <a
-                      href={asset.url}
-                      className="button primary"
-                      download={asset.filename}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      <Icon name="download" />
-                      下载
-                    </a>
-                  ) : (
-                    <span className="download-card-na">暂未提供</span>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-
-          {release.notes ? (
-            <div className="download-notes">
-              <strong>构建说明</strong>
-              <span>{release.notes}</span>
-            </div>
-          ) : null}
-
-          <div className="download-footer">
-            <a
-              href={`${GITEE_REPO_URL}/tree/desktop-artifacts`}
-              target="_blank"
-              rel="noreferrer"
-              className="button"
-            >
-              查看 Gitee 仓库
-            </a>
-            <p className="download-hint">
-              下载后直接运行安装包即可完成升级，无需卸载旧版本。
-            </p>
-          </div>
-        </>
-      )}
-    </section>
-  );
-}
+// 鈹€鈹€鈹€ 缈昏瘧 MarkdownView 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€

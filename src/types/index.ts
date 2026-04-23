@@ -80,6 +80,8 @@ export interface Config {
   installTargetsAuto?: boolean;
   /** 翻译服务配置 */
   translation?: TranslationConfig;
+  /** AI 修改服务配置 */
+  aiEditing?: AiEditConfig;
 }
 
 /** 安装目标 */
@@ -157,5 +159,20 @@ export interface TranslationConfig {
   /** CLI 模式：可执行命令，如 "claude" 或 "openai" */
   cliCommand?: string;
   /** CLI 模式：附加参数，如 ["--model", "claude-opus-4-5"] */
+  cliArgs?: string[];
+}
+
+/** AI 修改服务配置 */
+export interface AiEditConfig {
+  provider: 'openai' | 'cli' | 'none';
+  /** HTTP API 模式：接口基础地址，默认 https://api.openai.com/v1 */
+  apiBaseUrl?: string;
+  /** HTTP API 模式：API Key */
+  apiKey?: string;
+  /** HTTP API 模式：模型名称，默认 gpt-4o-mini */
+  model?: string;
+  /** CLI 模式：可执行命令，如 "claude" 或 "openai" */
+  cliCommand?: string;
+  /** CLI 模式：附加参数，如 ["--model", "gpt-5"] */
   cliArgs?: string[];
 }

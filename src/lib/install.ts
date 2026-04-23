@@ -12,6 +12,7 @@ import {
   getSkillSourceDir,
   updateSkillMarkdownName,
 } from './skills.js';
+import { captureInstalledSkillBaseline } from './baseline.js';
 
 export interface ConflictCheckResult {
   conflict: boolean;
@@ -66,6 +67,10 @@ export function installSkill(
   ensureDir(joinUnderTarget(targetRoot));
   ensureDir(dirname(destDir));
   copyDir(srcDir, destDir);
+  captureInstalledSkillBaseline(destDir, {
+    skillName: meta.name,
+    installedVersion: meta.version,
+  });
   return destDir;
 }
 
@@ -142,5 +147,9 @@ export function installSkillWithConflict(
   ensureDir(joinUnderTarget(targetRoot));
   copyDir(srcDir, destDir);
   syncMetaNameWithFolder(destDir, newName);
+  captureInstalledSkillBaseline(destDir, {
+    skillName: newName,
+    installedVersion: meta.version,
+  });
   return { path: destDir };
 }

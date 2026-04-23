@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   existsSync,
   mkdirSync,
@@ -10,21 +10,27 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createCliContext } from '../../src/cli/context.js';
+import { captureInstalledSkillBaseline } from '../../src/lib/baseline.js';
 import { getDefaultConfig } from '../../src/lib/config.js';
 import { getSourceCacheDir } from '../../src/lib/cache.js';
 import {
   addWebSource,
   exportWebInstalledSkill,
+  getWebInstalledSkillFileContent,
+  getWebInstalledSkillFileTree,
   getWebSkillDetail,
   generateNpxInstallCommand,
   installWebSkill,
   linkWebInstalledSkillToTargets,
   listWebInstalledSkills,
   listWebSkills,
+  resetWebInstalledSkill,
+  resetWebInstalledSkillFile,
   listWebSources,
   removeWebInstalledSkill,
   removeWebSource,
   restoreWebBuiltinSources,
+  saveWebInstalledSkillFile,
   updateWebSource,
 } from '../../src/lib/web/api.js';
 
@@ -115,6 +121,7 @@ describe('web api', () => {
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     delete process.env.SUIT_SKILLS_HOME;
     if (existsSync(tmp)) {
       rmSync(tmp, { recursive: true, force: true });
@@ -553,6 +560,195 @@ describe('web api', () => {
     expect(byPath.items.map((item) => item.name)).toEqual(['local-helper']);
   });
 
+  it('reads installed skill files and saves text edits', () => {
+    writeStandardSkill(join(projectDir, '.claude', 'skills'), 'editable-helper', {
+      description: 'Editable helper',
+      tags: ['edit'],
+    });
+    writeFileSync(
+      join(projectDir, '.claude', 'skills', 'editable-helper', 'notes.txt'),
+      'hello world',
+    );
+
+    const tree = getWebInstalledSkillFileTree(ctx(), 'editable-helper', {
+      target: 'claude',
+      scope: 'project',
+    });
+    expect(tree.files.map((item) => item.path)).toEqual(
+      expect.arrayContaining(['SKILL.md', 'notes.txt']),
+    );
+
+    const before = getWebInstalledSkillFileContent(
+      ctx(),
+      'editable-helper',
+      'notes.txt',
+      {
+        target: 'claude',
+        scope: 'project',
+      },
+    );
+    expect(before.content).toBe('hello world');
+    expect(before.encoding).toBe('text');
+
+    const saved = saveWebInstalledSkillFile(ctx(), 'editable-helper', 'notes.txt', {
+      target: 'claude',
+      scope: 'project',
+      content: 'edited from web api',
+    });
+    expect(saved.content).toBe('edited from web api');
+    expect(
+      readFileSync(
+        join(projectDir, '.claude', 'skills', 'editable-helper', 'notes.txt'),
+        'utf8',
+      ),
+    ).toBe('edited from web api');
+  });
+
+  it('rejects editing non-text installed skill files', () => {
+    writeStandardSkill(join(projectDir, '.claude', 'skills'), 'image-helper');
+    writeFileSync(
+      join(projectDir, '.claude', 'skills', 'image-helper', 'logo.png'),
+      Buffer.from([0x89, 0x50, 0x4e, 0x47]),
+    );
+
+    expect(() =>
+      saveWebInstalledSkillFile(ctx(), 'image-helper', 'logo.png', {
+        target: 'claude',
+        scope: 'project',
+        content: 'not allowed',
+      }),
+    ).toThrow('Only previewable text files can be edited');
+  });
+
+  it('restores installed skill files and directories from a baseline snapshot', () => {
+    const skillDir = join(projectDir, '.claude', 'skills', 'baseline-helper');
+    writeStandardSkill(join(projectDir, '.claude', 'skills'), 'baseline-helper', {
+      description: 'Baseline helper',
+      tags: ['baseline'],
+    });
+    writeFileSync(join(skillDir, 'notes.txt'), 'original notes');
+    captureInstalledSkillBaseline(skillDir, {
+      skillName: 'baseline-helper',
+      installedVersion: '1.0.0',
+    });
+
+    writeFileSync(join(skillDir, 'notes.txt'), 'changed notes');
+    writeFileSync(join(skillDir, 'scratch.txt'), 'temporary file');
+
+    const resetFile = resetWebInstalledSkillFile(ctx(), 'baseline-helper', {
+      target: 'claude',
+      scope: 'project',
+      filePath: 'notes.txt',
+    });
+    expect(resetFile.status).toBe('reset');
+    expect(resetFile.file?.content).toBe('original notes');
+    expect(readFileSync(join(skillDir, 'notes.txt'), 'utf8')).toBe('original notes');
+
+    const resetSkill = resetWebInstalledSkill(ctx(), 'baseline-helper', {
+      target: 'claude',
+      scope: 'project',
+    });
+    expect(resetSkill.status).toBe('reset');
+    expect(existsSync(join(skillDir, 'scratch.txt'))).toBe(false);
+    expect(readFileSync(join(skillDir, 'notes.txt'), 'utf8')).toBe('original notes');
+  });
+
+  it('reports a missing baseline when restoring an older installed skill', () => {
+    writeStandardSkill(join(projectDir, '.claude', 'skills'), 'legacy-helper');
+
+    expect(() =>
+      resetWebInstalledSkillFile(ctx(), 'legacy-helper', {
+        target: 'claude',
+        scope: 'project',
+        filePath: 'SKILL.md',
+      }),
+    ).toThrow('No installation baseline is available for this skill');
+  });
+
+  it('generates and applies AI edit previews for installed skills', async () => {
+    const skillDir = join(projectDir, '.claude', 'skills', 'ai-helper');
+    writeStandardSkill(join(projectDir, '.claude', 'skills'), 'ai-helper', {
+      description: 'AI helper',
+    });
+    writeFileSync(
+      join(skillDir, 'notes.txt'),
+      'Use short answers.\n',
+    );
+    const configPath = join(suitHome, 'config.json');
+    const config = JSON.parse(readFileSync(configPath, 'utf8')) as ReturnType<typeof getDefaultConfig>;
+    config.aiEditing = {
+      provider: 'openai',
+      apiKey: 'test-key',
+      model: 'gpt-5',
+    };
+    writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    summary: 'Refined the skill instructions.',
+                    files: [
+                      {
+                        path: 'notes.txt',
+                        content: 'Use concise answers.\nAdd one example.\n',
+                      },
+                    ],
+                  }),
+                },
+              },
+            ],
+          }),
+          {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          },
+        ),
+      ),
+    );
+
+    const preview = await import('../../src/lib/web/api.js').then((api) =>
+      api.generateWebInstalledSkillAiEdit(ctx(), 'ai-helper', {
+        target: 'claude',
+        scope: 'project',
+        mode: 'file',
+        filePath: 'notes.txt',
+        prompt: 'Make the guidance more concise and add one example.',
+      }),
+    );
+
+    expect(preview.provider).toBe('openai');
+    expect(preview.files).toEqual([
+      {
+        path: 'notes.txt',
+        beforeContent: 'Use short answers.\n',
+        afterContent: 'Use concise answers.\nAdd one example.\n',
+      },
+    ]);
+
+    const { applyWebInstalledSkillAiEdit } = await import('../../src/lib/web/api.js');
+    const applied = applyWebInstalledSkillAiEdit(ctx(), 'ai-helper', {
+      target: 'claude',
+      scope: 'project',
+      files: preview.files.map((file) => ({
+        path: file.path,
+        content: file.afterContent,
+      })),
+    });
+    expect(applied).toEqual({
+      status: 'applied',
+      files: ['notes.txt'],
+    });
+    expect(readFileSync(join(skillDir, 'notes.txt'), 'utf8')).toBe(
+      'Use concise answers.\nAdd one example.\n',
+    );
+  });
+
   it('searches installed skills across project and user locations', () => {
     writeStandardSkill(join(projectDir, '.codex', 'skills'), 'project-codex', {
       description: 'Workspace codex helper',
@@ -588,6 +784,37 @@ describe('web api', () => {
     });
     expect(globalOnly.items.map((item) => item.name)).toEqual([
       'global-claude',
+    ]);
+  });
+
+  it('lists installed skills without refreshing remote sources', () => {
+    writeStandardSkill(join(projectDir, '.claude', 'skills'), 'code-review', {
+      description: 'Installed locally',
+      tags: ['offline'],
+    });
+
+    const offlineCtx = createCliContext({
+      cwd: projectDir,
+      userHome,
+      refreshExtra: {
+        cloneOrPullRepo: () => {
+          throw new Error('should not refresh sources when listing installed');
+        },
+      },
+    });
+
+    const listed = listWebInstalledSkills(offlineCtx, {
+      target: 'claude',
+      scope: 'project',
+    });
+
+    expect(listed.items).toEqual([
+      expect.objectContaining({
+        name: 'code-review',
+        target: 'claude',
+        scope: 'project',
+        sourceName: 'default',
+      }),
     ]);
   });
 
@@ -655,6 +882,15 @@ describe('web api', () => {
     const installedPath = join(projectDir, '.skills', 'react-helper');
     expect(existsSync(join(centralPath, 'meta.json'))).toBe(true);
     expect(existsSync(join(installedPath, 'meta.json'))).toBe(true);
+
+    writeFileSync(join(centralPath, 'SKILL.md'), '# react-helper\n\nChanged locally\n');
+    const reset = resetWebInstalledSkillFile(ctx(), 'react-helper', {
+      target: 'agents',
+      scope: 'project',
+      filePath: 'SKILL.md',
+    });
+    expect(reset.status).toBe('reset');
+    expect(reset.file?.content).toContain('## Usage');
 
     const removed = removeWebInstalledSkill(ctx(), 'react-helper', {
       target: 'skills',

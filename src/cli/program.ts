@@ -13,6 +13,7 @@ import { registerConfig } from '../commands/config-cmd.js';
 import { registerEnv } from '../commands/env.js';
 import { registerWeb } from '../commands/web.js';
 import { registerDesktopReleaseManifest } from '../commands/desktop-release-manifest.js';
+import { registerDesktopBootstrap } from '../commands/desktop-bootstrap.js';
 import { registerSkillFilesCommands } from '../commands/skill-files.js';
 import { registerShare } from '../commands/share.js';
 import { registerTargets } from '../commands/targets-cmd.js';
@@ -36,6 +37,7 @@ export function buildProgram(ctx: CliContext): Command {
   registerEnv(program, ctx);
   registerWeb(program, ctx);
   registerDesktopReleaseManifest(program, ctx);
+  registerDesktopBootstrap(program, ctx);
   registerSkillFilesCommands(program, ctx);
   registerShare(program, ctx);
   registerTargets(program, ctx);

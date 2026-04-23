@@ -1,15 +1,25 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { createReadStream, existsSync, statSync } from 'node:fs';
 import { extname, join, normalize, resolve, sep } from 'node:path';
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 import type { CliContext } from '../../cli/context.js';
 import { moduleDir } from '../../utils/module.js';
-import { fetchDesktopReleaseManifestText } from './desktop-release-manifest.js';
+import {
+  fetchDesktopReleaseManifest,
+  fetchDesktopReleaseManifestText,
+} from './desktop-release-manifest.js';
 import {
   addWebInstallTarget,
   addWebSource,
+  applyWebInstalledSkillAiEdit,
   copyWebInstalledSkillPackage,
+  generateWebInstalledSkillAiEdit,
+  getWebAiEditConfig,
   exportWebInstalledSkill,
   getWebSettings,
+  getWebInstalledSkillFileContent,
+  getWebInstalledSkillFileTree,
   getWebSkillDetail,
   getWebSkillFileContent,
   getWebSkillFileTree,
@@ -23,10 +33,14 @@ import {
   removeWebInstallTarget,
   removeWebSource,
   removeWebInstalledSkill,
+  resetWebInstalledSkill,
+  resetWebInstalledSkillFile,
+  saveWebInstalledSkillFile,
   restoreWebBuiltinSources,
   toApiErrorPayload,
   translateWebText,
   updateWebSettings,
+  updateWebAiEditConfig,
   updateWebInstallTarget,
   updateWebSource,
   updateWebTranslationConfig,
@@ -147,6 +161,83 @@ async function handleApi(
         'cache-control': 'public, max-age=120',
       });
       res.end(body);
+      return;
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/desktop/download') {
+      const platform = url.searchParams.get('platform');
+      if (
+        platform !== 'windows-x86_64' &&
+        platform !== 'darwin-aarch64' &&
+        platform !== 'darwin-x86_64'
+      ) {
+        sendJson(res, 400, {
+          error: {
+            code: 'INVALID_PLATFORM',
+            message: 'Unsupported desktop download platform',
+          },
+        });
+        return;
+      }
+
+      const manifest = await fetchDesktopReleaseManifest();
+      const asset = manifest?.platforms[platform];
+      if (!asset) {
+        sendJson(res, 404, {
+          error: {
+            code: 'ASSET_NOT_FOUND',
+            message: `No desktop asset found for platform "${platform}"`,
+          },
+        });
+        return;
+      }
+
+      let upstream: Response;
+      try {
+        upstream = await fetch(asset.url, {
+          redirect: 'follow',
+          headers: {
+            accept: 'application/octet-stream, */*',
+            'user-agent': 'Suit-Skills-Web',
+          },
+        });
+      } catch {
+        sendJson(res, 502, {
+          error: {
+            code: 'UPSTREAM_FAILED',
+            message: 'Could not download desktop asset from upstream',
+          },
+        });
+        return;
+      }
+
+      if (!upstream.ok || !upstream.body) {
+        sendJson(res, 502, {
+          error: {
+            code: 'UPSTREAM_FAILED',
+            message: 'Could not download desktop asset from upstream',
+          },
+        });
+        return;
+      }
+
+      const headers: Record<string, string> = {
+        'content-type':
+          upstream.headers.get('content-type') || 'application/octet-stream',
+        'content-disposition':
+          `attachment; filename="${asset.filename}"; filename*=UTF-8''${encodeURIComponent(asset.filename)}`,
+        'cache-control': 'no-store',
+      };
+      const contentLength = upstream.headers.get('content-length');
+      if (contentLength) {
+        headers['content-length'] = contentLength;
+      }
+
+      res.writeHead(200, headers);
+      await pipeline(
+        Readable.fromWeb(upstream.body as globalThis.ReadableStream<Uint8Array>),
+        res,
+      );
       return;
     }
 
@@ -275,6 +366,16 @@ async function handleApi(
       return;
     }
 
+    if (req.method === 'GET' && url.pathname === '/api/ai-edit-config') {
+      sendJson(res, 200, getWebAiEditConfig(ctx));
+      return;
+    }
+
+    if (req.method === 'PATCH' && url.pathname === '/api/ai-edit-config') {
+      sendJson(res, 200, updateWebAiEditConfig(ctx, (await readJsonBody(req)) as never));
+      return;
+    }
+
     if (req.method === 'POST' && url.pathname === '/api/translate') {
       sendJson(
         res,
@@ -302,6 +403,162 @@ async function handleApi(
 
     if (req.method === 'POST' && url.pathname === '/api/install') {
       sendJson(res, 200, installWebSkill(ctx, (await readJsonBody(req)) as never));
+      return;
+    }
+
+    const resetFileMatch =
+      req.method === 'POST'
+        ? url.pathname.match(/^\/api\/installed\/([^/]+)\/reset-file$/)
+        : null;
+    if (resetFileMatch) {
+      const sName = decodeURIComponent(resetFileMatch[1]!);
+      const body = (await readJsonBody(req)) as {
+        target?: string;
+        scope?: 'project' | 'global';
+        filePath?: string;
+      };
+      sendJson(
+        res,
+        200,
+        resetWebInstalledSkillFile(ctx, sName, {
+          target: body.target ?? '',
+          scope: body.scope,
+          filePath: body.filePath ?? '',
+        }),
+      );
+      return;
+    }
+
+    const resetSkillMatch =
+      req.method === 'POST'
+        ? url.pathname.match(/^\/api\/installed\/([^/]+)\/reset-skill$/)
+        : null;
+    if (resetSkillMatch) {
+      const sName = decodeURIComponent(resetSkillMatch[1]!);
+      const body = (await readJsonBody(req)) as {
+        target?: string;
+        scope?: 'project' | 'global';
+      };
+      sendJson(
+        res,
+        200,
+        resetWebInstalledSkill(ctx, sName, {
+          target: body.target ?? '',
+          scope: body.scope,
+        }),
+      );
+      return;
+    }
+
+    const aiEditMatch =
+      req.method === 'POST'
+        ? url.pathname.match(/^\/api\/installed\/([^/]+)\/ai-edit$/)
+        : null;
+    if (aiEditMatch) {
+      const sName = decodeURIComponent(aiEditMatch[1]!);
+      const body = (await readJsonBody(req)) as {
+        target?: string;
+        scope?: 'project' | 'global';
+        mode?: 'file' | 'skill';
+        filePath?: string;
+        prompt?: string;
+      };
+      sendJson(
+        res,
+        200,
+        await generateWebInstalledSkillAiEdit(ctx, sName, {
+          target: body.target ?? '',
+          scope: body.scope,
+          mode: body.mode === 'skill' ? 'skill' : 'file',
+          filePath: body.filePath,
+          prompt: body.prompt ?? '',
+        }),
+      );
+      return;
+    }
+
+    const applyAiEditMatch =
+      req.method === 'POST'
+        ? url.pathname.match(/^\/api\/installed\/([^/]+)\/apply-ai-edit$/)
+        : null;
+    if (applyAiEditMatch) {
+      const sName = decodeURIComponent(applyAiEditMatch[1]!);
+      const body = (await readJsonBody(req)) as {
+        target?: string;
+        scope?: 'project' | 'global';
+        files?: Array<{ path?: string; content?: string }>;
+      };
+      sendJson(
+        res,
+        200,
+        applyWebInstalledSkillAiEdit(ctx, sName, {
+          target: body.target ?? '',
+          scope: body.scope,
+          files:
+            body.files?.map((file) => ({
+              path: file.path ?? '',
+              content: file.content ?? '',
+            })) ?? [],
+        }),
+      );
+      return;
+    }
+
+    const installedFilesMatch =
+      req.method === 'GET' || req.method === 'PUT'
+        ? url.pathname.match(/^\/api\/installed\/([^/]+)\/files(\/.*)?$/)
+        : null;
+    if (installedFilesMatch) {
+      const sName = decodeURIComponent(installedFilesMatch[1]!);
+      const rawFilePath = installedFilesMatch[2];
+      if (req.method === 'GET') {
+        const target = url.searchParams.get('target') ?? undefined;
+        const scope = url.searchParams.get('scope') ?? undefined;
+        if (rawFilePath) {
+          const filePath = decodeURIComponent(rawFilePath.slice(1));
+          sendJson(
+            res,
+            200,
+            getWebInstalledSkillFileContent(ctx, sName, filePath, {
+              target: target ?? '',
+              scope: scope === 'global' ? 'global' : 'project',
+            }),
+          );
+        } else {
+          sendJson(
+            res,
+            200,
+            getWebInstalledSkillFileTree(ctx, sName, {
+              target: target ?? '',
+              scope: scope === 'global' ? 'global' : 'project',
+            }),
+          );
+        }
+        return;
+      }
+
+      if (!rawFilePath) {
+        sendJson(res, 404, {
+          error: { code: 'NOT_FOUND', message: 'API route not found' },
+        });
+        return;
+      }
+
+      const filePath = decodeURIComponent(rawFilePath.slice(1));
+      const body = (await readJsonBody(req)) as {
+        target?: string;
+        scope?: 'project' | 'global';
+        content?: unknown;
+      };
+      sendJson(
+        res,
+        200,
+        saveWebInstalledSkillFile(ctx, sName, filePath, {
+          target: body.target ?? '',
+          scope: body.scope,
+          content: body.content as string,
+        }),
+      );
       return;
     }
 

@@ -14,6 +14,9 @@ concurrency:
   group: desktop-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: write
+
 jobs:
   tauri:
     strategy:
@@ -78,6 +81,7 @@ jobs:
     needs: tauri
     runs-on: ubuntu-22.04
     env:
+      GITHUB_ARTIFACT_BRANCH: desktop-artifacts
       GITEE_ARTIFACT_BRANCH: desktop-artifacts
       GITEE_REPO: gitee.com/zhujun12/suit-skills-cli.git
 
@@ -108,7 +112,7 @@ jobs:
           const path = require('path');
 
           const version = require('./package.json').version;
-          const baseUrl = 'https://gitee.com/zhujun12/suit-skills-cli/raw/desktop-artifacts';
+          const baseUrl = 'https://cdn.jsdelivr.net/gh/zhujunzhujunzhu/suit-skills@desktop-artifacts';
           const pubDate = new Date().toISOString();
           const refName = process.env.GITHUB_REF_NAME || '';
           const sha = (process.env.GITHUB_SHA || '').substring(0, 7);
@@ -161,14 +165,20 @@ jobs:
           EOF
 
       # 自动同步到你的 Gitee 仓库
-      - name: Push to Gitee
+      - name: Push desktop artifacts to GitHub and Gitee
         shell: bash
-        timeout-minutes: 60
+        timeout-minutes: 180
         env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
           GIT_TERMINAL_PROMPT: '0'
         run: |
           set -euo pipefail
+
+          if [ -z "${GITHUB_TOKEN:-}" ]; then
+            echo 'GITHUB_TOKEN is required.'
+            exit 1
+          fi
 
           if [ -z "${GITEE_TOKEN:-}" ]; then
             echo 'GITEE_TOKEN secret is required.'
@@ -194,11 +204,16 @@ jobs:
           git config user.email 'github-actions[bot]@users.noreply.github.com'
           git add .
           git commit -m "auto build"
+          git remote add github "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           git remote add gitee "https://oauth2:${GITEE_TOKEN}@${GITEE_REPO}"
 
           echo 'Artifact files to push:'
           find . -maxdepth 4 -type f -print | sort
           du -sh .
+
+          git \
+            -c credential.interactive=false \
+            push --force --progress --porcelain github "${GITHUB_ARTIFACT_BRANCH}"
 
           git \
             -c credential.interactive=false \
