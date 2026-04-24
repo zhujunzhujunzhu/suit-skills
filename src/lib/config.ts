@@ -38,7 +38,7 @@ export const DEFAULT_SOURCE_INFO: BuiltinSourceInfo = {
   url: DEFAULT_SOURCE_URL,
   label: 'Suit Skills 默认源',
   category: 'cn',
-  description: '数知建维护的默认技能库，新安装默认启用。',
+  description: '默认技能库，新安装默认启用。',
 };
 
 export const BUILTIN_SOURCE_CATALOG: BuiltinSourceInfo[] = [

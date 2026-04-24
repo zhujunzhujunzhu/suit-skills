@@ -146,7 +146,7 @@ describe('web api', () => {
       builtin: true,
       category: 'cn',
       label: 'Suit Skills 默认源',
-      description: '数知建维护的默认技能库，新安装默认启用。',
+      description: '默认技能库，新安装默认启用。',
       effectiveUrl: 'https://gitee.com/digital-construction-center_1/suit-skills-lib.git',
     });
     const anthropics = result.sources.find(
@@ -178,7 +178,7 @@ describe('web api', () => {
       {
         name: 'default',
         label: 'Suit Skills 默认源',
-        description: '数知建维护的默认技能库，新安装默认启用。',
+        description: '默认技能库，新安装默认启用。',
       },
       {
         name: 'anthropics-skills',
