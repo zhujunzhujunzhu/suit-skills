@@ -296,7 +296,7 @@
   "builtinSources": {
     "default": {
       "label": "Suit Skills 默认源",
-      "description": "数知建维护的默认技能库，新安装默认启用。"
+      "description": "默认技能库，新安装默认启用。"
     },
     "anthropics-skills": {
       "label": "Anthropic 官方技能库",
