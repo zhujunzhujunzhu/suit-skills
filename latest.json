@@ -1,0 +1,19 @@
+{
+  "version": "0.0.15",
+  "pub_date": "2026-04-24T05:00:46.926Z",
+  "notes": "Source ref: master, Commit: f1dc46c",
+  "platforms": {
+    "windows-x86_64": {
+      "filename": "Suit Skills_0.0.11_x64_en-US.msi",
+      "url": "https://cdn.jsdelivr.net/gh/zhujunzhujunzhu/suit-skills@desktop-artifacts/desktop-windows-setup-msi/msi/Suit%20Skills_0.0.11_x64_en-US.msi"
+    },
+    "darwin-aarch64": {
+      "filename": "Suit Skills_0.0.11_aarch64.dmg",
+      "url": "https://cdn.jsdelivr.net/gh/zhujunzhujunzhu/suit-skills@desktop-artifacts/desktop-macos-apple-silicon-arm64/dmg/Suit%20Skills_0.0.11_aarch64.dmg"
+    },
+    "darwin-x86_64": {
+      "filename": "Suit Skills_0.0.11_x64.dmg",
+      "url": "https://cdn.jsdelivr.net/gh/zhujunzhujunzhu/suit-skills@desktop-artifacts/desktop-macos-intel-x64/dmg/Suit%20Skills_0.0.11_x64.dmg"
+    }
+  }
+}

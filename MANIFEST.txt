@@ -1,0 +1,15 @@
+./MANIFEST.txt
+./README.md
+./desktop-macos-apple-silicon-arm64/dmg/Suit Skills_0.0.11_aarch64.dmg
+./desktop-macos-apple-silicon-arm64/dmg/bundle_dmg.sh
+./desktop-macos-apple-silicon-arm64/dmg/icon.icns
+./desktop-macos-apple-silicon-arm64/share/create-dmg/support/eula-resources-template.xml
+./desktop-macos-apple-silicon-arm64/share/create-dmg/support/template.applescript
+./desktop-macos-intel-x64/dmg/Suit Skills_0.0.11_x64.dmg
+./desktop-macos-intel-x64/dmg/bundle_dmg.sh
+./desktop-macos-intel-x64/dmg/icon.icns
+./desktop-macos-intel-x64/share/create-dmg/support/eula-resources-template.xml
+./desktop-macos-intel-x64/share/create-dmg/support/template.applescript
+./desktop-windows-setup-msi/msi/Suit Skills_0.0.11_x64_en-US.msi
+./desktop-windows-setup-msi/nsis/Suit Skills_0.0.11_x64-setup.exe
+./latest.json
