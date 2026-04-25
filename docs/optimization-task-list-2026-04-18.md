@@ -13,7 +13,7 @@
 - Priority: P1
 - Owner: Codex
 - Files:
-  - `src/lib/config.ts`
+  - `packages/core/src/config/index.ts`
   - `tests/lib/web-api.test.ts`
 - Problem:
   - 内置源 `label/description` 出现 mojibake，例如 `榛樿婧?`。
@@ -33,7 +33,7 @@
 - Priority: P1
 - Owner: Codex
 - Files:
-  - `web/vite.config.ts`
+  - `apps/local-web/vite.config.ts`
   - `package.json` if needed
 - Problem:
   - `emptyOutDir: false` 导致 `dist/web/assets` 累积旧 hash 文件。
@@ -53,7 +53,7 @@
 - Priority: P1
 - Owner: Codex
 - Files:
-  - `tests/e2e/*` or `web/tests/*`
+  - `tests/e2e/*` or `apps/local-web/tests/*`
   - `package.json`
   - optional `playwright.config.ts`
 - Problem:
@@ -80,10 +80,10 @@
 - Priority: P2
 - Owner: Codex
 - Files:
-  - `src/lib/web/api.ts`
-  - `src/lib/web/server.ts`
-  - `web/src/api/client.ts`
-  - `web/src/App.tsx`
+  - `apps/cli/src/lib/web/api.ts`
+  - `apps/cli/src/lib/web/server.ts`
+  - `apps/local-web/src/api/client.ts`
+  - `apps/local-web/src/App.tsx`
   - `tests/lib/web-api.test.ts`
 - Problem:
   - `/api/skills?source=all&refresh=false` 本地实测约 `323-375ms`，响应约 `593KB`。
@@ -105,7 +105,7 @@
 - Priority: P2
 - Owner: Codex
 - Files:
-  - `src/lib/web/api.ts`
+  - `apps/cli/src/lib/web/api.ts`
   - `tests/lib/web-api.test.ts`
 - Problem:
   - `listWebInstalledSkills()` 为补 `sourceName` 会调用 `sourceNameIndexForInstalledSkills()`，进而扫描所有启用源。
@@ -126,7 +126,7 @@
 - Priority: P2
 - Owner: Codex
 - Files:
-  - `src/lib/web/api.ts`
+  - `apps/cli/src/lib/web/api.ts`
   - `tests/lib/web-api.test.ts`
 - Problem:
   - 当前 `sourceRowsCache` 和 `installedTargetsIndexCache` 较粗糙，installed index TTL 只有 `1000ms`。
@@ -152,9 +152,9 @@
 - Priority: P1 for desktop release, P2 otherwise
 - Owner: Codex
 - Files:
-  - `src-tauri/capabilities/default.json`
-  - `src-tauri/tauri.conf.json`
-  - `src-tauri/src/commands.rs`
+  - `apps/desktop/capabilities/default.json`
+  - `apps/desktop/tauri.conf.json`
+  - `apps/desktop/apps/cli/src/commands.rs`
 - Problem:
   - 当前 capability 包含宽泛的 `shell:allow-execute` 和通用 `fs:*` 权限。
   - 桌面应用一旦出现前端注入风险，权限面偏大。
@@ -175,9 +175,9 @@
 - Priority: P2
 - Owner: Codex
 - Files:
-  - `src-tauri/src/commands.rs`
-  - `web/src/api/tauri.ts`
-  - `web/src/api/client.ts`
+  - `apps/desktop/apps/cli/src/commands.rs`
+  - `apps/local-web/src/api/tauri.ts`
+  - `apps/local-web/src/api/client.ts`
 - Problem:
   - Tauri 模式每个 IPC command 都 shell 到 sidecar CLI。
   - `fetchSkills` / `fetchSkillDetail` 还会额外扫 installed，桌面端成本会比 Web API 模式更高。
@@ -199,9 +199,9 @@
 - Priority: P2
 - Owner: Codex
 - Files:
-  - `web/src/App.tsx`
-  - `web/src/styles/app.css`
-  - `web/src/locales/*.json`
+  - `apps/local-web/src/App.tsx`
+  - `apps/local-web/src/styles/app.css`
+  - `apps/local-web/src/locales/*.json`
 - Problem:
   - 当前 `error` 是 App 级全局状态。
   - Sources 表单错误、Library 详情错误、Installed 操作错误容易互相残留。
@@ -221,8 +221,8 @@
 - Priority: P3
 - Owner: Codex
 - Files:
-  - `web/src/App.tsx`
-  - `web/src/api/client.ts`
+  - `apps/local-web/src/App.tsx`
+  - `apps/local-web/src/api/client.ts`
 - Problem:
   - 当前用 request id 防止旧响应覆盖新响应，但 fetch 本身没有 abort。
   - 搜索和快速切换 source 时仍会产生无用请求。

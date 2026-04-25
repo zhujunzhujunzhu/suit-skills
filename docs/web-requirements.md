@@ -818,9 +818,9 @@ API 只能访问已知目录：
 ```json
 {
   "scripts": {
-    "web:dev": "vite --config web/vite.config.ts",
-    "web:build": "vite build --config web/vite.config.ts",
-    "web:preview": "vite preview --config web/vite.config.ts",
+    "web:dev": "vite --config apps/local-web/vite.config.ts",
+    "web:build": "vite build --config apps/local-web/vite.config.ts",
+    "web:preview": "vite preview --config apps/local-web/vite.config.ts",
     "build": "tsc && npm run web:build"
   }
 }
@@ -951,14 +951,14 @@ API 只能访问已知目录：
 要求：
 
 - CLI 帮助中必须展示 `web [options]`。
-- npm 发布包必须包含 `dist/index.js`、`dist/commands/web.js`、`dist/lib/web/*` 和 `dist/web/*`。
+- npm 发布包必须包含 `apps/cli/dist/index.js`、`apps/cli/dist/commands/web.js`、`apps/cli/dist/lib/web/*` 和 `dist/web/*`。
 - 发布或打包前必须自动执行完整构建，避免发布旧的 `dist`。
-- TypeScript 构建不能依赖可能过期的增量构建缓存；当 `dist/index.js` 缺失时，构建必须重新产出 CLI 入口。
+- TypeScript 构建不能依赖可能过期的增量构建缓存；当 `apps/cli/dist/index.js` 缺失时，构建必须重新产出 CLI 入口。
 - `npx suit-skills@latest web` 应拉取到包含 Web 命令的新版本。
 
 验收：
 
-- `node dist/index.js --help` 输出包含 `web [options]`。
+- `node apps/cli/dist/index.js --help` 输出包含 `web [options]`。
 - `npm pack --dry-run` 输出的 tarball contents 包含 CLI 入口、Web 命令和 Web 静态资源。
 
 ### 15.2 Installed 页面搜索范围

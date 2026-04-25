@@ -6,8 +6,8 @@
 
 当前页面已经有“内容翻译”能力，但它本质上还是一个局部能力：
 
-- 前端入口是 `web/src/App.tsx` 里的 `TranslateMarkdownView`
-- 后端能力是 `src/lib/web/api.ts` 里的 `/api/translate`
+- 前端入口是 `apps/local-web/src/App.tsx` 里的 `TranslateMarkdownView`
+- 后端能力是 `apps/cli/src/lib/web/api.ts` 里的 `/api/translate`
 - 设置页可以配置翻译 provider（OpenAI 兼容 API / 本地 CLI）
 
 现有方案更像是“对某一段 Markdown 文本做一次整块翻译”，而不是“对当前页面内容进行全局翻译”。

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { tagMatches } from '../../src/cli/helpers.js';
-import type { SkillMeta } from '../../src/types/index.js';
+import { tagMatches } from '../../apps/cli/src/cli/helpers.js';
+import type { SkillMeta } from '@suit-skills/core';
 
 describe('tagMatches', () => {
   it('非字符串 tag 不抛错，且仍匹配合法 tag', () => {

@@ -83,7 +83,14 @@ async function main() {
   }
 
   // 先启动后端 API
-  const apiChild = run('api', [tsxBin, 'src/index.ts', 'web', '--port', String(port), '--no-open']);
+  const apiChild = run('api', [
+    tsxBin,
+    'apps/cli/src/index.ts',
+    'web',
+    '--port',
+    String(port),
+    '--no-open',
+  ]);
 
   // 等待后端 API 就绪
   console.log(`[dev-web] 等待后端 API 在端口 ${port} 启动...`);
@@ -96,7 +103,7 @@ async function main() {
   }
 
   // 启动 Vite，传入实际端口
-  run('vite', [viteBin, '--config', 'web/vite.config.ts'], {
+  run('vite', [viteBin, '--config', 'apps/local-web/vite.config.ts'], {
     SUIT_SKILLS_API_PORT: String(port),
   });
 

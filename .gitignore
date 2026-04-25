@@ -5,9 +5,9 @@ dist/
 .env
 .env.local
 *.tsbuildinfo
-src-tauri/binaries/
-src-tauri/gen/
-src-tauri/target/
+apps/desktop/binaries/
+apps/desktop/gen/
+apps/desktop/target/
 .agents/
 .codex/
 .claude/
@@ -16,3 +16,4 @@ src-tauri/target/
 .claude/worktrees/
 .playwright-mcp/
 screenshots/
+test-results/

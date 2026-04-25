@@ -227,7 +227,7 @@ npm run build:desktop
 构建产物位于：
 
 ```text
-src-tauri/target/release/bundle/
+apps/desktop/target/release/bundle/
 ```
 
 ## 本地开发

@@ -2,7 +2,7 @@
 
 > 本文基于 `docs/web-requirements.md` 拆解，专注 Web 管理闭环：`SKILL.md` frontmatter 元信息、未安装 skill 的 `npx` 安装命令分享、已安装 skill 的搜索、删除和 zip 导出。
 >
-> 现有仓库已经具备部分 Web 骨架，包括 `src/commands/web.ts`、`src/lib/web/api.ts`、`src/lib/web/server.ts`、`web/`、`build:web` 和 `dev:web` 脚本。下面任务按“增量补齐”设计。
+> 现有仓库已经具备部分 Web 骨架，包括 `apps/cli/src/commands/web.ts`、`apps/cli/src/lib/web/api.ts`、`apps/cli/src/lib/web/server.ts`、`apps/local-web/`、`build:web` 和 `dev:web` 脚本。下面任务按“增量补齐”设计。
 
 ## 当前执行进度
 
@@ -24,7 +24,7 @@
 |---|---|
 | `npm test` | 每个后端能力、CLI 能力、共享逻辑任务完成后 |
 | `npm run typecheck` | 修改 `src/**/*.ts` 或共享类型时 |
-| `npm run build:web` | 修改 `web/**` 后 |
+| `npm run build:web` | 修改 `apps/local-web/**` 后 |
 | `npm run build:all` | Web 前后端联调完成后 |
 
 前端页面任务还应通过浏览器人工验证关键路径：
@@ -61,7 +61,7 @@
 
 ### 0.2 明确 Web 任务测试目录
 
-**任务**：约定后端 Web 测试放在 `tests/lib/web-api.test.ts` 或拆到 `tests/lib/web/*.test.ts`，前端纯函数测试放到 `web/src/**/*.test.ts`。
+**任务**：约定后端 Web 测试放在 `tests/lib/web-api.test.ts` 或拆到 `tests/lib/web/*.test.ts`，前端纯函数测试放到 `apps/local-web/src/**/*.test.ts`。
 
 | 项 | 内容 |
 |---|---|
@@ -78,7 +78,7 @@
 
 | 项 | 内容 |
 |---|---|
-| 目标文件 | `src/types/index.ts` 或 `src/lib/web/api.ts` |
+| 目标文件 | `packages/core/src/types/index.ts` 或 `apps/cli/src/lib/web/api.ts` |
 | 类型 | `MetadataSource`、`WebSkillSummary`、`WebSkillDetail`、`WebInstalledSkill` |
 | 验收 | 类型能表达 `skill-md`、`meta-json-fallback`、`unknown` |
 
@@ -94,7 +94,7 @@
 
 | 项 | 内容 |
 |---|---|
-| 目标文件 | `src/lib/skills.ts` 或新增 `src/lib/skill-metadata.ts` |
+| 目标文件 | `packages/core/src/skills/index.ts` 或新增 `src/lib/skill-metadata.ts` |
 | 输入 | skill 目录路径 |
 | 输出 | 元信息、正文 markdown、metadataSource |
 | 注意 | 不引入重型依赖时，只需支持当前需求字段：string 与 string[] |
@@ -116,7 +116,7 @@
 
 | 项 | 内容 |
 |---|---|
-| 目标文件 | `src/lib/skills.ts` 或 `src/lib/skill-metadata.ts` |
+| 目标文件 | `packages/core/src/skills/index.ts` 或 `src/lib/skill-metadata.ts` |
 | 验收 | 优先级为 `SKILL.md` frontmatter > `meta.json` > 目录名 |
 
 测试用例：
@@ -129,7 +129,7 @@
 
 ## 阶段 2：Web API 数据模型升级
 
-> 目标：把现有 `src/lib/web/api.ts` 从 `meta.json` 模型升级到 `SKILL.md` frontmatter 模型。
+> 目标：把现有 `apps/cli/src/lib/web/api.ts` 从 `meta.json` 模型升级到 `SKILL.md` frontmatter 模型。
 
 ### 2.1 升级 `listWebSkills`
 
@@ -137,7 +137,7 @@
 
 | 项 | 内容 |
 |---|---|
-| 目标文件 | `src/lib/web/api.ts` |
+| 目标文件 | `apps/cli/src/lib/web/api.ts` |
 | 相关测试 | `tests/lib/web-api.test.ts` |
 | 验收 | 返回字段包含 `metadataSource`、`installedTargets`、`installed` |
 
@@ -158,7 +158,7 @@
 
 | 项 | 内容 |
 |---|---|
-| 目标文件 | `src/lib/web/api.ts` |
+| 目标文件 | `apps/cli/src/lib/web/api.ts` |
 | API | `GET /api/skills/:name` |
 
 测试用例：
@@ -176,7 +176,7 @@
 
 | 项 | 内容 |
 |---|---|
-| 目标文件 | `src/lib/web/api.ts` |
+| 目标文件 | `apps/cli/src/lib/web/api.ts` |
 | API | `GET /api/installed?scope=project&q=review&target=claude` |
 | 搜索字段 | name、description、tags、path、target、sourceName |
 
@@ -199,7 +199,7 @@
 
 | 项 | 内容 |
 |---|---|
-| 目标文件 | `src/lib/web/api.ts`、`web/src/api/client.ts` 或共享 util |
+| 目标文件 | `apps/cli/src/lib/web/api.ts`、`apps/local-web/src/api/client.ts` 或共享 util |
 | 规则 | 命令必须以 `npx suit-skills@latest` 开头 |
 
 测试用例：
@@ -222,7 +222,7 @@
 
 | 项 | 内容 |
 |---|---|
-| 目标文件 | `src/lib/web/api.ts`、`src/lib/web/server.ts` |
+| 目标文件 | `apps/cli/src/lib/web/api.ts`、`apps/cli/src/lib/web/server.ts` |
 | 方法 | `POST /api/install` |
 | 输入 | identifier、source、targets、global、strategy |
 | 输出 | 每个 target 的安装结果 |
@@ -244,7 +244,7 @@
 
 | 项 | 内容 |
 |---|---|
-| 目标文件 | `src/lib/web/server.ts` |
+| 目标文件 | `apps/cli/src/lib/web/server.ts` |
 | 安全 | 限制 body 大小，例如 1MB |
 
 测试用例：
@@ -262,7 +262,7 @@
 
 | 项 | 内容 |
 |---|---|
-| 目标文件 | `src/lib/web/api.ts`、`src/lib/web/server.ts` |
+| 目标文件 | `apps/cli/src/lib/web/api.ts`、`apps/cli/src/lib/web/server.ts` |
 | 方法 | `DELETE /api/installed/:name` |
 | 安全 | 不接受任意绝对路径删除 |
 
@@ -283,7 +283,7 @@
 
 | 项 | 内容 |
 |---|---|
-| 目标文件 | `src/lib/web/api.ts`、`src/lib/web/server.ts`，必要时新增 `src/lib/web/export.ts` |
+| 目标文件 | `apps/cli/src/lib/web/api.ts`、`apps/cli/src/lib/web/server.ts`，必要时新增 `apps/cli/src/lib/web/export.ts` |
 | 输出 | zip 文件流或临时下载地址 |
 | 文件名 | `<name>-<version>.zip`，版本未知则 `<name>.zip` |
 
@@ -306,11 +306,11 @@
 
 ### 4.1 拆分前端页面结构
 
-**任务**：将当前 `web/src/App.tsx` 拆成应用外壳和页面组件。
+**任务**：将当前 `apps/local-web/src/App.tsx` 拆成应用外壳和页面组件。
 
 | 项 | 内容 |
 |---|---|
-| 目标文件 | `web/src/App.tsx`、`web/src/routes/*`、`web/src/components/*` |
+| 目标文件 | `apps/local-web/src/App.tsx`、`apps/local-web/src/routes/*`、`apps/local-web/src/components/*` |
 | 页面 | Library、Installed、Sources、Detail panel |
 
 验收：
@@ -325,7 +325,7 @@
 
 | 项 | 内容 |
 |---|---|
-| 目标文件 | `web/src/api/client.ts` |
+| 目标文件 | `apps/local-web/src/api/client.ts` |
 | 方法 | listSkills、getSkillDetail、listInstalled、installSkill、removeInstalled、exportInstalled |
 
 测试/验收：
@@ -342,7 +342,7 @@
 
 | 项 | 内容 |
 |---|---|
-| 目标文件 | `web/src/components/*` |
+| 目标文件 | `apps/local-web/src/components/*` |
 | 组件 | LoadingState、EmptyState、ErrorState、StatusBadge |
 
 验收：
@@ -361,7 +361,7 @@
 
 | 项 | 内容 |
 |---|---|
-| 目标文件 | `web/src/routes/LibraryPage.tsx`、`web/src/components/SkillCard.tsx` |
+| 目标文件 | `apps/local-web/src/routes/LibraryPage.tsx`、`apps/local-web/src/components/SkillCard.tsx` |
 | 数据 | `GET /api/skills` |
 
 验收：
@@ -376,7 +376,7 @@
 
 | 项 | 内容 |
 |---|---|
-| 目标文件 | `web/src/components/SearchToolbar.tsx`、`web/src/routes/LibraryPage.tsx` |
+| 目标文件 | `apps/local-web/src/components/SearchToolbar.tsx`、`apps/local-web/src/routes/LibraryPage.tsx` |
 
 验收：
 
@@ -391,7 +391,7 @@
 
 | 项 | 内容 |
 |---|---|
-| 目标文件 | `web/src/components/SkillDetail.tsx` |
+| 目标文件 | `apps/local-web/src/components/SkillDetail.tsx` |
 | 数据 | `GET /api/skills/:name` |
 
 验收：
@@ -406,7 +406,7 @@
 
 | 项 | 内容 |
 |---|---|
-| 目标文件 | `web/src/components/SkillCard.tsx`、`web/src/components/SkillDetail.tsx` |
+| 目标文件 | `apps/local-web/src/components/SkillCard.tsx`、`apps/local-web/src/components/SkillDetail.tsx` |
 | 命令 | `npx suit-skills@latest install xxx` |
 
 验收：
@@ -421,7 +421,7 @@
 
 | 项 | 内容 |
 |---|---|
-| 目标文件 | `web/src/components/ShareCommandDialog.tsx` |
+| 目标文件 | `apps/local-web/src/components/ShareCommandDialog.tsx` |
 
 验收：
 
@@ -434,7 +434,7 @@
 
 | 项 | 内容 |
 |---|---|
-| 目标文件 | `web/src/components/InstallDialog.tsx`、`web/src/routes/LibraryPage.tsx` |
+| 目标文件 | `apps/local-web/src/components/InstallDialog.tsx`、`apps/local-web/src/routes/LibraryPage.tsx` |
 | API | `POST /api/install` |
 
 验收：
@@ -454,7 +454,7 @@
 
 | 项 | 内容 |
 |---|---|
-| 目标文件 | `web/src/routes/InstalledPage.tsx`、`web/src/components/InstalledSkillRow.tsx` |
+| 目标文件 | `apps/local-web/src/routes/InstalledPage.tsx`、`apps/local-web/src/components/InstalledSkillRow.tsx` |
 | API | `GET /api/installed` |
 
 验收：
@@ -468,7 +468,7 @@
 
 | 项 | 内容 |
 |---|---|
-| 目标文件 | `web/src/routes/InstalledPage.tsx` |
+| 目标文件 | `apps/local-web/src/routes/InstalledPage.tsx` |
 | 搜索字段 | name、description、tags、path、target |
 
 验收：
@@ -486,7 +486,7 @@
 
 | 项 | 内容 |
 |---|---|
-| 目标文件 | `web/src/components/InstalledSkillDetail.tsx` |
+| 目标文件 | `apps/local-web/src/components/InstalledSkillDetail.tsx` |
 
 验收：
 
@@ -500,7 +500,7 @@
 
 | 项 | 内容 |
 |---|---|
-| 目标文件 | `web/src/components/ConfirmRemoveDialog.tsx` |
+| 目标文件 | `apps/local-web/src/components/ConfirmRemoveDialog.tsx` |
 | API | `DELETE /api/installed/:name` |
 
 验收：
@@ -516,7 +516,7 @@
 
 | 项 | 内容 |
 |---|---|
-| 目标文件 | `web/src/components/ExportSkillButton.tsx` |
+| 目标文件 | `apps/local-web/src/components/ExportSkillButton.tsx` |
 | API | `POST /api/installed/export` |
 
 验收：
@@ -535,7 +535,7 @@
 
 | 项 | 内容 |
 |---|---|
-| 目标文件 | `web/src/routes/SourcesPage.tsx` |
+| 目标文件 | `apps/local-web/src/routes/SourcesPage.tsx` |
 | API | `GET /api/sources` |
 
 验收：
@@ -549,7 +549,7 @@
 
 | 项 | 内容 |
 |---|---|
-| 目标文件 | `src/lib/web/api.ts`、`src/lib/web/server.ts`、`web/src/App.tsx`、`web/src/api/client.ts` |
+| 目标文件 | `apps/cli/src/lib/web/api.ts`、`apps/cli/src/lib/web/server.ts`、`apps/local-web/src/App.tsx`、`apps/local-web/src/api/client.ts` |
 | API | `POST /api/sources`、`PATCH /api/sources/:name`、`DELETE /api/sources/:name` |
 
 验收：
@@ -566,7 +566,7 @@
 
 | 项 | 内容 |
 |---|---|
-| 目标文件 | `web/src/routes/TagsPage.tsx` 或 Library 中的标签区域 |
+| 目标文件 | `apps/local-web/src/routes/TagsPage.tsx` 或 Library 中的标签区域 |
 
 验收：
 
@@ -583,7 +583,7 @@
 
 | 项 | 内容 |
 |---|---|
-| 目标文件 | `src/lib/web/api.ts` 或 `src/lib/web/paths.ts` |
+| 目标文件 | `apps/cli/src/lib/web/api.ts` 或 `apps/cli/src/lib/web/paths.ts` |
 
 测试用例：
 
@@ -600,7 +600,7 @@
 
 | 项 | 内容 |
 |---|---|
-| 目标文件 | `src/commands/web.ts`、`src/lib/web/server.ts` |
+| 目标文件 | `apps/cli/src/commands/web.ts`、`apps/cli/src/lib/web/server.ts` |
 
 测试用例：
 
@@ -616,7 +616,7 @@
 
 | 项 | 内容 |
 |---|---|
-| 目标文件 | `src/lib/web/api.ts`、`src/lib/web/server.ts` |
+| 目标文件 | `apps/cli/src/lib/web/api.ts`、`apps/cli/src/lib/web/server.ts` |
 
 测试用例：
 
@@ -639,7 +639,7 @@
 验收步骤：
 
 1. 执行 `npm run build:all`。
-2. 执行 `node dist/index.js web --no-open` 或等价命令。
+2. 执行 `node apps/cli/dist/index.js web --no-open` 或等价命令。
 3. 打开控制台输出 URL。
 4. 技能库能展示 source skills。
 5. 打开某个 skill 详情。

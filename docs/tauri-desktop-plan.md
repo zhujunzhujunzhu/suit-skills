@@ -11,9 +11,9 @@ skills-cli/
 ├── src/                    # CLI 核心 (TypeScript)
 │   ├── commands/           # 命令实现
 │   ├── lib/                # 核心库
-│   │   ├── web/            # Web 服务器 + API
+│   │   ├── apps/local-web/            # Web 服务器 + API
 │   └── cli/                # CLI 入口
-├── web/                    # React 前端
+├── apps/local-web/                    # React 前端
 │   ├── src/
 │   │   ├── App.tsx         # 主界面
 │   │   ├── api/            # API 客户端
@@ -50,7 +50,7 @@ skills-cli/
 ├─────────────────────────────────────────────────────────────┤
 │  Frontend (WebView)                                         │
 │  ┌───────────────────────────────────────────────────────┐ │
-│  │  React App (web/src/App.tsx)                          │ │
+│  │  React App (apps/local-web/src/App.tsx)                          │ │
 │  │  ┌─────────────┬─────────────┬─────────────┬───────┐ │ │
 │  │  │ Skills      │ Installed   │ Sources     │ Tags  │ │ │
 │  │  └─────────────┴─────────────┴─────────────┴───────┘ │ │
@@ -92,7 +92,7 @@ skills-cli/
 
 ```
 skills-cli/
-├── src-tauri/                  # 新增：Tauri 项目
+├── apps/desktop/                  # 新增：Tauri 项目
 │   ├── src/
 │   │   ├── main.rs             # Tauri 入口
 │   │   ├── commands.rs         # IPC 命令定义
@@ -107,7 +107,7 @@ skills-cli/
 │   └── binaries/               # sidecar 二进制
 │       └── suit-skills-x86_64-pc-windows-msvc.exe
 │
-├── web/                        # 保持现有结构
+├── apps/local-web/                        # 保持现有结构
 │   └── src/
 │       └── api/
 │           ├── client.ts       # 改造：支持 IPC 调用
@@ -161,19 +161,19 @@ winget install Microsoft.VisualStudio.2022.BuildTools
 npm create tauri-app@latest
 
 # 选择配置：
-# - Project name: src-tauri
+# - Project name: apps/desktop
 # - Package manager: npm
-# - UI template: 无 (使用现有 web/)
+# - UI template: 无 (使用现有 apps/local-web/)
 # - UI framework: 无
 ```
 
 或手动创建目录结构：
 
 ```bash
-mkdir src-tauri
-mkdir src-tauri/src
-mkdir src-tauri/icons
-mkdir src-tauri/binaries
+mkdir apps/desktop
+mkdir apps/desktop/src
+mkdir apps/desktop/icons
+mkdir apps/desktop/binaries
 ```
 
 ---
@@ -192,7 +192,7 @@ mkdir src-tauri/binaries
     "beforeDevCommand": "npm run dev:web:vite",
     "devUrl": "http://localhost:5173",
     "beforeBuildCommand": "npm run build:all",
-    "frontendDist": "../web/dist"
+    "frontendDist": "../apps/local-web/dist"
   },
   "app": {
     "withGlobalTauri": true,
@@ -302,13 +302,13 @@ npm install -D pkg
     "scripts": "dist/**/*.js",
     "assets": "dist/**/*",
     "targets": ["node18-win-x64"],
-    "outputPath": "src-tauri/binaries"
+    "outputPath": "apps/desktop/binaries"
   }
 }
 
 # 打包命令
 npm run build
-pkg dist/index.js --targets node18-win-x64 --output src-tauri/binaries/suit-skills.exe
+pkg apps/cli/dist/index.js --targets node18-win-x64 --output apps/desktop/binaries/suit-skills.exe
 ```
 
 **方式 B: Node.js Sidecar (更完整)**
@@ -319,7 +319,7 @@ pkg dist/index.js --targets node18-win-x64 --output src-tauri/binaries/suit-skil
 # 使用 nexe 或 node-packer
 npm install -D nexe
 
-nexe -t windows-x64-18.0.0 -i dist/index.js -o src-tauri/binaries/suit-skills.exe
+nexe -t windows-x64-18.0.0 -i apps/cli/dist/index.js -o apps/desktop/binaries/suit-skills.exe
 ```
 
 #### 4.7 Sidecar 文件命名规范
@@ -342,7 +342,7 @@ binaries/
 #### 4.8 main.rs 基础结构
 
 ```rust
-// src-tauri/src/main.rs
+// apps/desktop/src/main.rs
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
@@ -371,7 +371,7 @@ fn main() {
 #### 4.9 commands.rs IPC 命令模板
 
 ```rust
-// src-tauri/src/commands.rs
+// apps/desktop/apps/cli/src/commands.rs
 
 use serde::{Deserialize, Serialize};
 use tauri::command;
@@ -522,7 +522,7 @@ async fn remove_source(
 
 #### 4.10 API 客户端改造策略
 
-现有 `web/src/api/client.ts` 通过 HTTP 调用本地服务器。需要改造为：
+现有 `apps/local-web/src/api/client.ts` 通过 HTTP 调用本地服务器。需要改造为：
 
 ```
 ┌─────────────────────────────────────────────┐
@@ -538,7 +538,7 @@ async fn remove_source(
 #### 4.11 tauri.ts 封装模板
 
 ```typescript
-// web/src/api/tauri.ts
+// apps/local-web/src/api/tauri.ts
 
 import { invoke } from '@tauri-apps/api/core';
 
@@ -610,7 +610,7 @@ export async function addSource(options: {
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
-    "build:sidecar": "pkg dist/index.js --targets node18-win-x64 --output src-tauri/binaries/suit-skills-x86_64-pc-windows-msvc.exe",
+    "build:sidecar": "pkg apps/cli/dist/index.js --targets node18-win-x64 --output apps/desktop/binaries/suit-skills-x86_64-pc-windows-msvc.exe",
     "build:desktop": "npm run build:all && npm run build:sidecar && npm run tauri:build"
   }
 }
@@ -636,7 +636,7 @@ npm run build:desktop
 #### 4.14 输出产物
 
 ```
-src-tauri/target/release/bundle/
+apps/desktop/target/release/bundle/
 ├── msi/
 │   └── Suit Skills_0.0.7_x64.msi      # Windows 安装包
 ├── nsis/
@@ -653,7 +653,7 @@ src-tauri/target/release/bundle/
 现有 CLI 需要添加 `--json` 输出格式支持，确保 IPC 调用能正确解析结果。
 
 ```typescript
-// src/commands/list.ts 需要改造
+// apps/cli/src/commands/list.ts 需要改造
 // 添加 --json 参数支持结构化输出
 
 export function list(options: { json?: boolean; ... }) {
@@ -766,7 +766,7 @@ Tauri 需要配置权限范围：
 - [ ] 安装 pkg (`npm install -D pkg`)
 
 ### Phase 2: 项目初始化
-- [ ] 创建 `src-tauri/` 目录
+- [ ] 创建 `apps/desktop/` 目录
 - [ ] 配置 `tauri.conf.json`
 - [ ] 配置 `Cargo.toml`
 - [ ] 创建基础 Rust 代码 (`main.rs`, `commands.rs`)
@@ -780,12 +780,12 @@ Tauri 需要配置权限范围：
 ### Phase 4: Sidecar 打包
 - [ ] 配置 pkg 打包脚本
 - [ ] 打包 CLI 为可执行文件
-- [ ] 放置到 `src-tauri/binaries/` 目录
+- [ ] 放置到 `apps/desktop/binaries/` 目录
 - [ ] 确保文件命名符合 Tauri 规范
 
 ### Phase 5: 前端改造
-- [ ] 创建 `web/src/api/tauri.ts`
-- [ ] 改造 `web/src/api/client.ts` 支持双模式
+- [ ] 创建 `apps/local-web/src/api/tauri.ts`
+- [ ] 改造 `apps/local-web/src/api/client.ts` 支持双模式
 - [ ] 测试 IPC 调用
 
 ### Phase 6: 构建测试

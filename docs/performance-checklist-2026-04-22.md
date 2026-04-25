@@ -6,7 +6,7 @@
 - `npm run typecheck`：通过
 - `npm run build:web`：通过
 - `npm run test:e2e`：通过，`3/3`
-- `cargo check --manifest-path src-tauri/Cargo.toml`：通过
+- `cargo check --manifest-path apps/desktop/Cargo.toml`：通过
 
 ## 当前构建结果
 
@@ -33,7 +33,7 @@
 - 处理：
   - `listWebInstalledSkills()` 改为只基于本地缓存 source 索引构建 `sourceName`，不再为 `Installed` 页面触发远端刷新。
 - 涉及文件：
-  - `src/lib/web/api.ts`
+  - `apps/cli/src/lib/web/api.ts`
   - `tests/lib/web-api.test.ts`
 
 ### 2. Tauri 模式重复读取 installed 状态并重复拉起 sidecar
@@ -44,11 +44,11 @@
   - `fetchSkills()` 和 `fetchSkillDetail()` 都会额外请求一次 installed 列表。
   - 在桌面端会造成额外 IPC 和 sidecar 启动成本。
 - 处理：
-  - 在 `web/src/api/client.ts` 增加短生命周期 installed 缓存。
+  - 在 `apps/local-web/src/api/client.ts` 增加短生命周期 installed 缓存。
   - 安装、移除、链接后自动失效，列表和详情请求复用同一份状态。
 - 涉及文件：
-  - `web/src/api/client.ts`
-  - `tests/web/api-client.test.ts`
+  - `apps/local-web/src/api/client.ts`
+  - `tests/apps/local-web/api-client.test.ts`
 
 ### 3. Web 旧请求没有真正取消
 
@@ -59,20 +59,20 @@
   - 会浪费网络和浏览器资源，也让高频交互更嘈杂。
 - 处理：
   - 为 `fetchSkills()`、`fetchInstalled()`、`fetchSkillDetail()` 补上 `AbortController` 支持。
-  - 在 `web/src/App.tsx` 中为库列表、已安装列表、详情加载接入请求取消。
+  - 在 `apps/local-web/src/App.tsx` 中为库列表、已安装列表、详情加载接入请求取消。
 - 涉及文件：
-  - `web/src/api/client.ts`
-  - `web/src/App.tsx`
-  - `tests/web/api-client.test.ts`
+  - `apps/local-web/src/api/client.ts`
+  - `apps/local-web/src/App.tsx`
+  - `tests/apps/local-web/api-client.test.ts`
 
 ### 4. Web 主包承载了下载页和详情页的重内容
 
 - 优先级：`P2`
 - 状态：`fixed`
 - 处理：
-  - 将下载页拆到 `web/src/views/DownloadView.tsx`
-  - 将技能详情和翻译预览拆到 `web/src/views/SkillDetailView.tsx`
-  - 在 `web/src/App.tsx` 里改成 `React.lazy` + `Suspense` 按需加载
+  - 将下载页拆到 `apps/local-web/src/views/DownloadView.tsx`
+  - 将技能详情和翻译预览拆到 `apps/local-web/src/views/SkillDetailView.tsx`
+  - 在 `apps/local-web/src/App.tsx` 里改成 `React.lazy` + `Suspense` 按需加载
 - 结果：
   - 主入口包从 `349259 B` 降到 `335220 B`
   - 详情页拆成独立 chunk：`12630 B`
@@ -83,10 +83,10 @@
 - 优先级：`P2`
 - 状态：`fixed`
 - 处理：
-  - 将三块视图分别拆到 `web/src/views/InstalledView.tsx`
-  - `web/src/views/SourcesView.tsx`
-  - `web/src/views/SettingsView.tsx`
-  - 抽出 `web/src/ui/Icon.tsx` 作为共享图标模块
+  - 将三块视图分别拆到 `apps/local-web/src/views/InstalledView.tsx`
+  - `apps/local-web/src/views/SourcesView.tsx`
+  - `apps/local-web/src/views/SettingsView.tsx`
+  - 抽出 `apps/local-web/src/ui/Icon.tsx` 作为共享图标模块
 - 结果：
   - 主入口包从 `335220 B` 降到 `313380 B`
   - `InstalledView` chunk：`4730 B`
@@ -98,7 +98,7 @@
 - 优先级：`P2`
 - 状态：`fixed`
 - 处理：
-  - 将技能库主视图拆到 `web/src/views/LibraryView.tsx`
+  - 将技能库主视图拆到 `apps/local-web/src/views/LibraryView.tsx`
   - 虚拟列表、标签筛选、来源告警和详情侧栏一起迁出
 - 结果：
   - 主入口包从 `313380 B` 降到 `304650 B`
@@ -109,7 +109,7 @@
 - 优先级：`P3`
 - 状态：`fixed`
 - 处理：
-  - 将自定义主题算法抽到 `web/src/theme/customTheme.ts`
+  - 将自定义主题算法抽到 `apps/local-web/src/theme/customTheme.ts`
   - `SettingsView` 复用该模块做预览和颜色归一化
   - `App.tsx` 只在 `themeMode === 'custom'` 时动态加载主题生成逻辑
 - 结果：
@@ -135,15 +135,15 @@
   - 主 Web 入口因接入 bootstrap 逻辑小幅回升：`302070 B` -> `303240 B`
   - 这部分体积换来了桌面端更少的 sidecar 启动和 IPC 往返，收益更直接
 - 涉及文件：
-  - `src/commands/desktop-bootstrap.ts`
-  - `src/cli/program.ts`
-  - `src-tauri/src/commands.rs`
-  - `src-tauri/src/lib.rs`
-  - `web/src/api/tauri.ts`
-  - `web/src/api/client.ts`
-  - `web/src/App.tsx`
+  - `apps/cli/src/commands/desktop-bootstrap.ts`
+  - `apps/cli/src/cli/program.ts`
+  - `apps/desktop/apps/cli/src/commands.rs`
+  - `apps/desktop/src/lib.rs`
+  - `apps/local-web/src/api/tauri.ts`
+  - `apps/local-web/src/api/client.ts`
+  - `apps/local-web/src/App.tsx`
   - `tests/commands/cli.test.ts`
-  - `tests/web/api-client.test.ts`
+  - `tests/apps/local-web/api-client.test.ts`
 
 ## 已验证的改进
 

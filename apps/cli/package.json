@@ -1,0 +1,17 @@
+{
+  "name": "@suit-skills/app-cli",
+  "version": "0.0.15",
+  "type": "module",
+  "private": true,
+  "description": "Suit Skills CLI application entrypoint.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@suit-skills/core": "0.0.15"
+  }
+}

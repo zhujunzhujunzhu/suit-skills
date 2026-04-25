@@ -59,11 +59,11 @@
 
 ## 阶段 1 — TypeScript 类型定义
 
-> **进度**：`[x]` 已完成（`src/types/index.ts`、`tests/types.test.ts`）。
+> **进度**：`[x]` 已完成（`packages/core/src/types/index.ts`、`tests/types.test.ts`）。
 
 ### 1.1 定义核心类型接口
 
-**任务**: 在 `src/types/index.ts` 中定义所有核心接口。
+**任务**: 在 `packages/core/src/types/index.ts` 中定义所有核心接口。
 
 | 项 | 内容 |
 |---|------|
@@ -111,9 +111,9 @@ interface InstallTarget {
 
 ---
 
-## 阶段 2 — 工具函数层 (`src/utils/`)
+## 阶段 2 — 工具函数层 (`packages/core/src/utils/`)
 
-> **进度**：`[x]` 已完成（`src/utils/validate.ts`、`path.ts`、`fs.ts` 与 `tests/utils/*`）。
+> **进度**：`[x]` 已完成（`packages/core/src/utils/validate.ts`、`path.ts`、`fs.ts` 与 `tests/utils/*`）。
 
 ### 2.1 `validateSkillName` — Skill 名称校验
 
@@ -188,9 +188,9 @@ interface InstallTarget {
 
 ---
 
-## 阶段 3 — 配置管理模块 (`src/lib/config.ts`)
+## 阶段 3 — 配置管理模块 (`packages/core/src/config/index.ts`)
 
-> **进度**：`[x]` 已完成（`src/lib/config.ts`、`tests/lib/config.test.ts`）。测试与生产路径可通过环境变量 `SUIT_SKILLS_HOME` 指向临时目录。
+> **进度**：`[x]` 已完成（`packages/core/src/config/index.ts`、`tests/lib/config.test.ts`）。测试与生产路径可通过环境变量 `SUIT_SKILLS_HOME` 指向临时目录。
 
 ### 3.1 `getDefaultConfig` — 获取默认配置
 
@@ -242,9 +242,9 @@ interface InstallTarget {
 
 ---
 
-## 阶段 4 — Git 操作模块 (`src/lib/git.ts`)
+## 阶段 4 — Git 操作模块 (`packages/core/src/sources/git.ts`)
 
-> **进度**：`[x]` 已完成（`src/lib/git.ts`、`tests/lib/git.test.ts`）。`isGitAvailable` 等支持注入 `env` / `spawnSync` 以便测试模拟「无 git」。
+> **进度**：`[x]` 已完成（`packages/core/src/sources/git.ts`、`tests/lib/git.test.ts`）。`isGitAvailable` 等支持注入 `env` / `spawnSync` 以便测试模拟「无 git」。
 
 ### 4.1 `isGitAvailable` — 检测 git 是否可用
 
@@ -288,9 +288,9 @@ interface InstallTarget {
 
 ---
 
-## 阶段 5 — 缓存管理模块 (`src/lib/cache.ts`)
+## 阶段 5 — 缓存管理模块 (`packages/core/src/cache/index.ts`)
 
-> **进度**：`[x]` 已完成（`src/lib/cache.ts`、`tests/lib/cache.test.ts`）。缓存根与 `SUIT_SKILLS_HOME` / `~/.suit-skills` 对齐；`urlToCacheDirName` 会将 `_` 规范为 `-` 以满足5.2 默认源目录名；`refreshCache` 在 pull 降级时返回字符串 `warning: "Using local cache..."`。
+> **进度**：`[x]` 已完成（`packages/core/src/cache/index.ts`、`tests/lib/cache.test.ts`）。缓存根与 `SUIT_SKILLS_HOME` / `~/.suit-skills` 对齐；`urlToCacheDirName` 会将 `_` 规范为 `-` 以满足5.2 默认源目录名；`refreshCache` 在 pull 降级时返回字符串 `warning: "Using local cache..."`。
 
 ### 5.1 `getCacheDir` — 获取缓存根目录
 
@@ -321,9 +321,9 @@ interface InstallTarget {
 
 ---
 
-## 阶段 6 — Skill 解析模块 (`src/lib/skills.ts`)
+## 阶段 6 — Skill 解析模块 (`packages/core/src/skills/index.ts`)
 
-> **进度**：`[x]` 已完成（`src/lib/skills.ts`、`tests/lib/skills.test.ts`）。
+> **进度**：`[x]` 已完成（`packages/core/src/skills/index.ts`、`tests/lib/skills.test.ts`）。
 
 ### 6.1 `parseMetaJson` — 解析 meta.json
 
@@ -371,9 +371,9 @@ interface InstallTarget {
 
 ---
 
-## 阶段 7 — 智能体目录模块 (`src/lib/agents.ts`)
+## 阶段 7 — 智能体目录模块 (`packages/core/src/targets/agents.ts`)
 
-> **进度**：`[x]` 已完成（`src/lib/agents.ts`、`tests/lib/agents.test.ts`）。
+> **进度**：`[x]` 已完成（`packages/core/src/targets/agents.ts`、`tests/lib/agents.test.ts`）。
 
 ### 7.1 `resolveTargetPath` — 解析安装目标路径
 
@@ -399,9 +399,9 @@ interface InstallTarget {
 
 ---
 
-## 阶段 8 — 安装逻辑模块 (`src/lib/install.ts`)
+## 阶段 8 — 安装逻辑模块 (`packages/core/src/install/index.ts`)
 
-> **进度**：`[x]` 已完成（`src/lib/install.ts`、`tests/lib/install.test.ts`）。`rename` 策略会同步更新目标目录内 `meta.json` 的 `name` 与文件夹名一致。
+> **进度**：`[x]` 已完成（`packages/core/src/install/index.ts`、`tests/lib/install.test.ts`）。`rename` 策略会同步更新目标目录内 `meta.json` 的 `name` 与文件夹名一致。
 
 ### 8.1 `checkConflict` — 冲突检测
 
@@ -435,13 +435,13 @@ interface InstallTarget {
 
 ---
 
-## 阶段 9 — CLI 命令实现 (`src/commands/`)
+## 阶段 9 — CLI 命令实现 (`apps/cli/src/commands/`)
 
-> **进度**：`[x]` 已完成（`src/index.ts`、`src/cli/*`、`src/commands/*`、`tests/commands/cli.test.ts`）。`package.json` 已设 `"type": "module"` 以匹配 NodeNext 产物。
+> **进度**：`[x]` 已完成（`apps/cli/src/index.ts`、`apps/cli/src/cli/*`、`apps/cli/src/commands/*`、`tests/commands/cli.test.ts`）。`package.json` 已设 `"type": "module"` 以匹配 NodeNext 产物。
 
 ### 9.1 CLI 入口重构
 
-**任务**: 重构 `src/index.ts` 为注册所有子命令的入口，命令拆分到 `src/commands/`。
+**任务**: 重构 `apps/cli/src/index.ts` 为注册所有子命令的入口，命令拆分到 `apps/cli/src/commands/`。
 
 | 项 | 内容 |
 |---|------|
@@ -557,7 +557,7 @@ interface InstallTarget {
 
 ## 阶段 10 — 体验优化
 
-> **进度**：`[x]` 已完成（`src/utils/output.ts`、`tests/utils/output.test.ts`；命令与 `config` 加载警告已接入；`install`/`list`/`remove` 别名见 `tests/commands/cli.test.ts`「阶段 10」）。
+> **进度**：`[x]` 已完成（`packages/core/src/utils/output.ts`、`tests/utils/output.test.ts`；命令与 `config` 加载警告已接入；`install`/`list`/`remove` 别名见 `tests/commands/cli.test.ts`「阶段 10」）。
 
 ### 10.1 统一输出格式化
 

@@ -88,7 +88,7 @@ AI 不应直接无提示覆盖文件；优先采用“生成补丁/改动预览 
 - 当前应用已经能查看 skill 文件树和文件内容，但仍偏只读
 - 当前系统存在“中央 skill 库 + 各 agent 目录软链接/启用”的设计方向
 - source 恢复能力已经采用 `restore` 语义，不应把 skill 恢复和 source 恢复混在一起
-- Web/Tauri 共用较多 API 逻辑，新增能力最好优先落在统一的 `src/lib/web/api.ts` 语义层
+- Web/Tauri 共用较多 API 逻辑，新增能力最好优先落在统一的 `apps/cli/src/lib/web/api.ts` 语义层
 - 文件访问已经有路径边界校验，新增写入能力必须继续沿用相同安全约束
 
 ## 6. 用户故事

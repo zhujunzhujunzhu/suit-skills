@@ -1,6 +1,6 @@
 /**
  * 版本号同步脚本
- * 将 package.json 中的版本号同步到 src-tauri/tauri.conf.json 和 src-tauri/Cargo.toml
+ * 将 package.json 中的版本号同步到 apps/desktop/tauri.conf.json 和 apps/desktop/Cargo.toml
  *
  * 用法：node scripts/sync-version.mjs
  */
@@ -21,8 +21,8 @@ function writeJson(path, data) {
 }
 
 const pkgPath = resolve(root, 'package.json');
-const tauriConfPath = resolve(root, 'src-tauri', 'tauri.conf.json');
-const cargoPath = resolve(root, 'src-tauri', 'Cargo.toml');
+const tauriConfPath = resolve(root, 'apps', 'desktop', 'tauri.conf.json');
+const cargoPath = resolve(root, 'apps', 'desktop', 'Cargo.toml');
 
 const pkg = readJson(pkgPath);
 const version = pkg.version;

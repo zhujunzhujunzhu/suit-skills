@@ -21,7 +21,7 @@
 
 ### P1 - 移动导航没有可访问名称
 
-- 位置：`web/src/App.tsx:963`，`web/src/styles/app.css:1287`
+- 位置：`apps/local-web/src/App.tsx:963`，`apps/local-web/src/styles/app.css:1287`
 - 类别：可访问性
 - 复现：调整至 `390x844`；Playwright 角色查询 `getByRole('button', { name: 'Skills' })` 无法找到导航按钮，因为 `.nav span` 是 `display: none`。
 - 影响：屏幕阅读器和基于角色的自动化用户无法识别主要的移动导航控件。
@@ -30,7 +30,7 @@
 
 ### P1 - 移动库虚拟化渲染整个目录
 
-- 位置：`web/src/styles/app.css:1297`，`web/src/App.tsx:1020`
+- 位置：`apps/local-web/src/styles/app.css:1297`，`apps/local-web/src/App.tsx:1020`
 - 类别：性能/响应式
 - 复现：在 `390x844` 上，打开 Skills 并清除搜索。Playwright 计数 `1442` 个 `.skill-card` 节点，因为 `.library-scroll` 变为 `height: auto; overflow: visible`。
 - 影响：大型目录产生沉重的DOM，慢速文本提取，更高的内存使用，以及移动端的卡顿。
@@ -39,7 +39,7 @@
 
 ### P2 - 移动触摸目标小于44px
 
-- 位置：`web/src/styles/app.css:196`，`web/src/styles/app.css:298`，`web/src/styles/app.css:416`，`web/src/styles/app.css:1297`
+- 位置：`apps/local-web/src/styles/app.css:196`，`apps/local-web/src/styles/app.css:298`，`apps/local-web/src/styles/app.css:416`，`apps/local-web/src/styles/app.css:1297`
 - 类别：可访问性/响应式
 - 复现：移动端审计发现 `Refresh` 为 `36x36`，语言选择为 `76x28`，源表单控件为 `40px` 高，以及多个行操作按钮为 `40px`。
 - 影响：触摸用户误触控件的可能性更高。
@@ -48,7 +48,7 @@
 
 ### P2 - 缺少favicon产生控制台噪音
 
-- 位置：`web/index.html`
+- 位置：`apps/local-web/index.html`
 - 类别：运行时优化
 - 复现：初始加载记录 `GET /favicon.ico 404` 两次。
 - 影响：不面向用户，但会污染控制台输出，使真实的运行时错误更难发现。
@@ -57,7 +57,7 @@
 
 ### P3 - 空源表单发送400请求
 
-- 位置：`web/src/App.tsx:698`
+- 位置：`apps/local-web/src/App.tsx:698`
 - 类别：UX/运行时优化
 - 复现：使用空字段点击 `Add source`。翻译后的错误显示正确，但浏览器控制台记录了 `400 Bad Request`。
 - 影响：验证有效，但可避免的客户端请求在QA期间产生噪音。
@@ -78,7 +78,7 @@
 | T1 | Codex | 已完成 | 为导航按钮添加了持久的 `aria-label` 值。 |
 | T2 | Codex | 已完成 | 更新虚拟行测量，在移动CSS使库滚动可见时使用页面滚动。 |
 | T3 | Codex | 已完成 | 将图标按钮、主要按钮、表单控件、移动标签和目标芯片提升到44px触摸目标。 |
-| T4 | Codex | 已完成 | 添加了 `web/favicon.svg` 并从 `web/index.html` 链接它。 |
+| T4 | Codex | 已完成 | 添加了 `apps/local-web/favicon.svg` 并从 `apps/local-web/index.html` 链接它。 |
 | T5 | Codex | 已完成 | 在API调用之前添加了客户端源名称/URL验证。 |
 
 ## 验证日志

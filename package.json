@@ -3,10 +3,14 @@
   "version": "0.0.15",
   "type": "module",
   "description": "A CLI tool for skills management with Web console and Desktop app",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "main": "apps/cli/dist/index.js",
+  "types": "apps/cli/dist/index.d.ts",
   "bin": {
-    "suit-skills": "dist/index.js"
+    "suit-skills": "apps/cli/dist/index.js"
   },
   "authors": [
     {
@@ -23,39 +27,46 @@
     "url": "git+https://github.com/zhujunzhujunzhu/suit-skills.git"
   },
   "scripts": {
-    "build": "tsc",
-    "build:all": "npm run build && npm run build:web",
+    "build": "npm run build:workspaces",
+    "build:workspaces": "npm run build --workspaces --if-present",
+    "build:all": "npm run build",
     "sync:version": "node scripts/sync-version.mjs",
-    "build:web": "vite build --config web/vite.config.ts",
+    "build:web": "npm --workspace @suit-skills/app-local-web run build",
     "build:sidecar": "node scripts/build-sidecar.mjs",
     "build:desktop": "npm run build:all && npm run build:sidecar && npm run tauri:build",
     "prepack": "npm run build:all",
-    "dev": "tsx src/index.ts",
+    "dev": "tsx apps/cli/src/index.ts",
     "dev:web": "node scripts/dev-web.mjs",
-    "dev:web:vite": "vite --config web/vite.config.ts",
-    "dev:tauri": "tauri dev",
-    "tauri": "tauri",
-    "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build",
-    "start": "node dist/index.js",
+    "dev:web:vite": "npm --workspace @suit-skills/app-local-web run dev",
+    "dev:tauri": "npm --workspace @suit-skills/app-desktop run tauri:dev",
+    "tauri": "npm --workspace @suit-skills/app-desktop run tauri --",
+    "tauri:dev": "npm --workspace @suit-skills/app-desktop run tauri:dev",
+    "tauri:build": "npm --workspace @suit-skills/app-desktop run tauri:build",
+    "start": "node apps/cli/dist/index.js",
     "clean": "rm -rf dist",
-    "typecheck": "tsc --noEmit",
-    "test": "vitest run",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run build:workspaces && npm run test:workspaces && vitest run",
+    "test:root": "vitest run",
+    "test:workspaces": "npm run test --workspaces --if-present",
     "test:e2e": "playwright test",
     "test:watch": "vitest"
   },
   "pkg": {
-    "scripts": "dist/**/*.js",
+    "scripts": "apps/cli/dist/**/*.js",
     "assets": "dist/**/*",
     "targets": [
       "node18-win-x64"
     ],
-    "outputPath": "src-tauri/binaries"
+    "outputPath": "apps/desktop/binaries"
   },
   "files": [
-    "dist",
+    "apps/cli/dist",
+    "dist/web",
     "readme.md",
     "imgs/*.png"
+  ],
+  "bundledDependencies": [
+    "@suit-skills/core"
   ],
   "keywords": [
     "cli",
@@ -85,6 +96,7 @@
     "node": ">=18"
   },
   "dependencies": {
+    "@suit-skills/core": "0.0.15",
     "@inquirer/core": "^11.1.8",
     "@inquirer/prompts": "^8.4.1",
     "@tauri-apps/api": "^2.10.1",

@@ -5,7 +5,7 @@ import sharp from 'sharp';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '..');
-const iconsDir = path.join(root, 'src-tauri', 'icons');
+const iconsDir = path.join(root, 'apps', 'desktop', 'icons');
 
 const svg = String.raw`<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
   <defs>
@@ -106,4 +106,4 @@ await sharp(Buffer.from(svg))
   .png({ compressionLevel: 9, adaptiveFiltering: true })
   .toFile(path.join(iconsDir, 'icon.png'));
 
-console.log('Generated app-icon.svg, app-icon.png, and src-tauri/icons/icon.png');
+console.log('Generated app-icon.svg, app-icon.png, and apps/desktop/icons/icon.png');

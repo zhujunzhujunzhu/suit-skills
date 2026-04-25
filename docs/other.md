@@ -86,7 +86,7 @@ EADDRINUSE: address already in use 127.0.0.1:4587
 
 | 项目 | 说明 |
 |------|------|
-| 涉及文件 | `src/lib/web/server.ts`（`startWebServer` 函数）、`src/commands/web.ts`（CLI 命令） |
+| 涉及文件 | `apps/cli/src/lib/web/server.ts`（`startWebServer` 函数）、`apps/cli/src/commands/web.ts`（CLI 命令） |
 | 默认端口 | 4587 |
 | 重试策略 | 端口 +1 递增 |
 | 最大重试次数 | 3 次 |

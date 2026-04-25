@@ -18,7 +18,7 @@ EADDRINUSE: address already in use 127.0.0.1:4587
 
 | 项目 | 说明 |
 |------|------|
-| 涉及文件 | `src/lib/web/server.ts`（`startWebServer` 函数）、`src/commands/web.ts`（CLI 命令） |
+| 涉及文件 | `apps/cli/src/lib/web/server.ts`（`startWebServer` 函数）、`apps/cli/src/commands/web.ts`（CLI 命令） |
 | 默认端口 | 4587 |
 | 重试策略 | 端口 +1 递增 |
 | 最大重试次数 | 3 次 |
@@ -49,7 +49,7 @@ Local: http://127.0.0.1:4589
 
 ## 实现方案
 
-### 修改 `src/lib/web/server.ts`
+### 修改 `apps/cli/src/lib/web/server.ts`
 
 ```typescript
 export function startWebServer(
@@ -104,7 +104,7 @@ export function startWebServer(
 }
 ```
 
-### 修改 `src/commands/web.ts`
+### 修改 `apps/cli/src/commands/web.ts`
 
 ```typescript
 .action(
@@ -146,7 +146,7 @@ export function startWebServer(
 - [x] 修改 `startWebServer` 函数，支持端口重试
 - [x] 修改 `web` 命令，显示端口重试提示信息
 - [x] 修改 `scripts/dev-web.mjs`，支持开发环境端口自动重试
-- [x] 修改 `web/vite.config.ts`，支持动态 API 端口配置
+- [x] 修改 `apps/local-web/vite.config.ts`，支持动态 API 端口配置
 - [x] 测试用例验证
 
 ## 实现状态
@@ -160,5 +160,5 @@ export function startWebServer(
 
 ### 开发环境
 - `scripts/dev-web.mjs` 先启动后端，获取实际端口后启动 Vite
-- `web/vite.config.ts` 从环境变量 `SUIT_SKILLS_API_PORT` 读取 API 端口
+- `apps/local-web/vite.config.ts` 从环境变量 `SUIT_SKILLS_API_PORT` 读取 API 端口
 - Vite 代理自动连接到正确的后端端口

@@ -9,7 +9,7 @@ todos:
     content: 后端：在 api.ts 新增 translateText 函数（支持 HTTP API 和 CLI 两种 provider），在 server.ts 注册 POST /api/translate 路由
     status: pending
   - id: config-translation
-    content: 在 src/types/index.ts 添加 TranslationConfig 类型，在 config.ts 添加翻译配置默认值
+    content: 在 packages/core/src/types/index.ts 添加 TranslationConfig 类型，在 config.ts 添加翻译配置默认值
     status: pending
   - id: frontend-file-browser
     content: 前端：在 App.tsx 新增 SkillDetailView 视图（左文件树 + 右内容预览），在侧边栏添加入口按钮
@@ -47,7 +47,7 @@ flowchart LR
     end
 ```
 
-### 后端改动（`src/lib/web/`）
+### 后端改动（`apps/cli/src/lib/web/`）
 
 - **`api.ts`** - 新增两个函数：
   - `getSkillFileTree(ctx, skillName, options)` → 递归读取 `skillDir`，返回文件树 JSON（忽略 `.git` 等）
@@ -55,12 +55,12 @@ flowchart LR
 - **`server.ts`** - 注册两条路由：
   - `GET /api/skills/:name/files`
   - `GET /api/skills/:name/files/*`
-- **`src/types/index.ts`** - 新增类型：
+- **`packages/core/src/types/index.ts`** - 新增类型：
   - `WebSkillFileNode` (name, path, type: 'file'|'dir', children?)
   - `WebSkillFileContent` (path, content?, encoding: 'text'|'base64'|'binary', previewable: boolean)
   - 所有文件都在树中显示；文本文件展示内容，图片 base64 渲染，其他二进制显示「无法预览」提示
 
-### 前端改动（`web/src/`）
+### 前端改动（`apps/local-web/src/`）
 
 - **`api/client.ts`** - 新增 `fetchSkillFiles()`, `fetchSkillFileContent()`
 - **`App.tsx`** - 新增 `SkillDetailView` 组件（独立视图，类 View = 'skill-detail'），包含：
@@ -91,7 +91,7 @@ flowchart TB
     end
 ```
 
-### 翻译配置类型（`src/types/index.ts`）
+### 翻译配置类型（`packages/core/src/types/index.ts`）
 
 ```typescript
 interface TranslationConfig {
@@ -131,9 +131,9 @@ interface TranslationConfig {
 
 | 文件 | 改动 |
 |------|------|
-| [`src/types/index.ts`](src/types/index.ts) | 新增 `WebSkillFileNode`、`TranslationConfig` 类型 |
-| [`src/lib/web/api.ts`](src/lib/web/api.ts) | 新增文件树、文件内容、翻译 API 函数 |
-| [`src/lib/web/server.ts`](src/lib/web/server.ts) | 注册新路由 |
-| [`src/lib/config.ts`](src/lib/config.ts) | 翻译配置默认值 |
-| [`web/src/api/client.ts`](web/src/api/client.ts) | 新增前端 API 函数 |
-| [`web/src/App.tsx`](web/src/App.tsx) | 新增详情视图组件、翻译按钮、Settings 配置区 |
+| [`packages/core/src/types/index.ts`](packages/core/src/types/index.ts) | 新增 `WebSkillFileNode`、`TranslationConfig` 类型 |
+| [`apps/cli/src/lib/web/api.ts`](apps/cli/src/lib/web/api.ts) | 新增文件树、文件内容、翻译 API 函数 |
+| [`apps/cli/src/lib/web/server.ts`](apps/cli/src/lib/web/server.ts) | 注册新路由 |
+| [`packages/core/src/config/index.ts`](packages/core/src/config/index.ts) | 翻译配置默认值 |
+| [`apps/local-web/src/api/client.ts`](apps/local-web/src/api/client.ts) | 新增前端 API 函数 |
+| [`apps/local-web/src/App.tsx`](apps/local-web/src/App.tsx) | 新增详情视图组件、翻译按钮、Settings 配置区 |

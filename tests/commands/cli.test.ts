@@ -9,14 +9,14 @@ import {
 } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { getDefaultConfig } from '../../src/lib/config.js';
-import { getSourceCacheDir } from '../../src/lib/cache.js';
-import { createCliContext } from '../../src/cli/context.js';
+import { getDefaultConfig } from '@suit-skills/core';
+import { getSourceCacheDir } from '@suit-skills/core';
+import { createCliContext } from '../../apps/cli/src/cli/context.js';
 import {
   createProgramForTest,
   runCliUserArgs,
-} from '../../src/cli/run.js';
-import type { SkillMeta } from '../../src/types/index.js';
+} from '../../apps/cli/src/cli/run.js';
+import type { SkillMeta } from '@suit-skills/core';
 
 function writeSkill(
   cacheRoot: string,

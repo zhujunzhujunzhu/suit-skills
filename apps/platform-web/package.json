@@ -1,0 +1,9 @@
+{
+  "name": "@suit-skills/app-platform-web",
+  "version": "0.0.15",
+  "type": "module",
+  "private": true,
+  "description": "Suit Skills private platform Web application placeholder.",
+  "scripts": {}
+}
+
