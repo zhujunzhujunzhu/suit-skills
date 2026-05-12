@@ -166,6 +166,8 @@ export function Badge({ status }: { status: string }) {
 }
 
 export function SkillRow({ skill, onOpen, highlightTerms = [] }: { skill: Skill; onOpen: () => void; highlightTerms?: string[] }) {
+  const updatedDaysAgo = Math.floor((Date.now() - skill.updatedAtValue) / (1000 * 60 * 60 * 24));
+  const updatedLabel = updatedDaysAgo === 0 ? '今天' : updatedDaysAgo === 1 ? '昨天' : `${updatedDaysAgo}天前`;
   return (
     <button className="skill-row" type="button" onClick={onOpen}>
       <span className="skill-icon">{skill.name.slice(0, 2).toUpperCase()}</span>
@@ -176,6 +178,7 @@ export function SkillRow({ skill, onOpen, highlightTerms = [] }: { skill: Skill;
       </span>
       <span className="skill-meta"><small>作者</small><strong><HighlightText text={skill.author} terms={highlightTerms} /></strong></span>
       <span className="skill-meta"><small>来源</small><strong><HighlightText text={skill.source} terms={highlightTerms} /></strong></span>
+      <span className="skill-meta"><small>更新</small><strong>{updatedLabel}</strong></span>
       <span className="skill-metrics"><strong>{skill.rating.toFixed(1)}</strong><small>{skill.reviews} 评价 / {formatCompact(skill.installs)} 安装</small></span>
       <span className="open-link">查看详情</span>
     </button>
