@@ -1,6 +1,7 @@
 import { useDeferredValue, useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import type { SourceItem } from '../api/client';
+import { useLocalStorage } from '../hooks';
 import {
   averageRating,
   formatCompact,
@@ -13,33 +14,12 @@ import {
 
 type SortMode = 'install' | 'rating' | 'updated';
 
-const STORAGE_KEY = 'market-filter-prefs';
+type FilterPrefs = { source: string; sort: SortMode };
 
-function loadFilterPrefs(): { source: string; sort: SortMode } {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw) as { source?: string; sort?: string };
-      return {
-        source: typeof parsed.source === 'string' ? parsed.source : '全部来源',
-        sort: (parsed.sort === 'install' || parsed.sort === 'rating' || parsed.sort === 'updated')
-          ? parsed.sort
-          : 'install',
-      };
-    }
-  } catch {
-    // ignore
-  }
-  return { source: '全部来源', sort: 'install' };
-}
-
-function saveFilterPrefs(source: string, sort: SortMode) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ source, sort }));
-  } catch {
-    // ignore
-  }
-}
+const DEFAULT_FILTER_PREFS: FilterPrefs = {
+  source: '全部来源',
+  sort: 'install',
+};
 
 export function MarketPage({
   skills,
@@ -56,8 +36,10 @@ export function MarketPage({
 }) {
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('全部');
-  const [source, setSource] = useState(() => loadFilterPrefs().source);
-  const [sort, setSort] = useState<SortMode>(() => loadFilterPrefs().sort);
+  const [filterPrefs, setFilterPrefs] = useLocalStorage<FilterPrefs>(
+    'market-filter-prefs',
+    DEFAULT_FILTER_PREFS,
+  );
   const deferredQuery = useDeferredValue(query);
   const listRef = useRef<HTMLDivElement | null>(null);
 
@@ -116,18 +98,18 @@ export function MarketPage({
       .filter(({ skill, searchableText }) => {
         const matchesQuery = !terms.length || terms.every((term) => searchableText.includes(term));
         const matchesCategory = category === '全部' || categoryGroupFor(skill.category) === category;
-        const matchesSource = source === '全部来源' || skill.source === source;
+        const matchesSource = filterPrefs.source === '全部来源' || skill.source === filterPrefs.source;
         const enabledSource =
           !configuredLabels.has(skill.source) || enabledLabels.has(skill.source);
         return matchesQuery && matchesCategory && matchesSource && enabledSource;
       })
       .sort((a, b) => {
-        if (sort === 'rating') return b.skill.rating - a.skill.rating;
-        if (sort === 'updated') return b.skill.updatedAtValue - a.skill.updatedAtValue;
+        if (filterPrefs.sort === 'rating') return b.skill.rating - a.skill.rating;
+        if (filterPrefs.sort === 'updated') return b.skill.updatedAtValue - a.skill.updatedAtValue;
         return b.skill.installs - a.skill.installs;
       })
       .map(({ skill }) => skill);
-  }, [category, deferredQuery, indexedSkills, sort, source, sourceConfig]);
+  }, [category, deferredQuery, indexedSkills, filterPrefs.sort, filterPrefs.source, sourceConfig]);
 
   const highlightTerms = useMemo(
     () => normalizeSearchText(deferredQuery).split(' ').filter(Boolean),
@@ -140,7 +122,7 @@ export function MarketPage({
     rating: averageRating(filteredSkills),
   }), [filteredSkills]);
 
-  const hasActiveFilters = Boolean(query.trim()) || category !== '全部' || source !== '全部来源';
+  const hasActiveFilters = Boolean(query.trim()) || category !== '全部' || filterPrefs.source !== '全部来源';
 
   const rowVirtualizer = useVirtualizer({
     count: filteredSkills.length,
@@ -156,8 +138,7 @@ export function MarketPage({
   function resetFilters() {
     setQuery('');
     setCategory('全部');
-    setSource('全部来源');
-    saveFilterPrefs('全部来源', sort);
+    setFilterPrefs(DEFAULT_FILTER_PREFS);
     scrollListToTop();
   }
 
@@ -172,14 +153,12 @@ export function MarketPage({
   }
 
   function handleSourceChange(value: string) {
-    setSource(value);
-    saveFilterPrefs(value, sort);
+    setFilterPrefs({ ...filterPrefs, source: value });
     scrollListToTop();
   }
 
   function handleSortChange(value: SortMode) {
-    setSort(value);
-    saveFilterPrefs(source, value);
+    setFilterPrefs({ ...filterPrefs, sort: value });
     scrollListToTop();
   }
 
@@ -221,10 +200,10 @@ export function MarketPage({
         <select value={category} onChange={(event) => handleFilterChange(setCategory, event.target.value)}>
           {categoryOptions.map((item) => <option key={item} value={item}>{item}</option>)}
         </select>
-        <select value={source} onChange={(event) => handleSourceChange(event.target.value)}>
+        <select value={filterPrefs.source} onChange={(event) => handleSourceChange(event.target.value)}>
           {sourceOptions.map((item) => <option key={item} value={item}>{item}</option>)}
         </select>
-        <select value={sort} onChange={(event) => handleSortChange(event.target.value as SortMode)}>
+        <select value={filterPrefs.sort} onChange={(event) => handleSortChange(event.target.value as SortMode)}>
           <option value="install">安装量优先</option>
           <option value="rating">评分优先</option>
           <option value="updated">最近更新</option>
