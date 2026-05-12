@@ -13,9 +13,9 @@ function useColorFor(stream: NodeJS.WriteStream): boolean {
   return stream.isTTY === true;
 }
 
-/** 成功消息：前缀 U+2714，TTY 下绿色 */
+/** Print a success message with color when the terminal supports it. */
 export function success(message: string): void {
-  const line = `\u2714 ${message}`;
+  const line = `[OK] ${message}`;
   if (useColorFor(process.stdout)) {
     console.log(`${GREEN}${line}${RESET}`);
     return;
@@ -23,9 +23,9 @@ export function success(message: string): void {
   console.log(line);
 }
 
-/** 警告消息：前缀 U+26A0，TTY 下黄色 */
+/** Print a warning message with color when the terminal supports it. */
 export function warn(message: string): void {
-  const line = `\u26A0 ${message}`;
+  const line = `[WARN] ${message}`;
   if (useColorFor(process.stderr)) {
     console.error(`${YELLOW}${line}${RESET}`);
     return;
@@ -33,9 +33,9 @@ export function warn(message: string): void {
   console.error(line);
 }
 
-/** 错误消息：前缀 U+2716，TTY 下红色，写入 stderr */
+/** Print an error message with color when the terminal supports it. */
 export function error(message: string): void {
-  const line = `\u2716 ${message}`;
+  const line = `[ERROR] ${message}`;
   if (useColorFor(process.stderr)) {
     console.error(`${RED}${line}${RESET}`);
     return;

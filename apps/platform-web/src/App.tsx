@@ -23,18 +23,18 @@ import {
   navItems,
   ROLE_STORAGE_KEY,
   readStoredRole,
-  ReviewCenter,
-  SkillDirectoryPage,
+  SourcesPage,
   skillFromApi,
   skills,
-  SourcesPage,
-  UploadPage,
   type Role,
   type Skill,
   type View,
 } from './components';
 
 const SkillDetailPage = lazy(() => import('./components/SkillDetailPage').then(m => ({ default: m.SkillDetailPage })));
+const SkillDirectoryPage = lazy(() => import('./components/SkillDetailPage').then(m => ({ default: m.SkillDirectoryPage })));
+const UploadPage = lazy(() => import('./components/UploadPage').then(m => ({ default: m.UploadPage })));
+const ReviewCenter = lazy(() => import('./components/ReviewCenter').then(m => ({ default: m.ReviewCenter })));
 
 type SkillSourceView = 'market' | 'mine';
 
@@ -168,11 +168,13 @@ function App() {
     }
 
     return (
-      <SkillDirectoryPage
-        skill={selectedSkill}
-        onBack={() => requestNavigate(`/skills/${encodeURIComponent(selectedSkill.id)}`, { state: { from } })}
-        onDirtyChange={setDirectoryDirty}
-      />
+      <Suspense fallback={<div className="page"><section className="empty-state"><p>加载中...</p></section></div>}>
+        <SkillDirectoryPage
+          skill={selectedSkill}
+          onBack={() => requestNavigate(`/skills/${encodeURIComponent(selectedSkill.id)}`, { state: { from } })}
+          onDirtyChange={setDirectoryDirty}
+        />
+      </Suspense>
     );
   }
 
@@ -264,24 +266,26 @@ function App() {
           <Route
             path="/upload"
             element={
-              <UploadPage
-                sourceConfig={sourceConfig}
-                onUploaded={(skill) =>
-                  setMarketSkills((current) => [
-                    skill,
-                    ...current.filter((item) => item.id !== skill.id),
-                  ])
-                }
-                onOpenMine={() => requestNavigate('/mine')}
-                onOpenSkill={(skillId) => openSkill(skillId, 'mine')}
-              />
+              <Suspense fallback={<div className="page"><section className="empty-state"><p>加载中...</p></section></div>}>
+                <UploadPage
+                  sourceConfig={sourceConfig}
+                  onUploaded={(skill) =>
+                    setMarketSkills((current) => [
+                      skill,
+                      ...current.filter((item) => item.id !== skill.id),
+                    ])
+                  }
+                  onOpenMine={() => requestNavigate('/mine')}
+                  onOpenSkill={(skillId) => openSkill(skillId, 'mine')}
+                />
+              </Suspense>
             }
           />
           <Route
             path="/mine"
             element={<MySkillsPage fallbackSkills={marketSkills} onOpenSkill={(skillId) => openSkill(skillId, 'mine')} />}
           />
-          <Route path="/reviews" element={routeAdmin(<ReviewCenter />)} />
+          <Route path="/reviews" element={routeAdmin(<Suspense fallback={<div className="page"><section className="empty-state"><p>加载中...</p></section></div>}><ReviewCenter /></Suspense>)} />
           <Route
             path="/sources"
             element={routeAdmin(

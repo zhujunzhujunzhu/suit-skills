@@ -25,7 +25,7 @@ describe('output', () => {
     });
     success('ok');
     const t = lines[0] ?? '';
-    expect(t).toContain('\u2714');
+    expect(t).toContain('[OK] ok');
     expect(t).toContain('\x1b[32m');
   });
 
@@ -36,7 +36,7 @@ describe('output', () => {
     });
     warn('careful');
     const t = lines[0] ?? '';
-    expect(t).toContain('\u26A0');
+    expect(t).toContain('[WARN] careful');
     expect(t).toContain('\x1b[33m');
   });
 
@@ -47,7 +47,7 @@ describe('output', () => {
     });
     error('bad');
     const t = lines[0] ?? '';
-    expect(t).toContain('\u2716');
+    expect(t).toContain('[ERROR] bad');
     expect(t).toContain('\x1b[31m');
   });
 });

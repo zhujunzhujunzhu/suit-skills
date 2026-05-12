@@ -32,12 +32,17 @@
     "build:all": "npm run build",
     "sync:version": "node scripts/sync-version.mjs",
     "build:web": "npm --workspace @suit-skills/app-local-web run build",
+    "build:platform": "npm --workspace @suit-skills/server run build && npm --workspace @suit-skills/app-platform-web run build",
+    "build:platform-web": "npm --workspace @suit-skills/app-platform-web run build",
     "build:sidecar": "node scripts/build-sidecar.mjs",
     "build:desktop": "npm run build:all && npm run build:sidecar && npm run tauri:build",
     "prepack": "npm run build:all",
     "dev": "tsx apps/cli/src/index.ts",
     "dev:web": "node scripts/dev-web.mjs",
     "dev:web:vite": "npm --workspace @suit-skills/app-local-web run dev",
+    "dev:platform-web": "node scripts/dev-platform-web.mjs",
+    "dev:platform-web:vite": "npm --workspace @suit-skills/app-platform-web run dev",
+    "start:platform-api": "npm --workspace @suit-skills/server run start",
     "dev:tauri": "npm --workspace @suit-skills/app-desktop run tauri:dev",
     "tauri": "npm --workspace @suit-skills/app-desktop run tauri --",
     "tauri:dev": "npm --workspace @suit-skills/app-desktop run tauri:dev",
@@ -45,6 +50,7 @@
     "start": "node apps/cli/dist/index.js",
     "clean": "rm -rf dist",
     "typecheck": "npm run typecheck --workspaces --if-present",
+    "typecheck:platform": "npm --workspace @suit-skills/server run typecheck && npm --workspace @suit-skills/app-platform-web run typecheck",
     "test": "npm run build:workspaces && npm run test:workspaces && vitest run",
     "test:root": "vitest run",
     "test:workspaces": "npm run test --workspaces --if-present",
@@ -96,23 +102,29 @@
     "node": ">=18"
   },
   "dependencies": {
-    "@suit-skills/core": "0.0.15",
     "@inquirer/core": "^11.1.8",
     "@inquirer/prompts": "^8.4.1",
+    "@suit-skills/core": "0.0.15",
+    "@tanstack/react-virtual": "^3.13.24",
     "@tauri-apps/api": "^2.10.1",
     "@tauri-apps/plugin-dialog": "^2.7.0",
     "commander": "^14.0.3",
     "i18next": "^26.0.5",
     "mdast-util-to-string": "^4.0.0",
+    "nodemailer": "^8.0.7",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
     "react-i18next": "^17.0.4",
     "react-markdown": "^10.1.0",
+    "react-router-dom": "^7.14.2",
     "remark-breaks": "^4.0.0",
     "remark-frontmatter": "^5.0.0",
     "remark-gfm": "^4.0.1",
     "remark-parse": "^11.0.0",
     "unified": "^11.0.5",
     "unist-util-visit": "^5.1.0"
-  }
+  },
+  "bundleDependencies": [
+    "@suit-skills/core"
+  ]
 }

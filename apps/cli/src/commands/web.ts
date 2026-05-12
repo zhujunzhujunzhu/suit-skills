@@ -52,7 +52,9 @@ export function registerWeb(program: Command, ctx: CliContext): void {
         success('Suit Skills Web started');
         console.log(`Local: ${started.url}`);
         if (started.attempts !== undefined && started.attempts > 1) {
-          console.log(`(端口 ${started.requestedPort} 被占用，已自动尝试到 ${started.port})`);
+          console.log(
+            `(Port ${started.requestedPort} is busy; using ${started.port})`,
+          );
         }
         if (opts.open !== false) {
           openBrowser(started.url);

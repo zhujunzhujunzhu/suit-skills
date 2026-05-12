@@ -1,9 +1,6 @@
 export { LoginPage } from './LoginPage';
 export { MarketPage } from './MarketPage';
-export { SkillDirectoryPage } from './SkillDetailPage';
-export { UploadPage } from './UploadPage';
 export { MySkillsPage } from './MySkillsPage';
-export { ReviewCenter } from './ReviewCenter';
 export { SourcesPage } from './SourcesPage';
 export {
   adminOnlyViews,

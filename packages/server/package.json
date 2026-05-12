@@ -8,10 +8,13 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@suit-skills/core": "0.0.15"
+    "@suit-skills/core": "0.0.15",
+    "@types/adm-zip": "^0.5.8",
+    "adm-zip": "^0.5.17",
+    "mysql2": "^3.22.3"
   }
 }
-
