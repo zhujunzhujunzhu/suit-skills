@@ -2,6 +2,7 @@
 import { parseSkillPackage, submitSkillPackageForReview, updateSkillPackageMetadata, uploadSkill, type PackageUploadRecord, type SkillInput, type SkillItem, type SourceItem } from '../api/client';
 import type { UploadFileEntry } from '../uploadPackaging';
 import { Badge, PageHeader, skillFromApi, skillInputFromForm, type Skill } from './shared';
+import { EmptyState } from './EmptyState';
 
 type DirectoryInputElement = HTMLInputElement & { webkitdirectory: boolean; directory: boolean };
 type FileWithRelativePath = File & { webkitRelativePath?: string };
@@ -138,17 +139,29 @@ export function UploadPage({
             onSelect={(entries) => { void parseEntries(entries); }}
           />
           {message ? (
-            <div className={status === 'error' ? 'empty-state danger-text' : 'empty-state'}>
-              {message}
-              {status === 'success' && uploadedSkill ? (
-                <div className="success-actions">
-                  <button type="button" onClick={onOpenMine}>查看我的技能包</button>
-                  <button className="primary" type="button" onClick={() => onOpenSkill(uploadedSkill.id)}>
-                    打开技能详情
-                  </button>
-                </div>
-              ) : null}
-            </div>
+            status === 'error' ? (
+              <EmptyState
+                type="error"
+                title="上传失败"
+                description={message}
+                ariaLabel="上传出错"
+              />
+            ) : status === 'success' ? (
+              <EmptyState
+                type="no-data"
+                title="上传成功"
+                description={message}
+                action={uploadedSkill ? {
+                  label: '打开技能详情',
+                  onClick: () => onOpenSkill(uploadedSkill.id),
+                } : undefined}
+                ariaLabel="上传完成"
+              />
+            ) : (
+              <div className="empty-state">
+                {message}
+              </div>
+            )
           ) : null}
           <label><span>技能名称</span><input value={form.name} placeholder="frontend-design" onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} /></label>
           <label><span>技能描述</span><textarea value={form.description} placeholder="描述这个技能解决什么问题，适合什么场景。" onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} /></label>
@@ -156,7 +169,7 @@ export function UploadPage({
           <div className="form-grid"><label><span>作者</span><input value={form.author ?? ''} placeholder="Current user" onChange={(event) => setForm((current) => ({ ...current, author: event.target.value }))} /></label><label><span>来源</span><select disabled={!publishableSources.length} value={selectedSource} onChange={(event) => setForm((current) => ({ ...current, source: event.target.value }))}>{publishableSources.length ? publishableSources.map((source) => <option key={source.name} value={source.name}>{source.label || source.name}</option>) : <option value="">暂无可发布源</option>}</select></label></div>
           <label><span>标签</span><input value={form.tags?.join(', ') ?? ''} placeholder="React, UI, Dashboard" onChange={(event) => setForm((current) => ({ ...current, tags: event.target.value.split(',').map((tag) => tag.trim()).filter(Boolean) }))} /></label>
         </form>
-        <section className="check-card"><h2>上传校验</h2>{upload ? <><div className="check-row"><span>文件</span><strong>{upload.fileName}</strong></div><div className="check-row"><span>状态</span><Badge status={uploadStatusLabel(upload.status)} /></div>{upload.validation.map((item) => <div className="check-row" key={item.code}><span>{item.message}</span><Badge status={validationStatusLabel(item.severity)} /></div>)}</> : <div className="empty-state">选择技能包后会显示 SKILL.md 解析结果、结构校验和提交状态。</div>}<div className="upload-note"><strong>发布流程</strong><p>提交后记录会进入审核队列。管理员通过后，服务端会同步到市场。</p></div></section>
+        <section className="check-card"><h2>上传校验</h2>{upload ? <><div className="check-row"><span>文件</span><strong>{upload.fileName}</strong></div><div className="check-row"><span>状态</span><Badge status={uploadStatusLabel(upload.status)} /></div>{upload.validation.map((item) => <div className="check-row" key={item.code}><span>{item.message}</span><Badge status={validationStatusLabel(item.severity)} /></div>)}</> : <EmptyState type="no-data" title="选择技能包" description="选择技能包后会显示 SKILL.md 解析结果、结构校验和提交状态。" ariaLabel="等待选择技能包" />}<div className="upload-note"><strong>发布流程</strong><p>提交后记录会进入审核队列。管理员通过后，服务端会同步到市场。</p></div></section>
       </section>
     </div>
   );

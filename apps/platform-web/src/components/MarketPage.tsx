@@ -11,6 +11,7 @@ import {
   sum,
   type Skill,
 } from './shared';
+import { EmptyState } from './EmptyState';
 
 type SortMode = 'install' | 'rating' | 'updated';
 
@@ -297,11 +298,16 @@ export function MarketPage({
               })}
             </div>
           ) : (
-            <div className="empty-state market-empty">
-              <strong>没有匹配的技能</strong>
-              <span>换一个关键词，或重置筛选后再查看。</span>
-              {hasActiveFilters ? <button className="primary" type="button" onClick={resetFilters}>重置筛选</button> : null}
-            </div>
+            <EmptyState
+              type="no-results"
+              title="没有匹配的技能"
+              description="换一个关键词，或重置筛选后再查看。"
+              action={hasActiveFilters ? {
+                label: '重置筛选',
+                onClick: resetFilters,
+              } : undefined}
+              ariaLabel="没有找到匹配的技能"
+            />
           )}
         </div>
       </section>

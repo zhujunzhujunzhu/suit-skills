@@ -1,3 +1,4 @@
+export { EmptyState, type EmptyStateProps, type EmptyStateType } from './EmptyState';
 export { LoginPage } from './LoginPage';
 export { MarketPage } from './MarketPage';
 export { MySkillsPage } from './MySkillsPage';

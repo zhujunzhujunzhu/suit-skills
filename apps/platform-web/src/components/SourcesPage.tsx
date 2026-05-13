@@ -1,6 +1,7 @@
 import { type FormEvent, useState } from 'react';
 import { addSource, listSources, removeSource, restoreBuiltinSources, updateSource, type SourceItem } from '../api/client';
 import { Badge, PageHeader } from './shared';
+import { EmptyState } from './EmptyState';
 
 export function SourcesPage({
   sources,
@@ -143,7 +144,7 @@ export function SourcesPage({
           <label className="check-field"><input type="checkbox" checked={form.publishEnabled} onChange={(event) => setForm((current) => ({ ...current, publishEnabled: event.target.checked }))} /><span>作为审核通过后的发布目标</span></label>
           <label><span>描述</span><textarea value={form.description} placeholder="说明这个源适合哪些技能包。" onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} /></label>
           <button className="primary" type="submit" disabled={status === 'saving'}>{status === 'saving' ? '保存中...' : '添加源'}</button>
-          {status === 'error' ? <div className="empty-state">源配置保存失败，请检查名称是否重复或后端是否可用。</div> : null}
+          {status === 'error' ? <EmptyState type="error" title="保存失败" description="源配置保存失败，请检查名称是否重复或后端是否可用。" ariaLabel="源配置错误" /> : null}
         </form>
         <section className="source-list-panel">
           {sources.map((source) => {

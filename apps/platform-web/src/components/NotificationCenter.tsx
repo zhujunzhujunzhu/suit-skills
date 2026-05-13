@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { PageHeader } from './shared';
 import { NotificationItem } from './NotificationItem';
+import { EmptyState } from './EmptyState';
 import type { Notification } from './notificationTypes';
 import { getNotifications, markAsRead, deleteNotification, getUnreadCount } from './notificationService';
 
@@ -104,22 +105,22 @@ export function NotificationCenter() {
 
       <section className="notification-list" id="notification-list" role="region" aria-live="polite" aria-label="通知列表">
         {loading ? (
-          <div className="empty-state" role="status" aria-live="polite">
-            <p>加载中...</p>
-          </div>
+          <EmptyState
+            type="loading"
+            title="加载中..."
+            ariaLabel="正在加载通知"
+          />
         ) : paginatedNotifications.length === 0 ? (
-          <div className="empty-state" role="status">
-            <strong>
-              {notifications.length === 0
-                ? '暂无通知'
-                : `${category}分类下暂无通知`}
-            </strong>
-            <span>
-              {notifications.length === 0
+          <EmptyState
+            type={notifications.length === 0 ? 'no-data' : 'no-results'}
+            title={notifications.length === 0 ? '暂无通知' : `${category}分类下暂无通知`}
+            description={
+              notifications.length === 0
                 ? '当有新的技能更新或系统消息时，会在这里显示。'
-                : '切换分类查看其他通知。'}
-            </span>
-          </div>
+                : '切换分类查看其他通知。'
+            }
+            ariaLabel={notifications.length === 0 ? '没有通知' : `${category}分类下没有通知`}
+          />
         ) : (
           <>
             {paginatedNotifications.map((notification) => (

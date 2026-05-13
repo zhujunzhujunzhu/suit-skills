@@ -5,6 +5,7 @@ import {
   type PackageUploadRecord,
 } from '../api/client';
 import { Badge, PageHeader, formatDateTime, skillFromApi, SkillRow, type Skill } from './shared';
+import { EmptyState } from './EmptyState';
 
 export function MySkillsPage({ fallbackSkills, onOpenSkill }: { fallbackSkills: Skill[]; onOpenSkill: (skillId: string) => void }) {
   const [mine, setMine] = useState<Skill[]>(fallbackSkills.filter((skill) => skill.source === '用户上传'));
@@ -51,10 +52,12 @@ export function MySkillsPage({ fallbackSkills, onOpenSkill }: { fallbackSkills: 
           <UploadRecordRow key={upload.id} upload={upload} />
         ))}
         {!hasItems ? (
-          <div className="empty-state market-empty">
-            <strong>{loading ? '正在读取我的技能包' : '还没有技能包记录'}</strong>
-            <span>{loading ? '同步上传、审核和发布状态中。' : '上传或创建技能包后，会在这里显示审核和发布进度。'}</span>
-          </div>
+          <EmptyState
+            type={loading ? 'loading' : 'no-data'}
+            title={loading ? '正在读取我的技能包' : '还没有技能包记录'}
+            description={loading ? '同步上传、审核和发布状态中。' : '上传或创建技能包后，会在这里显示审核和发布进度。'}
+            ariaLabel={loading ? '加载中' : '没有技能包'}
+          />
         ) : null}
       </section>
     </div>
