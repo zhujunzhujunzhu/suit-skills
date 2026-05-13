@@ -109,7 +109,7 @@ export function MarketPage({
         return b.skill.installs - a.skill.installs;
       })
       .map(({ skill }) => skill);
-  }, [category, deferredQuery, indexedSkills, filterPrefs.sort, filterPrefs.source, sourceConfig]);
+  }, [category, deferredQuery, indexedSkills, filterPrefs]);
 
   const highlightTerms = useMemo(
     () => normalizeSearchText(deferredQuery).split(' ').filter(Boolean),
@@ -122,7 +122,7 @@ export function MarketPage({
     rating: averageRating(filteredSkills),
   }), [filteredSkills]);
 
-  const hasActiveFilters = Boolean(query.trim()) || category !== '全部' || filterPrefs.source !== '全部来源';
+  const hasActiveFilters = useMemo(() => Boolean(query.trim()) || category !== '全部' || filterPrefs.source !== '全部来源', [query, category, filterPrefs.source]);
 
   const rowVirtualizer = useVirtualizer({
     count: filteredSkills.length,
