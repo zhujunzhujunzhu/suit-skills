@@ -37,6 +37,7 @@ export function MarketPage({
 }) {
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('全部');
+  const [showSearchHistory, setShowSearchHistory] = useState(false);
   const [filterPrefs, setFilterPrefs] = useLocalStorage<FilterPrefs>(
     'market-filter-prefs',
     DEFAULT_FILTER_PREFS,
@@ -213,6 +214,22 @@ export function MarketPage({
             </button>
           ) : null}
         </div>
+        {!query && searchHistory.length > 0 && (
+          <div className="search-history-panel" style={{marginTop: "8px", padding: "8px", background: "#f9f9f9", borderRadius: "4px", border: "1px solid #e0e0e0"}} role="region" aria-label="搜索历史">
+            <div style={{display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px"}}>
+              <span style={{fontSize: "12px", fontWeight: "500", color: "#666"}}>🕐 最近搜索</span>
+              <button type="button" onClick={() => setSearchHistory([])} style={{fontSize: "12px", border: "none", background: "none", color: "#0066cc", cursor: "pointer"}} aria-label="清空所有搜索历史">清空全部</button>
+            </div>
+            <div style={{display: "flex", gap: "6px", flexWrap: "wrap"}}>
+              {searchHistory.slice(0, 5).map((item, index) => (
+                <div key={index} style={{display: "flex", alignItems: "center", gap: "4px", padding: "4px 8px", background: "white", borderRadius: "3px", border: "1px solid #ddd", fontSize: "12px"}}>
+                  <button type="button" onClick={() => handleQueryChange(item)} style={{border: "none", background: "none", cursor: "pointer", color: "#0066cc"}} aria-label={`搜索: ${item}`}>{item}</button>
+                  <button type="button" onClick={() => setSearchHistory(searchHistory.filter((_, i) => i !== index))} style={{border: "none", background: "none", cursor: "pointer", color: "#999", padding: "0", fontSize: "10px"}} aria-label={`删除搜索历史: ${item}`}>✕</button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         {hasActiveFilters && (
           <div className="active-filters" style={{display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "8px"}} role="region" aria-label="活跃筛选条件">
             {query.trim() && <span style={{padding: "4px 8px", background: "#f0f0f0", borderRadius: "4px", fontSize: "12px"}} role="status">🔍 {query} <button type="button" onClick={() => handleQueryChange("")} style={{marginLeft: "4px", border: "none", background: "none", cursor: "pointer"}} aria-label={`移除搜索条件: ${query}`}>✕</button></span>}
