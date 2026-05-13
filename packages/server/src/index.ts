@@ -37,6 +37,16 @@ import type {
   GitConfig,
   AuthUser,
   OAuthConfig,
+  FavoriteListResponse,
+  FavoriteRecord,
+  FavoriteStoreData,
+  NotificationListResponse,
+  NotificationRecord,
+  NotificationStoreData,
+  NotificationType,
+  SearchHistoryListResponse,
+  SearchHistoryRecord,
+  SearchHistoryStoreData,
   PackageUploadListResponse,
   PackageUploadRecord,
   PackageUploadStatus,
@@ -66,6 +76,16 @@ export type {
   EvaluationStatus,
   EvaluationStoreData,
   GitConfig,
+  FavoriteListResponse,
+  FavoriteRecord,
+  FavoriteStoreData,
+  NotificationListResponse,
+  NotificationRecord,
+  NotificationStoreData,
+  NotificationType,
+  SearchHistoryListResponse,
+  SearchHistoryRecord,
+  SearchHistoryStoreData,
   PackageUploadListResponse,
   PackageUploadRecord,
   PackageUploadStatus,
@@ -136,6 +156,13 @@ const DEFAULT_UPLOADS_FILE = resolve(
   '..',
   'data',
   'uploads.json',
+);
+
+const DEFAULT_NOTIFICATIONS_FILE = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  '..',
+  'data',
+  'notifications.json',
 );
 
 const DEFAULT_UPLOAD_DIR = resolve(
@@ -250,6 +277,365 @@ class EvaluationStore {
 
   private async updateData(
     updater: (data: EvaluationStoreData) => EvaluationStoreData,
+  ): Promise<void> {
+    await this.document.write(updater(await this.read()));
+  }
+}
+
+class NotificationStore {
+  constructor(
+    private readonly document: JsonDocumentStore<NotificationStoreData>,
+  ) {}
+
+  async list(params: {
+    userId: string;
+    page: number;
+    pageSize: number;
+    type?: NotificationType;
+    unreadOnly?: boolean;
+  }): Promise<NotificationListResponse> {
+    const data = await this.read();
+    let items = data.notifications.filter((item) => item.userId === params.userId);
+
+    if (params.type) {
+      items = items.filter((item) => item.type === params.type);
+    }
+
+    if (params.unreadOnly) {
+      items = items.filter((item) => !item.isRead);
+    }
+
+    items = [...items].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    const total = items.length;
+    const offset = (params.page - 1) * params.pageSize;
+
+    return {
+      data: items.slice(offset, offset + params.pageSize),
+      total,
+      page: params.page,
+      pageSize: params.pageSize,
+      unreadCount: data.notifications.filter(
+        (item) => item.userId === params.userId && !item.isRead,
+      ).length,
+    };
+  }
+
+  async get(id: string): Promise<NotificationRecord | null> {
+    const data = await this.read();
+    return data.notifications.find((item) => item.id === id) ?? null;
+  }
+
+  async create(input: unknown): Promise<NotificationRecord> {
+    const parsed = parseNotificationInput(input);
+    const now = new Date().toISOString();
+    const record: NotificationRecord = {
+      id: randomUUID(),
+      ...parsed,
+      isRead: false,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    await this.updateData((data) => ({
+      ...data,
+      notifications: [record, ...data.notifications],
+    }));
+
+    return record;
+  }
+
+  async updateRead(id: string, isRead: boolean): Promise<NotificationRecord | null> {
+    let updated: NotificationRecord | null = null;
+
+    await this.updateData((data) => {
+      const notifications = data.notifications.map((item) => {
+        if (item.id !== id) return item;
+        updated = {
+          ...item,
+          isRead,
+          updatedAt: new Date().toISOString(),
+        };
+        return updated;
+      });
+      return { ...data, notifications };
+    });
+
+    return updated;
+  }
+
+  async batchUpdateRead(ids: string[], isRead: boolean): Promise<number> {
+    const idSet = new Set(ids);
+    let count = 0;
+
+    await this.updateData((data) => {
+      const notifications = data.notifications.map((item) => {
+        if (!idSet.has(item.id)) return item;
+        count++;
+        return {
+          ...item,
+          isRead,
+          updatedAt: new Date().toISOString(),
+        };
+      });
+      return { ...data, notifications };
+    });
+
+    return count;
+  }
+
+  async delete(id: string): Promise<boolean> {
+    let deleted = false;
+
+    await this.updateData((data) => {
+      const notifications = data.notifications.filter((item) => {
+        if (item.id === id) {
+          deleted = true;
+          return false;
+        }
+        return true;
+      });
+      return { ...data, notifications };
+    });
+
+    return deleted;
+  }
+
+  async getUnreadCount(userId: string): Promise<{ unreadCount: number; byType: Record<NotificationType, number> }> {
+    const data = await this.read();
+    const userNotifications = data.notifications.filter(
+      (item) => item.userId === userId && !item.isRead,
+    );
+
+    const byType: Record<NotificationType, number> = {
+      skill_reviewed: 0,
+      skill_status_changed: 0,
+      skill_comment: 0,
+      system: 0,
+    };
+
+    userNotifications.forEach((item) => {
+      byType[item.type]++;
+    });
+
+    return {
+      unreadCount: userNotifications.length,
+      byType,
+    };
+  }
+
+  private async read(): Promise<NotificationStoreData> {
+    try {
+      const parsed = await this.document.read({ version: 1, notifications: [] });
+      if (!Array.isArray(parsed.notifications)) {
+        throw new ApiError(500, 'INVALID_DATA_FILE', 'Notification data is malformed');
+      }
+      return {
+        version: 1,
+        notifications: parsed.notifications.filter(isNotificationRecord),
+      };
+    } catch (error) {
+      if (error instanceof ApiError) throw error;
+      if (error instanceof SyntaxError) {
+        throw new ApiError(500, 'INVALID_DATA_FILE', 'Notification data is not valid JSON');
+      }
+      throw error;
+    }
+  }
+
+  private async updateData(
+    updater: (data: NotificationStoreData) => NotificationStoreData,
+  ): Promise<void> {
+    await this.document.write(updater(await this.read()));
+  }
+}
+
+class FavoriteStore {
+  constructor(
+    private readonly document: JsonDocumentStore<FavoriteStoreData>,
+  ) {}
+
+  async list(params: {
+    userId: string;
+    page: number;
+    pageSize: number;
+  }): Promise<FavoriteListResponse> {
+    const data = await this.read();
+    let items = data.favorites.filter((item) => item.userId === params.userId);
+    items = [...items].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    const total = items.length;
+    const offset = (params.page - 1) * params.pageSize;
+
+    return {
+      items: items.slice(offset, offset + params.pageSize),
+      total,
+    };
+  }
+
+  async get(userId: string, skillId: string): Promise<FavoriteRecord | null> {
+    const data = await this.read();
+    return data.favorites.find((item) => item.userId === userId && item.skillId === skillId) ?? null;
+  }
+
+  async create(userId: string, skillId: string): Promise<FavoriteRecord> {
+    const existing = await this.get(userId, skillId);
+    if (existing) return existing;
+
+    const now = new Date().toISOString();
+    const record: FavoriteRecord = {
+      id: randomUUID(),
+      userId,
+      skillId,
+      createdAt: now,
+    };
+
+    await this.updateData((data) => ({
+      ...data,
+      favorites: [record, ...data.favorites],
+    }));
+
+    return record;
+  }
+
+  async delete(userId: string, skillId: string): Promise<boolean> {
+    let deleted = false;
+
+    await this.updateData((data) => {
+      const favorites = data.favorites.filter((item) => {
+        if (item.userId === userId && item.skillId === skillId) {
+          deleted = true;
+          return false;
+        }
+        return true;
+      });
+      return { ...data, favorites };
+    });
+
+    return deleted;
+  }
+
+  async isFavorited(userId: string, skillId: string): Promise<boolean> {
+    const record = await this.get(userId, skillId);
+    return record !== null;
+  }
+
+  private async read(): Promise<FavoriteStoreData> {
+    try {
+      const parsed = await this.document.read({ version: 1, favorites: [] });
+      if (!Array.isArray(parsed.favorites)) {
+        throw new ApiError(500, 'INVALID_DATA_FILE', 'Favorite data is malformed');
+      }
+      return {
+        version: 1,
+        favorites: parsed.favorites.filter(isFavoriteRecord),
+      };
+    } catch (error) {
+      if (error instanceof ApiError) throw error;
+      if (error instanceof SyntaxError) {
+        throw new ApiError(500, 'INVALID_DATA_FILE', 'Favorite data is not valid JSON');
+      }
+      throw error;
+    }
+  }
+
+  private async updateData(
+    updater: (data: FavoriteStoreData) => FavoriteStoreData,
+  ): Promise<void> {
+    await this.document.write(updater(await this.read()));
+  }
+}
+
+class SearchHistoryStore {
+  constructor(
+    private readonly document: JsonDocumentStore<SearchHistoryStoreData>,
+  ) {}
+
+  async list(params: {
+    userId: string;
+    limit: number;
+  }): Promise<SearchHistoryListResponse> {
+    const data = await this.read();
+    let items = data.searchHistory.filter((item) => item.userId === params.userId);
+    items = [...items].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    const total = items.length;
+
+    return {
+      items: items.slice(0, params.limit),
+      total,
+    };
+  }
+
+  async create(userId: string, query: string): Promise<SearchHistoryRecord> {
+    const now = new Date().toISOString();
+    const record: SearchHistoryRecord = {
+      id: randomUUID(),
+      userId,
+      query: query.trim(),
+      createdAt: now,
+    };
+
+    await this.updateData((data) => ({
+      ...data,
+      searchHistory: [record, ...data.searchHistory],
+    }));
+
+    return record;
+  }
+
+  async delete(id: string): Promise<boolean> {
+    let deleted = false;
+
+    await this.updateData((data) => {
+      const searchHistory = data.searchHistory.filter((item) => {
+        if (item.id === id) {
+          deleted = true;
+          return false;
+        }
+        return true;
+      });
+      return { ...data, searchHistory };
+    });
+
+    return deleted;
+  }
+
+  async clear(userId: string): Promise<number> {
+    let count = 0;
+
+    await this.updateData((data) => {
+      const searchHistory = data.searchHistory.filter((item) => {
+        if (item.userId === userId) {
+          count++;
+          return false;
+        }
+        return true;
+      });
+      return { ...data, searchHistory };
+    });
+
+    return count;
+  }
+
+  private async read(): Promise<SearchHistoryStoreData> {
+    try {
+      const parsed = await this.document.read({ version: 1, searchHistory: [] });
+      if (!Array.isArray(parsed.searchHistory)) {
+        throw new ApiError(500, 'INVALID_DATA_FILE', 'Search history data is malformed');
+      }
+      return {
+        version: 1,
+        searchHistory: parsed.searchHistory.filter(isSearchHistoryRecord),
+      };
+    } catch (error) {
+      if (error instanceof ApiError) throw error;
+      if (error instanceof SyntaxError) {
+        throw new ApiError(500, 'INVALID_DATA_FILE', 'Search history data is not valid JSON');
+      }
+      throw error;
+    }
+  }
+
+  private async updateData(
+    updater: (data: SearchHistoryStoreData) => SearchHistoryStoreData,
   ): Promise<void> {
     await this.document.write(updater(await this.read()));
   }
@@ -1655,6 +2041,9 @@ export function createPlatformApiServer(config = loadConfig()): ReturnType<typeo
     new JsonDocumentStore(db, 'uploads'),
     config.uploadDir,
   );
+  const notificationStore = new NotificationStore(new JsonDocumentStore(db, 'notifications'));
+  const favoriteStore = new FavoriteStore(new JsonDocumentStore(db, 'favorites'));
+  const searchHistoryStore = new SearchHistoryStore(new JsonDocumentStore(db, 'search-history'));
 
   const server = createServer((req, res) => {
     void handleRequest(
@@ -1668,6 +2057,9 @@ export function createPlatformApiServer(config = loadConfig()): ReturnType<typeo
       gitConfigStore,
       sourceStore,
       uploadStore,
+      notificationStore,
+      favoriteStore,
+      searchHistoryStore,
     );
   });
   server.once('close', () => {
@@ -1701,6 +2093,9 @@ async function handleRequest(
   gitConfigStore: GitConfigStore,
   sourceStore: SourceStore,
   uploadStore: PackageUploadStore,
+  notificationStore: NotificationStore,
+  favoriteStore: FavoriteStore,
+  searchHistoryStore: SearchHistoryStore,
 ): Promise<void> {
   applyCors(req, res, config);
 
@@ -1998,6 +2393,189 @@ async function handleRequest(
         return;
       }
       sendJson(res, 200, record);
+      return;
+    }
+
+    if (req.method === 'GET' && pathname === '/api/notifications') {
+      const user = readSessionUser(req, config.auth);
+      if (!user) {
+        sendJson(res, 401, errorBody('UNAUTHENTICATED', 'Not logged in'));
+        return;
+      }
+      const params = parseNotificationListQuery(url, user.id);
+      const response = await notificationStore.list(params);
+      sendJson(res, 200, response);
+      return;
+    }
+
+    const notificationMatch = pathname.match(/^\/api\/notifications\/([^/]+)$/);
+    if (req.method === 'GET' && notificationMatch) {
+      const record = await notificationStore.get(decodeURIComponent(notificationMatch[1]!));
+      if (!record) {
+        sendJson(res, 404, errorBody('NOT_FOUND', 'Notification not found'));
+        return;
+      }
+      sendJson(res, 200, record);
+      return;
+    }
+
+    const readMatch = pathname.match(/^\/api\/notifications\/([^/]+)\/read$/);
+    if (req.method === 'PUT' && readMatch) {
+      const body = await readJsonBody(req);
+      const isRead = typeof body === 'object' && body !== null && 'isRead' in body
+        ? Boolean(body.isRead)
+        : true;
+      const record = await notificationStore.updateRead(
+        decodeURIComponent(readMatch[1]!),
+        isRead,
+      );
+      if (!record) {
+        sendJson(res, 404, errorBody('NOT_FOUND', 'Notification not found'));
+        return;
+      }
+      sendJson(res, 200, record);
+      return;
+    }
+
+    if (req.method === 'PUT' && pathname === '/api/notifications/batch/read') {
+      const body = await readJsonBody(req);
+      if (!isPlainObject(body)) {
+        throw new ApiError(400, 'INVALID_BODY', 'Request body must be a JSON object');
+      }
+      const ids = Array.isArray(body.ids) ? body.ids.filter((id): id is string => typeof id === 'string') : [];
+      const isRead = typeof body.isRead === 'boolean' ? body.isRead : true;
+      const count = await notificationStore.batchUpdateRead(ids, isRead);
+      sendJson(res, 200, { count });
+      return;
+    }
+
+    if (req.method === 'DELETE' && notificationMatch) {
+      const deleted = await notificationStore.delete(decodeURIComponent(notificationMatch[1]!));
+      if (!deleted) {
+        sendJson(res, 404, errorBody('NOT_FOUND', 'Notification not found'));
+        return;
+      }
+      sendJson(res, 200, { ok: true });
+      return;
+    }
+
+    if (req.method === 'GET' && pathname === '/api/notifications/unread-count') {
+      const user = readSessionUser(req, config.auth);
+      if (!user) {
+        sendJson(res, 401, errorBody('UNAUTHENTICATED', 'Not logged in'));
+        return;
+      }
+      const result = await notificationStore.getUnreadCount(user.id);
+      sendJson(res, 200, result);
+      return;
+    }
+
+    if (req.method === 'GET' && pathname === '/api/favorites') {
+      const user = readSessionUser(req, config.auth);
+      if (!user) {
+        sendJson(res, 401, errorBody('UNAUTHENTICATED', 'Not logged in'));
+        return;
+      }
+      const params = parseFavoriteListQuery(url, user.id);
+      const response = await favoriteStore.list(params);
+      sendJson(res, 200, response);
+      return;
+    }
+
+    const favoriteMatch = pathname.match(/^\/api\/favorites\/([^/]+)$/);
+    if (req.method === 'POST' && favoriteMatch) {
+      const user = readSessionUser(req, config.auth);
+      if (!user) {
+        sendJson(res, 401, errorBody('UNAUTHENTICATED', 'Not logged in'));
+        return;
+      }
+      const skillId = decodeURIComponent(favoriteMatch[1]!);
+      const record = await favoriteStore.create(user.id, skillId);
+      sendJson(res, 201, record);
+      return;
+    }
+
+    if (req.method === 'DELETE' && favoriteMatch) {
+      const user = readSessionUser(req, config.auth);
+      if (!user) {
+        sendJson(res, 401, errorBody('UNAUTHENTICATED', 'Not logged in'));
+        return;
+      }
+      const skillId = decodeURIComponent(favoriteMatch[1]!);
+      const deleted = await favoriteStore.delete(user.id, skillId);
+      if (!deleted) {
+        sendJson(res, 404, errorBody('NOT_FOUND', 'Favorite not found'));
+        return;
+      }
+      sendJson(res, 200, { ok: true });
+      return;
+    }
+
+    const checkFavoriteMatch = pathname.match(/^\/api\/favorites\/check\/([^/]+)$/);
+    if (req.method === 'GET' && checkFavoriteMatch) {
+      const user = readSessionUser(req, config.auth);
+      if (!user) {
+        sendJson(res, 401, errorBody('UNAUTHENTICATED', 'Not logged in'));
+        return;
+      }
+      const skillId = decodeURIComponent(checkFavoriteMatch[1]!);
+      const isFavorited = await favoriteStore.isFavorited(user.id, skillId);
+      sendJson(res, 200, { isFavorited });
+      return;
+    }
+
+    if (req.method === 'GET' && pathname === '/api/search-history') {
+      const user = readSessionUser(req, config.auth);
+      if (!user) {
+        sendJson(res, 401, errorBody('UNAUTHENTICATED', 'Not logged in'));
+        return;
+      }
+      const params = parseSearchHistoryListQuery(url, user.id);
+      const response = await searchHistoryStore.list(params);
+      sendJson(res, 200, response);
+      return;
+    }
+
+    if (req.method === 'POST' && pathname === '/api/search-history') {
+      const user = readSessionUser(req, config.auth);
+      if (!user) {
+        sendJson(res, 401, errorBody('UNAUTHENTICATED', 'Not logged in'));
+        return;
+      }
+      const body = await readJsonBody(req);
+      if (!isPlainObject(body)) {
+        throw new ApiError(400, 'INVALID_BODY', 'Request body must be a JSON object');
+      }
+      const query = requiredString(body.query, 'query');
+      const record = await searchHistoryStore.create(user.id, query);
+      sendJson(res, 201, record);
+      return;
+    }
+
+    const searchHistoryMatch = pathname.match(/^\/api\/search-history\/([^/]+)$/);
+    if (req.method === 'DELETE' && searchHistoryMatch) {
+      const user = readSessionUser(req, config.auth);
+      if (!user) {
+        sendJson(res, 401, errorBody('UNAUTHENTICATED', 'Not logged in'));
+        return;
+      }
+      const deleted = await searchHistoryStore.delete(decodeURIComponent(searchHistoryMatch[1]!));
+      if (!deleted) {
+        sendJson(res, 404, errorBody('NOT_FOUND', 'Search history record not found'));
+        return;
+      }
+      sendJson(res, 200, { ok: true });
+      return;
+    }
+
+    if (req.method === 'DELETE' && pathname === '/api/search-history') {
+      const user = readSessionUser(req, config.auth);
+      if (!user) {
+        sendJson(res, 401, errorBody('UNAUTHENTICATED', 'Not logged in'));
+        return;
+      }
+      const count = await searchHistoryStore.clear(user.id);
+      sendJson(res, 200, { count });
       return;
     }
 
@@ -2825,6 +3403,124 @@ function isPackageUploadRecord(value: unknown): value is PackageUploadRecord {
     typeof value.createdAt === 'string' &&
     typeof value.updatedAt === 'string'
   );
+}
+
+function isNotificationRecord(value: unknown): value is NotificationRecord {
+  return (
+    isPlainObject(value) &&
+    typeof value.id === 'string' &&
+    typeof value.userId === 'string' &&
+    typeof value.type === 'string' &&
+    (value.type === 'skill_reviewed' ||
+      value.type === 'skill_status_changed' ||
+      value.type === 'skill_comment' ||
+      value.type === 'system') &&
+    typeof value.title === 'string' &&
+    typeof value.message === 'string' &&
+    typeof value.isRead === 'boolean' &&
+    typeof value.createdAt === 'string' &&
+    typeof value.updatedAt === 'string'
+  );
+}
+
+function parseNotificationInput(input: unknown): Omit<
+  NotificationRecord,
+  'id' | 'isRead' | 'createdAt' | 'updatedAt'
+> {
+  if (!isPlainObject(input)) {
+    throw new ApiError(400, 'INVALID_BODY', 'Request body must be a JSON object');
+  }
+
+  const userId = requiredString(input.userId, 'userId');
+  const type = requiredString(input.type, 'type');
+  const title = requiredString(input.title, 'title');
+  const message = requiredString(input.message, 'message');
+
+  if (type !== 'skill_reviewed' && type !== 'skill_status_changed' && type !== 'skill_comment' && type !== 'system') {
+    throw new ApiError(
+      400,
+      'INVALID_TYPE',
+      'type must be one of: skill_reviewed, skill_status_changed, skill_comment, system',
+    );
+  }
+
+  return compactObject({
+    userId,
+    type: type as NotificationType,
+    title,
+    message,
+    relatedSkillId: optionalString(input.relatedSkillId, 'relatedSkillId'),
+    relatedSkillName: optionalString(input.relatedSkillName, 'relatedSkillName'),
+    relatedReviewId: optionalString(input.relatedReviewId, 'relatedReviewId'),
+    actionUrl: optionalString(input.actionUrl, 'actionUrl'),
+  });
+}
+
+function parseNotificationListQuery(url: URL, userId: string): {
+  userId: string;
+  page: number;
+  pageSize: number;
+  type?: NotificationType;
+  unreadOnly?: boolean;
+} {
+  const typeParam = optionalQueryString(url, 'type');
+  const type =
+    typeParam === 'skill_reviewed' ||
+    typeParam === 'skill_status_changed' ||
+    typeParam === 'skill_comment' ||
+    typeParam === 'system'
+      ? (typeParam as NotificationType)
+      : undefined;
+
+  return {
+    userId,
+    page: parseIntegerQuery(url, 'page', 1, 1, Number.MAX_SAFE_INTEGER),
+    pageSize: parseIntegerQuery(url, 'pageSize', 20, 1, 100),
+    type,
+    unreadOnly: url.searchParams.get('unreadOnly') === 'true',
+  };
+}
+
+function isFavoriteRecord(value: unknown): value is FavoriteRecord {
+  return (
+    isPlainObject(value) &&
+    typeof value.id === 'string' &&
+    typeof value.userId === 'string' &&
+    typeof value.skillId === 'string' &&
+    typeof value.createdAt === 'string'
+  );
+}
+
+function parseFavoriteListQuery(url: URL, userId: string): {
+  userId: string;
+  page: number;
+  pageSize: number;
+} {
+  return {
+    userId,
+    page: parseIntegerQuery(url, 'page', 1, 1, Number.MAX_SAFE_INTEGER),
+    pageSize: parseIntegerQuery(url, 'pageSize', 20, 1, 100),
+  };
+}
+
+function isSearchHistoryRecord(value: unknown): value is SearchHistoryRecord {
+  return (
+    isPlainObject(value) &&
+    typeof value.id === 'string' &&
+    typeof value.userId === 'string' &&
+    typeof value.query === 'string' &&
+    typeof value.createdAt === 'string'
+  );
+}
+
+function parseSearchHistoryListQuery(url: URL, userId: string): {
+  userId: string;
+  limit: number;
+} {
+  return {
+    userId,
+    limit: parseIntegerQuery(url, 'limit', 10, 1, 100),
+  };
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {

@@ -239,3 +239,67 @@ export interface ParsedSkillPackage {
   fileCount: number;
   totalBytes: number;
 }
+
+export type NotificationType = 'skill_reviewed' | 'skill_status_changed' | 'skill_comment' | 'system';
+
+export interface NotificationRecord {
+  id: string;
+  userId: string;
+  type: NotificationType;
+  title: string;
+  message: string;
+  relatedSkillId?: string;
+  relatedSkillName?: string;
+  relatedReviewId?: string;
+  isRead: boolean;
+  actionUrl?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface NotificationListResponse {
+  data: NotificationRecord[];
+  total: number;
+  page: number;
+  pageSize: number;
+  unreadCount: number;
+}
+
+export interface NotificationStoreData {
+  version: 1;
+  notifications: NotificationRecord[];
+}
+
+export interface FavoriteRecord {
+  id: string;
+  userId: string;
+  skillId: string;
+  createdAt: string;
+}
+
+export interface FavoriteListResponse {
+  items: FavoriteRecord[];
+  total: number;
+}
+
+export interface FavoriteStoreData {
+  version: 1;
+  favorites: FavoriteRecord[];
+}
+
+export interface SearchHistoryRecord {
+  id: string;
+  userId: string;
+  query: string;
+  createdAt: string;
+}
+
+export interface SearchHistoryListResponse {
+  items: SearchHistoryRecord[];
+  total: number;
+}
+
+export interface SearchHistoryStoreData {
+  version: 1;
+  searchHistory: SearchHistoryRecord[];
+}
