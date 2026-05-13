@@ -10,7 +10,7 @@ import {
   type SkillFileEntry,
 } from '../api/client';
 
-export type View = 'market' | 'detail' | 'upload' | 'mine' | 'reviews' | 'sources';
+export type View = 'market' | 'detail' | 'upload' | 'mine' | 'reviews' | 'sources' | 'notifications';
 export type Role = 'user' | 'admin';
 export type SkillStatus = '已验证' | '待审核' | '新发布';
 
@@ -110,6 +110,7 @@ export const navItems: Array<{ view: Exclude<View, 'detail'>; label: string; des
   { view: 'market', label: '技能市场', desc: '浏览全部技能' },
   { view: 'upload', label: '上传技能', desc: '发布自己的技能包' },
   { view: 'mine', label: '我的技能包', desc: '维护与发布记录' },
+  { view: 'notifications', label: '通知中心', desc: '查看系统和技能通知' },
   { view: 'reviews', label: '评价中心', desc: '处理用户反馈' },
   { view: 'sources', label: '源管理', desc: '维护来源与发布' },
 ];

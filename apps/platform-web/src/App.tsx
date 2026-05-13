@@ -20,6 +20,8 @@ import {
   LoginPage,
   MarketPage,
   MySkillsPage,
+  NotificationCenter,
+  NotificationBell,
   navItems,
   ROLE_STORAGE_KEY,
   readStoredRole,
@@ -42,6 +44,7 @@ const viewPaths: Record<Exclude<View, 'detail'>, string> = {
   market: '/market',
   upload: '/upload',
   mine: '/mine',
+  notifications: '/notifications',
   reviews: '/reviews',
   sources: '/sources',
 };
@@ -247,6 +250,9 @@ function App() {
       </aside>
 
       <section className="workspace">
+        <header className="workspace-header">
+          <NotificationBell />
+        </header>
         <Routes>
           <Route path="/" element={<Navigate replace to="/market" />} />
           <Route
@@ -284,6 +290,10 @@ function App() {
           <Route
             path="/mine"
             element={<MySkillsPage fallbackSkills={marketSkills} onOpenSkill={(skillId) => openSkill(skillId, 'mine')} />}
+          />
+          <Route
+            path="/notifications"
+            element={<NotificationCenter />}
           />
           <Route path="/reviews" element={routeAdmin(<Suspense fallback={<div className="page"><section className="empty-state"><p>加载中...</p></section></div>}><ReviewCenter /></Suspense>)} />
           <Route

@@ -1,6 +1,8 @@
 export { LoginPage } from './LoginPage';
 export { MarketPage } from './MarketPage';
 export { MySkillsPage } from './MySkillsPage';
+export { NotificationCenter } from './NotificationCenter';
+export { NotificationBell } from './NotificationBell';
 export { SourcesPage } from './SourcesPage';
 export {
   adminOnlyViews,

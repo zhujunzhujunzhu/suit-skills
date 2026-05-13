@@ -2,6 +2,7 @@
   "name": "suit-skills",
   "version": "0.0.15",
   "type": "module",
+  "packageManager": "npm@10.9.4",
   "description": "A CLI tool for skills management with Web console and Desktop app",
   "workspaces": [
     "packages/*",
