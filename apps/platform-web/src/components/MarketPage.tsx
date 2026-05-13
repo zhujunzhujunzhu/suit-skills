@@ -212,13 +212,25 @@ export function MarketPage({
             {filterPrefs.source !== '全部来源' && <span style={{padding: "4px 8px", background: "#f0f0f0", borderRadius: "4px", fontSize: "12px"}}>📦 {filterPrefs.source} <button type="button" onClick={() => handleSourceChange('全部来源')} style={{marginLeft: "4px", border: "none", background: "none", cursor: "pointer"}}>✕</button></span>}
           </div>
         )}
-        <select value={category} onChange={(event) => handleFilterChange(setCategory, event.target.value)}>
+        <select
+          value={category}
+          onChange={(event) => handleFilterChange(setCategory, event.target.value)}
+          style={category !== '全部' ? { backgroundColor: '#e8f4f8', borderColor: '#0066cc', borderWidth: '2px' } : {}}
+        >
           {categoryOptions.map((item) => <option key={item} value={item}>{item}</option>)}
         </select>
-        <select value={filterPrefs.source} onChange={(event) => handleSourceChange(event.target.value)}>
+        <select
+          value={filterPrefs.source}
+          onChange={(event) => handleSourceChange(event.target.value)}
+          style={filterPrefs.source !== '全部来源' ? { backgroundColor: '#e8f4f8', borderColor: '#0066cc', borderWidth: '2px' } : {}}
+        >
           {sourceOptions.map((item) => <option key={item} value={item}>{item}</option>)}
         </select>
-        <select value={filterPrefs.sort} onChange={(event) => handleSortChange(event.target.value as SortMode)}>
+        <select
+          value={filterPrefs.sort}
+          onChange={(event) => handleSortChange(event.target.value as SortMode)}
+          style={filterPrefs.sort !== 'install' ? { backgroundColor: '#e8f4f8', borderColor: '#0066cc', borderWidth: '2px' } : {}}
+        >
           <option value="install">安装量优先</option>
           <option value="rating">评分优先</option>
           <option value="updated">最近更新</option>
