@@ -28,10 +28,12 @@ import {
   SourcesPage,
   skillFromApi,
   skills,
+  ThemeToggle,
   type Role,
   type Skill,
   type View,
 } from './components';
+import { useTheme } from './hooks';
 
 const SkillDetailPage = lazy(() => import('./components/SkillDetailPage').then(m => ({ default: m.SkillDetailPage })));
 const SkillDirectoryPage = lazy(() => import('./components/SkillDetailPage').then(m => ({ default: m.SkillDirectoryPage })));
@@ -72,6 +74,7 @@ function sourceFromState(state: unknown): SkillSourceView {
 function App() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { themeMode, setThemeMode } = useTheme();
   const [marketSkills, setMarketSkills] = useState<Skill[]>(skills);
   const [sourceConfig, setSourceConfig] = useState<SourceItem[]>([]);
   const [role, setRole] = useState<Role | null>(() => readStoredRole());
@@ -238,6 +241,7 @@ function App() {
         <div className="auth-panel">
           <strong>{role === 'admin' ? '管理员' : '普通用户'}</strong>
           <small>{role === 'admin' ? '可管理源、Git 与评价' : '可浏览、上传与维护自己的技能'}</small>
+          <ThemeToggle />
           <button type="button" onClick={logout}>退出登录</button>
         </div>
         <div className="git-status">

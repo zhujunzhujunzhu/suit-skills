@@ -4,6 +4,7 @@ export { MySkillsPage } from './MySkillsPage';
 export { NotificationCenter } from './NotificationCenter';
 export { NotificationBell } from './NotificationBell';
 export { SourcesPage } from './SourcesPage';
+export { ThemeToggle } from './ThemeToggle';
 export {
   adminOnlyViews,
   navItems,
