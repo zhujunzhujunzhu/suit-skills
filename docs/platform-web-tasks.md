@@ -1282,3 +1282,53 @@ CREATE TABLE search_history (
 - ✅ 功能测试 - 主题切换、localStorage 持久化、系统偏好检测
 
 **完成时间**: 2026-05-13 14:45:00
+
+---
+
+## 🟡 MEDIUM 优先级（产品体验改进）
+
+### [UX-2026-05-13-001] 统一空状态处理
+
+**类别**: 产品/UX
+**优先级**: MEDIUM
+**预期收益**: 提升视觉一致性，改善用户体验
+**涉及文件**: 
+- src/components/EmptyState.tsx (新建)
+- src/components/index.ts (更新)
+- src/components/MarketPage.tsx (更新)
+- src/components/NotificationCenter.tsx (更新)
+- src/components/MySkillsPage.tsx (更新)
+- src/components/UploadPage.tsx (更新)
+- src/components/SourcesPage.tsx (更新)
+- src/styles/app.css (更新)
+
+**优化建议**: 
+创建统一的 EmptyState 组件，支持不同的空状态类型，提升视觉一致性。
+
+**实现详情**:
+- ✅ EmptyState 组件 - 支持 4 种类型 (no-data, no-results, error, loading)
+- ✅ 自定义图标 - 每种类型有对应的 SVG 图标
+- ✅ 灵活配置 - 支持自定义标题、描述、操作按钮
+- ✅ 可访问性 - 完整的 ARIA 标签支持
+- ✅ 样式系统 - 统一的 CSS 样式和颜色方案
+- ✅ 集成到各组件 - MarketPage, NotificationCenter, MySkillsPage, UploadPage, SourcesPage
+- ✅ 验证通过 - typecheck, build 全部成功
+
+**支持的类型**:
+1. no-data - 没有数据（初始状态）
+2. no-results - 没有搜索结果
+3. error - 错误状态
+4. loading - 加载中
+
+**复杂度**: Medium
+**预计时间**: 60 分钟
+**发现时间**: 2026-05-13 12:00:00
+**状态**: ✅ 已完成
+**Commit**: a4b5fe0
+**完成时间**: 2026-05-13 13:10:00
+
+**验证通过**:
+- ✅ TypeScript 检查 - 无错误
+- ✅ 构建 - 成功 (1.45s)
+- ✅ 测试 - 通过 (无相关测试文件)
+- ✅ 功能测试 - 所有空状态类型正常显示
