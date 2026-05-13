@@ -3,7 +3,7 @@ import { PageHeader } from './shared';
 import { NotificationItem } from './NotificationItem';
 import { EmptyState } from './EmptyState';
 import type { Notification } from './notificationTypes';
-import { getNotifications, markAsRead, deleteNotification, getUnreadCount } from './notificationService';
+import { getNotifications, markAsRead, deleteNotification } from './notificationService';
 
 type NotificationCategory = '全部' | '技能相关' | '系统';
 
@@ -19,34 +19,34 @@ export function NotificationCenter() {
     loadNotifications();
   }, []);
 
-  function loadNotifications() {
+  async function loadNotifications() {
     setLoading(true);
     try {
-      const allNotifications = getNotifications();
+      const allNotifications = await getNotifications();
       setNotifications(allNotifications);
     } finally {
       setLoading(false);
     }
   }
 
-  function handleMarkAsRead(id: string) {
-    markAsRead(id);
+  async function handleMarkAsRead(id: string) {
+    await markAsRead(id);
     setNotifications((prev) =>
       prev.map((n) => (n.id === id ? { ...n, read: true } : n))
     );
   }
 
-  function handleDelete(id: string) {
-    deleteNotification(id);
+  async function handleDelete(id: string) {
+    await deleteNotification(id);
     setNotifications((prev) => prev.filter((n) => n.id !== id));
   }
 
-  function handleMarkAllAsRead() {
-    notifications.forEach((n) => {
+  async function handleMarkAllAsRead() {
+    for (const n of notifications) {
       if (!n.read) {
-        markAsRead(n.id);
+        await markAsRead(n.id);
       }
-    });
+    }
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
   }
 

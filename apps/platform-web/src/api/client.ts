@@ -15,6 +15,16 @@ export interface PackageUploadRecord { id: string; fileName: string; owner: stri
 export interface AuthUser { id: string; email: string; name: string; avatarUrl?: string; role: 'user' | 'admin'; }
 export interface AuthConfig { enabled: boolean; mode?: 'oauth' | 'local'; scopes: string[]; apiAvailable: boolean; }
 
+export type NotificationType = 'skill_reviewed' | 'skill_status_changed' | 'skill_comment' | 'system';
+export interface NotificationRecord { id: string; userId: string; type: NotificationType; title: string; message: string; relatedSkillId?: string; relatedSkillName?: string; relatedReviewId?: string; isRead: boolean; actionUrl?: string; createdAt: string; updatedAt: string; }
+export interface NotificationListResponse { data: NotificationRecord[]; total: number; page: number; pageSize: number; unreadCount: number; }
+
+export interface FavoriteRecord { id: string; userId: string; skillId: string; createdAt: string; }
+export interface FavoriteListResponse { items: FavoriteRecord[]; total: number; }
+
+export interface SearchHistoryRecord { id: string; userId: string; query: string; createdAt: string; }
+export interface SearchHistoryListResponse { items: SearchHistoryRecord[]; total: number; }
+
 const FEEDBACK_STORAGE_KEY = 'suit-skills-platform-feedback';
 const SKILLS_STORAGE_KEY = 'suit-skills-platform-skills';
 const SOURCES_STORAGE_KEY = 'suit-skills-platform-sources';
@@ -155,3 +165,20 @@ function defaultSkillFile(skillId: string): SkillFilesResponse { const skill = r
 export async function listSkillFiles(skillId: string, selectedPath?: string): Promise<SkillFilesResponse> { try { return request(`/api/skills/${encodeURIComponent(skillId)}/files${selectedPath ? `?path=${encodeURIComponent(selectedPath)}` : ''}`); } catch { return defaultSkillFile(skillId); } }
 export async function getSkillFile(skillId: string, path: string): Promise<SkillFileDetail> { try { return request(`/api/skills/${encodeURIComponent(skillId)}/files/${encodeURIComponent(path)}`); } catch { const fallback = defaultSkillFile(skillId).selectedFile!; return { ...fallback, path, name: path.split('/').pop() || path, language: languageForPath(path) }; } }
 export async function updateSkillFile(skillId: string, path: string, content: string): Promise<SkillFileDetail> { try { return request(`/api/skills/${encodeURIComponent(skillId)}/files/${encodeURIComponent(path)}`, { method: 'PUT', body: JSON.stringify({ content }) }); } catch { const raw = localStorage.getItem(SKILL_FILES_STORAGE_KEY); const parsed = raw ? JSON.parse(raw) : {}; const store = isRecord(parsed) ? parsed : {}; const skillFiles = isRecord(store[skillId]) ? store[skillId] : {}; store[skillId] = { ...skillFiles, [path]: content }; writeJson(SKILL_FILES_STORAGE_KEY, store); return { path, name: path.split('/').pop() || path, content, language: languageForPath(path), size: content.length, updatedAt: new Date().toISOString(), editable: true }; } }
+
+export async function listNotifications(page = 1, pageSize = 20, type?: NotificationType, unreadOnly = false): Promise<NotificationListResponse> { try { const params = new URLSearchParams(); params.set('page', String(page)); params.set('pageSize', String(pageSize)); if (type) params.set('type', type); if (unreadOnly) params.set('unreadOnly', 'true'); return request(`/api/notifications?${params}`); } catch { return { data: [], total: 0, page, pageSize, unreadCount: 0 }; } }
+export async function getNotification(id: string): Promise<NotificationRecord | null> { try { return request(`/api/notifications/${encodeURIComponent(id)}`); } catch { return null; } }
+export async function markNotificationAsRead(id: string, isRead = true): Promise<NotificationRecord | null> { try { return request(`/api/notifications/${encodeURIComponent(id)}/read`, { method: 'PUT', body: JSON.stringify({ isRead }) }); } catch { return null; } }
+export async function batchMarkNotificationsAsRead(ids: string[], isRead = true): Promise<number> { try { const response = await request<{ updated?: number }>('/api/notifications/batch/read', { method: 'PUT', body: JSON.stringify({ ids, isRead }) }); return response.updated ?? 0; } catch { return 0; } }
+export async function deleteNotification(id: string): Promise<boolean> { try { await request(`/api/notifications/${encodeURIComponent(id)}`, { method: 'DELETE' }); return true; } catch { return false; } }
+export async function getUnreadCount(): Promise<{ unreadCount: number; byType: Record<NotificationType, number> }> { try { return request('/api/notifications/unread-count'); } catch { return { unreadCount: 0, byType: { skill_reviewed: 0, skill_status_changed: 0, skill_comment: 0, system: 0 } }; } }
+
+export async function listFavorites(page = 1, pageSize = 20): Promise<FavoriteListResponse> { try { const params = new URLSearchParams(); params.set('page', String(page)); params.set('pageSize', String(pageSize)); return request(`/api/favorites?${params}`); } catch { return { items: [], total: 0 }; } }
+export async function addFavorite(skillId: string): Promise<FavoriteRecord | null> { try { return request(`/api/favorites/${encodeURIComponent(skillId)}`, { method: 'POST', body: JSON.stringify({}) }); } catch { return null; } }
+export async function removeFavorite(skillId: string): Promise<boolean> { try { await request(`/api/favorites/${encodeURIComponent(skillId)}`, { method: 'DELETE' }); return true; } catch { return false; } }
+export async function isFavorited(skillId: string): Promise<boolean> { try { const response = await request<{ favorited?: boolean }>(`/api/favorites/check/${encodeURIComponent(skillId)}`); return response.favorited ?? false; } catch { return false; } }
+
+export async function listSearchHistory(limit = 10): Promise<SearchHistoryListResponse> { try { const params = new URLSearchParams(); params.set('limit', String(limit)); return request(`/api/search-history?${params}`); } catch { return { items: [], total: 0 }; } }
+export async function addSearchHistory(query: string): Promise<SearchHistoryRecord | null> { try { return request('/api/search-history', { method: 'POST', body: JSON.stringify({ query }) }); } catch { return null; } }
+export async function deleteSearchHistory(id: string): Promise<boolean> { try { await request(`/api/search-history/${encodeURIComponent(id)}`, { method: 'DELETE' }); return true; } catch { return false; } }
+export async function clearSearchHistory(): Promise<number> { try { const response = await request<{ deleted?: number }>('/api/search-history', { method: 'DELETE' }); return response.deleted ?? 0; } catch { return 0; } }

@@ -1,9 +1,8 @@
 import type { Notification } from './notificationTypes';
+import * as api from '../api/client';
 
 const NOTIFICATIONS_STORAGE_KEY = 'suit-skills-notifications';
-const NOTIFICATION_READ_KEY = 'suit-skills-notification-read';
 
-// Mock data for demonstration
 const mockNotifications: Notification[] = [
   {
     id: 'notif-1',
@@ -58,11 +57,22 @@ const mockNotifications: Notification[] = [
   },
 ];
 
-function initializeNotifications(): Notification[] {
-  if (typeof localStorage === 'undefined') {
-    return mockNotifications;
-  }
+function notificationFromApi(record: api.NotificationRecord): Notification {
+  return {
+    id: record.id,
+    title: record.title,
+    message: record.message,
+    category: record.type === 'system' ? '系统' : '技能相关',
+    read: record.isRead,
+    createdAt: record.createdAt,
+    actionUrl: record.actionUrl,
+    actionLabel: record.actionUrl ? '查看详情' : undefined,
+    icon: record.type === 'skill_reviewed' ? '⭐' : record.type === 'skill_status_changed' ? '✅' : record.type === 'skill_comment' ? '💬' : '🔔',
+  };
+}
 
+function readLocalNotifications(): Notification[] {
+  if (typeof localStorage === 'undefined') return mockNotifications;
   const stored = localStorage.getItem(NOTIFICATIONS_STORAGE_KEY);
   if (stored) {
     try {
@@ -71,51 +81,70 @@ function initializeNotifications(): Notification[] {
       return mockNotifications;
     }
   }
-
-  // Initialize with mock data
-  localStorage.setItem(NOTIFICATIONS_STORAGE_KEY, JSON.stringify(mockNotifications));
   return mockNotifications;
 }
 
-export function getNotifications(): Notification[] {
-  return initializeNotifications().sort(
-    (a, b) =>
-      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-  );
-}
-
-export function getUnreadCount(): number {
-  return getNotifications().filter((n) => !n.read).length;
-}
-
-export function markAsRead(id: string): void {
+function writeLocalNotifications(notifications: Notification[]): void {
   if (typeof localStorage === 'undefined') return;
-
-  const notifications = getNotifications();
-  const updated = notifications.map((n) =>
-    n.id === id ? { ...n, read: true } : n
-  );
-  localStorage.setItem(NOTIFICATIONS_STORAGE_KEY, JSON.stringify(updated));
+  localStorage.setItem(NOTIFICATIONS_STORAGE_KEY, JSON.stringify(notifications));
 }
 
-export function deleteNotification(id: string): void {
-  if (typeof localStorage === 'undefined') return;
+export async function getNotifications(): Promise<Notification[]> {
+  try {
+    const response = await api.listNotifications(1, 50);
+    const notifications = response.data.map(notificationFromApi).sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+    writeLocalNotifications(notifications);
+    return notifications;
+  } catch {
+    return readLocalNotifications().sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+  }
+}
 
-  const notifications = getNotifications();
-  const updated = notifications.filter((n) => n.id !== id);
-  localStorage.setItem(NOTIFICATIONS_STORAGE_KEY, JSON.stringify(updated));
+export async function getUnreadCount(): Promise<number> {
+  try {
+    const response = await api.getUnreadCount();
+    return response.unreadCount;
+  } catch {
+    const notifications = readLocalNotifications();
+    return notifications.filter((n) => !n.read).length;
+  }
+}
+
+export async function markAsRead(id: string): Promise<void> {
+  try {
+    await api.markNotificationAsRead(id, true);
+    const notifications = readLocalNotifications();
+    const updated = notifications.map((n) =>
+      n.id === id ? { ...n, read: true } : n
+    );
+    writeLocalNotifications(updated);
+  } catch {
+    const notifications = readLocalNotifications();
+    const updated = notifications.map((n) =>
+      n.id === id ? { ...n, read: true } : n
+    );
+    writeLocalNotifications(updated);
+  }
+}
+
+export async function deleteNotification(id: string): Promise<void> {
+  try {
+    await api.deleteNotification(id);
+    const notifications = readLocalNotifications();
+    const updated = notifications.filter((n) => n.id !== id);
+    writeLocalNotifications(updated);
+  } catch {
+    const notifications = readLocalNotifications();
+    const updated = notifications.filter((n) => n.id !== id);
+    writeLocalNotifications(updated);
+  }
 }
 
 export function addNotification(notification: Omit<Notification, 'id' | 'read' | 'createdAt'>): Notification {
-  if (typeof localStorage === 'undefined') {
-    return {
-      ...notification,
-      id: `notif-${Date.now()}`,
-      read: false,
-      createdAt: new Date().toISOString(),
-    };
-  }
-
   const newNotification: Notification = {
     ...notification,
     id: `notif-${Date.now()}`,
@@ -123,14 +152,22 @@ export function addNotification(notification: Omit<Notification, 'id' | 'read' |
     createdAt: new Date().toISOString(),
   };
 
-  const notifications = getNotifications();
+  const notifications = readLocalNotifications();
   const updated = [newNotification, ...notifications];
-  localStorage.setItem(NOTIFICATIONS_STORAGE_KEY, JSON.stringify(updated));
+  writeLocalNotifications(updated);
 
   return newNotification;
 }
 
-export function clearAllNotifications(): void {
-  if (typeof localStorage === 'undefined') return;
-  localStorage.removeItem(NOTIFICATIONS_STORAGE_KEY);
+export async function clearAllNotifications(): Promise<void> {
+  try {
+    await api.clearSearchHistory();
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem(NOTIFICATIONS_STORAGE_KEY);
+    }
+  } catch {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem(NOTIFICATIONS_STORAGE_KEY);
+    }
+  }
 }

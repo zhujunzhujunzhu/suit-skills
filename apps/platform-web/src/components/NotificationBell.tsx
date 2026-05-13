@@ -7,16 +7,15 @@ export function NotificationBell() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    // Initial load
-    setUnreadCount(getUnreadCount());
-
-    // Set up a listener for storage changes (for cross-tab updates)
-    function handleStorageChange() {
-      setUnreadCount(getUnreadCount());
+    async function loadUnreadCount() {
+      const count = await getUnreadCount();
+      setUnreadCount(count);
     }
 
-    window.addEventListener('storage', handleStorageChange);
-    return () => window.removeEventListener('storage', handleStorageChange);
+    loadUnreadCount();
+
+    const interval = setInterval(loadUnreadCount, 30000);
+    return () => clearInterval(interval);
   }, []);
 
   function handleClick() {
