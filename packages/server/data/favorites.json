@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "favorites": [
+    {
+      "id": "fav-001",
+      "userId": "current-user",
+      "skillId": "skill-react-dashboard",
+      "createdAt": "2026-05-13T10:00:00Z"
+    },
+    {
+      "id": "fav-002",
+      "userId": "current-user",
+      "skillId": "skill-vue-components",
+      "createdAt": "2026-05-12T15:30:00Z"
+    },
+    {
+      "id": "fav-003",
+      "userId": "current-user",
+      "skillId": "skill-typescript-utils",
+      "createdAt": "2026-05-11T09:15:00Z"
+    }
+  ]
+}
