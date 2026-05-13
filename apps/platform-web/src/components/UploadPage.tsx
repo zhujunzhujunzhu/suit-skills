@@ -67,6 +67,7 @@ export function UploadPage({
   const [form, setForm] = useState<SkillInput>({ name: '', description: '', author: '', source: 'default', category: '', version: '0.1.0', tags: [], gitUrl: '' });
   const [status, setStatus] = useState<'idle' | 'parsing' | 'submitting' | 'success' | 'error'>('idle');
   const [message, setMessage] = useState('');
+  const [uploadStatus, setUploadStatus] = useState<'draft' | 'reviewing' | 'published'>('draft');
   const publishableSources = sourceConfig.filter((source) => source.enabled && source.publishEnabled);
   const publishableSourceNames = new Set(publishableSources.map((source) => source.name));
   const selectedSource = form.source && publishableSourceNames.has(form.source)
@@ -118,7 +119,7 @@ export function UploadPage({
         setUploadedSkill(nextSkill);
       }
       setStatus('success');
-      setMessage(upload ? '已提交审核，可在“我的技能包”查看状态。' : '已创建技能草稿，可在“我的技能包”继续维护。');
+      setMessage(`✅ ${upload ? '审核中' : '已上传'} - 可在"我的技能包"查看详情`);
     } catch (error) {
       setStatus('error');
       setMessage(error instanceof Error ? error.message : '提交失败，请稍后重试。');
