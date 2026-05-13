@@ -169,10 +169,10 @@ export function SkillRow({ skill, onOpen, highlightTerms = [] }: { skill: Skill;
   const updatedDaysAgo = Math.floor((Date.now() - skill.updatedAtValue) / (1000 * 60 * 60 * 24));
   const updatedLabel = updatedDaysAgo === 0 ? '今天' : updatedDaysAgo === 1 ? '昨天' : `${updatedDaysAgo}天前`;
   return (
-    <button className="skill-row" type="button" onClick={onOpen}>
+    <button className="skill-row" type="button" role="link" aria-label="查看技能详情: ${skill.name}" tabIndex={0} onClick={onOpen}>
       <span className="skill-icon">{skill.name.slice(0, 2).toUpperCase()}</span>
       <span className="skill-main">
-        <span className="skill-title"><strong><HighlightText text={skill.name} terms={highlightTerms} /></strong><Badge status={skill.status} /></span>
+        <span className="skill-title" role="heading" aria-level={3}><strong><HighlightText text={skill.name} terms={highlightTerms} /></strong><Badge status={skill.status} /></span>
         <span className="skill-desc"><HighlightText text={skill.description} terms={highlightTerms} /></span>
         <span className="tag-row">{skill.tags.map((tag) => <em key={tag}><HighlightText text={tag} terms={highlightTerms} /></em>)}</span>
       </span>
