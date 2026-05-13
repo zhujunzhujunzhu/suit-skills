@@ -1,5 +1,4 @@
-import { useDeferredValue, useMemo, useRef, useState } from 'react';
-import { useVirtualizer } from '@tanstack/react-virtual';
+﻿import { useDeferredValue, useMemo, useState } from 'react';
 import type { SourceItem } from '../api/client';
 import { useLocalStorage, useFavorites } from '../hooks';
 import {
@@ -7,11 +6,12 @@ import {
   formatCompact,
   Metric,
   PageHeader,
-  SkillRow,
   sum,
   type Skill,
 } from './shared';
-import { EmptyState } from './EmptyState';
+import { MarketSearch } from './MarketSearch';
+import { MarketFilter } from './MarketFilter';
+import { SkillGrid } from './SkillGrid';
 
 type SortMode = 'install' | 'rating' | 'updated';
 
@@ -45,7 +45,6 @@ export function MarketPage({
   const deferredQuery = useDeferredValue(query);
   const [searchHistory, setSearchHistory] = useLocalStorage<string[]>('market-search-history', []);
   const { isFavorited, toggleFavorite } = useFavorites();
-  const listRef = useRef<HTMLDivElement | null>(null);
 
   const sourceLabelByName = useMemo(
     () => new Map(sourceConfig.map((item) => [item.name, item.label])),
@@ -131,15 +130,8 @@ export function MarketPage({
     [query, category, filterPrefs.source]
   );
 
-  const rowVirtualizer = useVirtualizer({
-    count: filteredSkills.length,
-    getScrollElement: () => listRef.current,
-    estimateSize: () => 116,
-    overscan: 5,
-  });
-
   function scrollListToTop() {
-    listRef.current?.scrollTo({ top: 0 });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
   function resetFilters() {
@@ -157,177 +149,73 @@ export function MarketPage({
     scrollListToTop();
   }
 
-  function handleFilterChange(setter: (value: string) => void, value: string) {
-    setter(value);
-    scrollListToTop();
-  }
-
-  function handleSourceChange(value: string) {
-    setFilterPrefs({ ...filterPrefs, source: value });
-    scrollListToTop();
-  }
-
-  function handleSortChange(value: SortMode) {
-    setFilterPrefs({ ...filterPrefs, sort: value });
-    scrollListToTop();
+  function handleFilterChange(setter: (value: string) => void) {
+    return (value: string) => {
+      setter(value);
+      scrollListToTop();
+    };
   }
 
   return (
-    <div className="page market-page">
+    <div className="market-page">
       <PageHeader
-        eyebrow="Skill marketplace"
+        eyebrow=""
         title="技能市场"
-        description="浏览、检索、安装和评价团队技能。"
+        description=""
         actions={
           <button
-            className="primary"
-            disabled={syncInProgress || !onSync}
-            type="button"
-            onClick={() => { void onSync?.(); }}
+            onClick={onSync}
+            disabled={syncInProgress}
+            className="sync-button"
           >
-            {syncInProgress ? '同步中...' : '同步市场'}
+            {syncInProgress ? '同步中...' : '同步'}
           </button>
         }
       />
-      <section className="toolbar market-toolbar" aria-label="技能市场筛选">
-        <div className="search-field">
-          <label htmlFor="skill-search" style={{ display: 'none' }}>搜索技能</label>
-          <input
-            id="skill-search"
-            value={query}
-            placeholder="搜索名称、描述、作者、来源、分类、命令或标签"
-            onChange={(event) => handleQueryChange(event.target.value)}
-            aria-label="搜索技能"
-            aria-describedby="search-hint"
-          />
-          <span id="search-hint" style={{ display: 'none' }}>
-            搜索技能名称、描述、作者、来源、分类、命令或标签
-          </span>
-          {query ? (
-            <button
-              aria-label="清空搜索"
-              className="ghost compact"
-              type="button"
-              onClick={() => handleQueryChange('')}
-            >
-              清空
-            </button>
-          ) : null}
-        </div>
-        {!query && searchHistory.length > 0 && (
-          <div className="search-history-panel" style={{marginTop: "8px", padding: "8px", background: "#f9f9f9", borderRadius: "4px", border: "1px solid #e0e0e0"}} role="region" aria-label="搜索历史">
-            <div style={{display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px"}}>
-              <span style={{fontSize: "12px", fontWeight: "500", color: "#666"}}>🕐 最近搜索</span>
-              <button type="button" onClick={() => setSearchHistory([])} style={{fontSize: "12px", border: "none", background: "none", color: "#0066cc", cursor: "pointer"}} aria-label="清空所有搜索历史">清空全部</button>
-            </div>
-            <div style={{display: "flex", gap: "6px", flexWrap: "wrap"}}>
-              {searchHistory.slice(0, 5).map((item, index) => (
-                <div key={index} style={{display: "flex", alignItems: "center", gap: "4px", padding: "4px 8px", background: "white", borderRadius: "3px", border: "1px solid #ddd", fontSize: "12px"}}>
-                  <button type="button" onClick={() => handleQueryChange(item)} style={{border: "none", background: "none", cursor: "pointer", color: "#0066cc"}} aria-label={`搜索: ${item}`}>{item}</button>
-                  <button type="button" onClick={() => setSearchHistory(searchHistory.filter((_, i) => i !== index))} style={{border: "none", background: "none", cursor: "pointer", color: "#999", padding: "0", fontSize: "10px"}} aria-label={`删除搜索历史: ${item}`}>✕</button>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-        {hasActiveFilters && (
-          <div className="active-filters" style={{display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "8px"}} role="region" aria-label="活跃筛选条件">
-            {query.trim() && <span style={{padding: "4px 8px", background: "#f0f0f0", borderRadius: "4px", fontSize: "12px"}} role="status">🔍 {query} <button type="button" onClick={() => handleQueryChange("")} style={{marginLeft: "4px", border: "none", background: "none", cursor: "pointer"}} aria-label={`移除搜索条件: ${query}`}>✕</button></span>}
-            {category !== '全部' && <span style={{padding: "4px 8px", background: "#f0f0f0", borderRadius: "4px", fontSize: "12px"}} role="status">📁 {category} <button type="button" onClick={() => handleFilterChange(setCategory, '全部')} style={{marginLeft: "4px", border: "none", background: "none", cursor: "pointer"}} aria-label={`移除分类筛选: ${category}`}>✕</button></span>}
-            {filterPrefs.source !== '全部来源' && <span style={{padding: "4px 8px", background: "#f0f0f0", borderRadius: "4px", fontSize: "12px"}} role="status">📦 {filterPrefs.source} <button type="button" onClick={() => handleSourceChange('全部来源')} style={{marginLeft: "4px", border: "none", background: "none", cursor: "pointer"}} aria-label={`移除来源筛选: ${filterPrefs.source}`}>✕</button></span>}
-          </div>
-        )}
-        <div>
-          <label htmlFor="category-select" style={{ display: 'none' }}>分类</label>
-          <select
-            id="category-select"
-            value={category}
-            onChange={(event) => handleFilterChange(setCategory, event.target.value)}
-            aria-label="按分类筛选"
-            style={category !== '全部' ? { backgroundColor: '#e8f4f8', borderColor: '#0066cc', borderWidth: '2px' } : {}}
-          >
-            {categoryOptions.map((item) => <option key={item} value={item}>{item}</option>)}
-          </select>
-        </div>
-        <div>
-          <label htmlFor="source-select" style={{ display: 'none' }}>来源</label>
-          <select
-            id="source-select"
-            value={filterPrefs.source}
-            onChange={(event) => handleSourceChange(event.target.value)}
-            aria-label="按来源筛选"
-            style={filterPrefs.source !== '全部来源' ? { backgroundColor: '#e8f4f8', borderColor: '#0066cc', borderWidth: '2px' } : {}}
-          >
-            {sourceOptions.map((item) => <option key={item} value={item}>{item}</option>)}
-          </select>
-        </div>
-        <div>
-          <label htmlFor="sort-select" style={{ display: 'none' }}>排序</label>
-          <select
-            id="sort-select"
-            value={filterPrefs.sort}
-            onChange={(event) => handleSortChange(event.target.value as SortMode)}
-            aria-label="按排序方式筛选"
-            style={filterPrefs.sort !== 'install' ? { backgroundColor: '#e8f4f8', borderColor: '#0066cc', borderWidth: '2px' } : {}}
-          >
-            <option value="install">安装量优先</option>
-            <option value="rating">评分优先</option>
-            <option value="updated">最近更新</option>
-          </select>
-        </div>
-        {hasActiveFilters ? (
-          <button className="ghost toolbar-reset" type="button" onClick={resetFilters} aria-label="重置所有筛选条件">
-            重置筛选
-          </button>
-        ) : null}
-      </section>
-      <section className="market-summary">
-        <Metric label="技能数量" value={summary.count} />
-        <Metric label="安装总量" value={summary.installs} />
-        <Metric label="平均评分" value={summary.rating} />
-      </section>
-      <section className="market-list-panel">
-        <div className="skill-list virtual-skill-list" ref={listRef} aria-label="技能列表">
-          {filteredSkills.length ? (
-            <div
-              className="virtual-skill-list-inner"
-              style={{ height: `${rowVirtualizer.getTotalSize()}px` }}
-            >
-              {rowVirtualizer.getVirtualItems().map((virtualItem) => {
-                const skill = filteredSkills[virtualItem.index]!;
-                return (
-                  <div
-                    className="virtual-skill-item"
-                    data-index={virtualItem.index}
-                    key={skill.id}
-                    ref={rowVirtualizer.measureElement}
-                    style={{ transform: `translateY(${virtualItem.start}px)` }}
-                  >
-                    <SkillRow
-                      highlightTerms={highlightTerms}
-                      skill={skill}
-                      onOpen={() => onOpenSkill(skill.id)}
-                      isFavorited={isFavorited(skill.id)}
-                      onToggleFavorite={() => toggleFavorite(skill.id)}
-                    />
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <EmptyState
-              type="no-results"
-              title="没有匹配的技能"
-              description="换一个关键词，或重置筛选后再查看。"
-              action={hasActiveFilters ? {
-                label: '重置筛选',
-                onClick: resetFilters,
-              } : undefined}
-              ariaLabel="没有找到匹配的技能"
-            />
-          )}
+
+      <section className="market-controls">
+        <MarketSearch
+          query={query}
+          searchHistory={searchHistory}
+          showSearchHistory={showSearchHistory}
+          onQueryChange={handleQueryChange}
+          onShowHistory={setShowSearchHistory}
+          onSelectHistory={(item) => {
+            setQuery(item);
+            scrollListToTop();
+          }}
+          onClearHistory={() => setSearchHistory([])}
+        />
+
+        <MarketFilter
+          category={category}
+          categoryOptions={categoryOptions}
+          sourceOptions={sourceOptions}
+          filterPrefs={filterPrefs}
+          onCategoryChange={handleFilterChange(setCategory)}
+          onSourceChange={handleFilterChange((value) => setFilterPrefs({ ...filterPrefs, source: value }))}
+          onSortChange={(sort) => {
+            setFilterPrefs({ ...filterPrefs, sort });
+            scrollListToTop();
+          }}
+        />
+
+        <div className="market-summary">
+          <Metric label="技能数量" value={summary.count} />
+          <Metric label="总安装量" value={summary.installs} />
+          <Metric label="平均评分" value={summary.rating} />
         </div>
       </section>
+
+      <SkillGrid
+        skills={filteredSkills}
+        highlightTerms={highlightTerms}
+        isFavorited={isFavorited}
+        onOpenSkill={onOpenSkill}
+        onToggleFavorite={toggleFavorite}
+        hasActiveFilters={hasActiveFilters}
+        onResetFilters={resetFilters}
+      />
     </div>
   );
 }
@@ -358,3 +246,4 @@ function categoryGroupFor(category: string): string {
   if (/(business|marketing|market|legal|auction|real-estate|product|业务)/.test(value)) return '业务';
   return '其他';
 }
+
