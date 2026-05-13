@@ -364,13 +364,25 @@ n**Commit**: 646f708
 **类别**: 产品/功能
 **优先级**: MEDIUM
 **预期收益**: 提升用户粘性
-**涉及文件**: 需要新增
+**涉及文件**: 
+- src/hooks/useFavorites.ts (新增)
+- src/hooks/index.ts
+- src/components/MarketPage.tsx
+- src/components/shared.tsx
+
 **优化建议**: 
 - 实现技能收藏功能（本地localStorage或服务端）
 - 在导航栏添加"收藏夹"入口
 - 支持收藏/取消收藏快速操作
 
-**状态**: 待处理
+**状态**: ✅ 已完成
+**Commit**: 822eaf9
+**完成时间**: 2026-05-13 11:30:00
+**实现细节**:
+- 创建 useFavorites hook，使用 localStorage 存储收藏 ID
+- 在 SkillRow 组件中添加心形按钮（❤️/🤍）
+- 支持点击按钮切换收藏状态
+- 收藏数据持久化到 localStorage 的 'market-favorites' 键
 
 ---
 
