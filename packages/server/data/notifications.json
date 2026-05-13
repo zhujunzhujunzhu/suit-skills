@@ -1,0 +1,55 @@
+{
+  "version": 1,
+  "notifications": [
+    {
+      "id": "notif-001",
+      "userId": "current-user",
+      "type": "skill_reviewed",
+      "title": "技能审核完成",
+      "message": "您上传的技能 'React Dashboard' 已通过审核",
+      "relatedSkillId": "skill-react-dashboard",
+      "relatedSkillName": "React Dashboard",
+      "isRead": false,
+      "actionUrl": "/skills/skill-react-dashboard",
+      "createdAt": "2026-05-13T10:00:00Z",
+      "updatedAt": "2026-05-13T10:00:00Z"
+    },
+    {
+      "id": "notif-002",
+      "userId": "current-user",
+      "type": "skill_status_changed",
+      "title": "技能状态变更",
+      "message": "技能 'Vue Components' 的状态已从 'review' 变更为 'verified'",
+      "relatedSkillId": "skill-vue-components",
+      "relatedSkillName": "Vue Components",
+      "isRead": true,
+      "actionUrl": "/skills/skill-vue-components",
+      "createdAt": "2026-05-12T15:30:00Z",
+      "updatedAt": "2026-05-12T15:30:00Z"
+    },
+    {
+      "id": "notif-003",
+      "userId": "current-user",
+      "type": "skill_comment",
+      "title": "新的评论",
+      "message": "管理员在您的技能 'TypeScript Utils' 上留下了评论",
+      "relatedSkillId": "skill-typescript-utils",
+      "relatedSkillName": "TypeScript Utils",
+      "relatedReviewId": "review-123",
+      "isRead": false,
+      "actionUrl": "/skills/skill-typescript-utils",
+      "createdAt": "2026-05-13T09:15:00Z",
+      "updatedAt": "2026-05-13T09:15:00Z"
+    },
+    {
+      "id": "notif-004",
+      "userId": "current-user",
+      "type": "system",
+      "title": "系统通知",
+      "message": "平台将于今晚进行维护，预计持续 2 小时",
+      "isRead": true,
+      "createdAt": "2026-05-13T08:00:00Z",
+      "updatedAt": "2026-05-13T08:00:00Z"
+    }
+  ]
+}
