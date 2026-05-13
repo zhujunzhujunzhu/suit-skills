@@ -83,7 +83,7 @@ export function NotificationCenter() {
       />
 
       <section className="notification-filters">
-        <div className="filter-group">
+        <div className="filter-group" role="tablist" aria-label="通知分类">
           {(['全部', '技能相关', '系统'] as const).map((cat) => (
             <button
               key={cat}
@@ -92,7 +92,9 @@ export function NotificationCenter() {
                 setCategory(cat);
                 setCurrentPage(1);
               }}
-              aria-pressed={category === cat}
+              role="tab"
+              aria-selected={category === cat}
+              aria-controls="notification-list"
             >
               {cat}
             </button>
@@ -100,13 +102,13 @@ export function NotificationCenter() {
         </div>
       </section>
 
-      <section className="notification-list">
+      <section className="notification-list" id="notification-list" role="region" aria-live="polite" aria-label="通知列表">
         {loading ? (
-          <div className="empty-state">
+          <div className="empty-state" role="status" aria-live="polite">
             <p>加载中...</p>
           </div>
         ) : paginatedNotifications.length === 0 ? (
-          <div className="empty-state">
+          <div className="empty-state" role="status">
             <strong>
               {notifications.length === 0
                 ? '暂无通知'
@@ -133,21 +135,21 @@ export function NotificationCenter() {
       </section>
 
       {totalPages > 1 && (
-        <section className="pagination">
+        <section className="pagination" aria-label="通知分页">
           <button
             disabled={currentPage === 1}
             onClick={() => setCurrentPage((p) => p - 1)}
-            aria-label="上一页"
+            aria-label={`上一页 (当前第 ${currentPage} 页)`}
           >
             上一页
           </button>
-          <span className="page-info">
+          <span className="page-info" aria-live="polite" aria-atomic="true">
             第 {currentPage} / {totalPages} 页
           </span>
           <button
             disabled={currentPage === totalPages}
             onClick={() => setCurrentPage((p) => p + 1)}
-            aria-label="下一页"
+            aria-label={`下一页 (当前第 ${currentPage} 页)`}
           >
             下一页
           </button>

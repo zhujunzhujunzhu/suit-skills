@@ -189,11 +189,18 @@ export function MarketPage({
       />
       <section className="toolbar market-toolbar" aria-label="技能市场筛选">
         <div className="search-field">
+          <label htmlFor="skill-search" style={{ display: 'none' }}>搜索技能</label>
           <input
+            id="skill-search"
             value={query}
             placeholder="搜索名称、描述、作者、来源、分类、命令或标签"
             onChange={(event) => handleQueryChange(event.target.value)}
+            aria-label="搜索技能"
+            aria-describedby="search-hint"
           />
+          <span id="search-hint" style={{ display: 'none' }}>
+            搜索技能名称、描述、作者、来源、分类、命令或标签
+          </span>
           {query ? (
             <button
               aria-label="清空搜索"
@@ -206,37 +213,52 @@ export function MarketPage({
           ) : null}
         </div>
         {hasActiveFilters && (
-          <div className="active-filters" style={{display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "8px"}}>
-            {query.trim() && <span style={{padding: "4px 8px", background: "#f0f0f0", borderRadius: "4px", fontSize: "12px"}}>🔍 {query} <button type="button" onClick={() => handleQueryChange("")} style={{marginLeft: "4px", border: "none", background: "none", cursor: "pointer"}}>✕</button></span>}
-            {category !== '全部' && <span style={{padding: "4px 8px", background: "#f0f0f0", borderRadius: "4px", fontSize: "12px"}}>📁 {category} <button type="button" onClick={() => handleFilterChange(setCategory, '全部')} style={{marginLeft: "4px", border: "none", background: "none", cursor: "pointer"}}>✕</button></span>}
-            {filterPrefs.source !== '全部来源' && <span style={{padding: "4px 8px", background: "#f0f0f0", borderRadius: "4px", fontSize: "12px"}}>📦 {filterPrefs.source} <button type="button" onClick={() => handleSourceChange('全部来源')} style={{marginLeft: "4px", border: "none", background: "none", cursor: "pointer"}}>✕</button></span>}
+          <div className="active-filters" style={{display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "8px"}} role="region" aria-label="活跃筛选条件">
+            {query.trim() && <span style={{padding: "4px 8px", background: "#f0f0f0", borderRadius: "4px", fontSize: "12px"}} role="status">🔍 {query} <button type="button" onClick={() => handleQueryChange("")} style={{marginLeft: "4px", border: "none", background: "none", cursor: "pointer"}} aria-label={`移除搜索条件: ${query}`}>✕</button></span>}
+            {category !== '全部' && <span style={{padding: "4px 8px", background: "#f0f0f0", borderRadius: "4px", fontSize: "12px"}} role="status">📁 {category} <button type="button" onClick={() => handleFilterChange(setCategory, '全部')} style={{marginLeft: "4px", border: "none", background: "none", cursor: "pointer"}} aria-label={`移除分类筛选: ${category}`}>✕</button></span>}
+            {filterPrefs.source !== '全部来源' && <span style={{padding: "4px 8px", background: "#f0f0f0", borderRadius: "4px", fontSize: "12px"}} role="status">📦 {filterPrefs.source} <button type="button" onClick={() => handleSourceChange('全部来源')} style={{marginLeft: "4px", border: "none", background: "none", cursor: "pointer"}} aria-label={`移除来源筛选: ${filterPrefs.source}`}>✕</button></span>}
           </div>
         )}
-        <select
-          value={category}
-          onChange={(event) => handleFilterChange(setCategory, event.target.value)}
-          style={category !== '全部' ? { backgroundColor: '#e8f4f8', borderColor: '#0066cc', borderWidth: '2px' } : {}}
-        >
-          {categoryOptions.map((item) => <option key={item} value={item}>{item}</option>)}
-        </select>
-        <select
-          value={filterPrefs.source}
-          onChange={(event) => handleSourceChange(event.target.value)}
-          style={filterPrefs.source !== '全部来源' ? { backgroundColor: '#e8f4f8', borderColor: '#0066cc', borderWidth: '2px' } : {}}
-        >
-          {sourceOptions.map((item) => <option key={item} value={item}>{item}</option>)}
-        </select>
-        <select
-          value={filterPrefs.sort}
-          onChange={(event) => handleSortChange(event.target.value as SortMode)}
-          style={filterPrefs.sort !== 'install' ? { backgroundColor: '#e8f4f8', borderColor: '#0066cc', borderWidth: '2px' } : {}}
-        >
-          <option value="install">安装量优先</option>
-          <option value="rating">评分优先</option>
-          <option value="updated">最近更新</option>
-        </select>
+        <div>
+          <label htmlFor="category-select" style={{ display: 'none' }}>分类</label>
+          <select
+            id="category-select"
+            value={category}
+            onChange={(event) => handleFilterChange(setCategory, event.target.value)}
+            aria-label="按分类筛选"
+            style={category !== '全部' ? { backgroundColor: '#e8f4f8', borderColor: '#0066cc', borderWidth: '2px' } : {}}
+          >
+            {categoryOptions.map((item) => <option key={item} value={item}>{item}</option>)}
+          </select>
+        </div>
+        <div>
+          <label htmlFor="source-select" style={{ display: 'none' }}>来源</label>
+          <select
+            id="source-select"
+            value={filterPrefs.source}
+            onChange={(event) => handleSourceChange(event.target.value)}
+            aria-label="按来源筛选"
+            style={filterPrefs.source !== '全部来源' ? { backgroundColor: '#e8f4f8', borderColor: '#0066cc', borderWidth: '2px' } : {}}
+          >
+            {sourceOptions.map((item) => <option key={item} value={item}>{item}</option>)}
+          </select>
+        </div>
+        <div>
+          <label htmlFor="sort-select" style={{ display: 'none' }}>排序</label>
+          <select
+            id="sort-select"
+            value={filterPrefs.sort}
+            onChange={(event) => handleSortChange(event.target.value as SortMode)}
+            aria-label="按排序方式筛选"
+            style={filterPrefs.sort !== 'install' ? { backgroundColor: '#e8f4f8', borderColor: '#0066cc', borderWidth: '2px' } : {}}
+          >
+            <option value="install">安装量优先</option>
+            <option value="rating">评分优先</option>
+            <option value="updated">最近更新</option>
+          </select>
+        </div>
         {hasActiveFilters ? (
-          <button className="ghost toolbar-reset" type="button" onClick={resetFilters}>
+          <button className="ghost toolbar-reset" type="button" onClick={resetFilters} aria-label="重置所有筛选条件">
             重置筛选
           </button>
         ) : null}

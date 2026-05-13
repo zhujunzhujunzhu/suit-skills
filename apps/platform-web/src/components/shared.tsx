@@ -151,9 +151,9 @@ export function skillInputFromForm(form: SkillInput): SkillInput {
 
 export function PageHeader({ eyebrow, title, description, actions }: { eyebrow: string; title: string; description: string; actions?: React.ReactNode }) {
   return (
-    <header className="page-header">
+    <header className="page-header" role="banner">
       <div><p className="eyebrow">{eyebrow}</p><h1>{title}</h1><p>{description}</p></div>
-      {actions ? <div className="page-actions">{actions}</div> : null}
+      {actions ? <div className="page-actions" role="toolbar" aria-label="页面操作">{actions}</div> : null}
     </header>
   );
 }
@@ -466,18 +466,42 @@ function timestampValue(value: string): number {
 
 export function LoadingSpinner({ message = '加载中...' }: { message?: string }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '32px', gap: '16px' }}>
-      <div style={{ fontSize: '32px', animation: 'spin 1s linear infinite' }}>⟳</div>
-      <p style={{ color: '#666', fontSize: '14px' }}>{message}</p>
+    <div
+      style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '32px', gap: '16px' }}
+      role="status"
+      aria-live="polite"
+      aria-label={message}
+    >
+      <div
+        style={{ fontSize: '32px', animation: 'spin 1s linear infinite' }}
+        aria-hidden="true"
+      >
+        ⟳
+      </div>
+      <p style={{ color: '#666', fontSize: '14px', margin: 0 }}>{message}</p>
     </div>
   );
 }
 
 export function SkeletonLoader({ count = 3 }: { count?: number }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+    <div
+      style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}
+      role="status"
+      aria-live="polite"
+      aria-label="加载中，请稍候"
+    >
       {Array.from({ length: count }).map((_, i) => (
-        <div key={i} style={{ height: '100px', background: '#f0f0f0', borderRadius: '4px', animation: 'pulse 1.5s ease-in-out infinite' }} />
+        <div
+          key={i}
+          style={{
+            height: '100px',
+            background: '#f0f0f0',
+            borderRadius: '4px',
+            animation: 'pulse 1.5s ease-in-out infinite',
+          }}
+          aria-hidden="true"
+        />
       ))}
     </div>
   );
