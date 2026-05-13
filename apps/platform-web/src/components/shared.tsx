@@ -165,7 +165,7 @@ export function Badge({ status }: { status: string }) {
   return <span className={`badge ${badgeClass(status)}`}>{status}</span>;
 }
 
-export function SkillRow({ skill, onOpen, highlightTerms = [] }: { skill: Skill; onOpen: () => void; highlightTerms?: string[] }) {
+export function SkillRow({ skill, onOpen, highlightTerms = [], isFavorited = false, onToggleFavorite }: { skill: Skill; onOpen: () => void; highlightTerms?: string[]; isFavorited?: boolean; onToggleFavorite?: () => void }) {
   const updatedDaysAgo = Math.floor((Date.now() - skill.updatedAtValue) / (1000 * 60 * 60 * 24));
   const updatedLabel = updatedDaysAgo === 0 ? '今天' : updatedDaysAgo === 1 ? '昨天' : `${updatedDaysAgo}天前`;
   return (
@@ -180,6 +180,19 @@ export function SkillRow({ skill, onOpen, highlightTerms = [] }: { skill: Skill;
       <span className="skill-meta"><small>来源</small><strong><HighlightText text={skill.source} terms={highlightTerms} /></strong></span>
       <span className="skill-meta"><small>更新</small><strong>{updatedLabel}</strong></span>
       <span className="skill-metrics"><strong>⭐ {skill.rating.toFixed(1)}</strong><small>📥 {formatCompact(skill.installs)} 安装 · {skill.reviews} 评价 · 📅 {updatedLabel}更新</small></span>
+      {onToggleFavorite && (
+        <button
+          className="favorite-btn"
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleFavorite();
+          }}
+          aria-label={isFavorited ? '取消收藏' : '收藏'}
+        >
+          {isFavorited ? '❤️' : '🤍'}
+        </button>
+      )}
       <span className="open-link">查看详情</span>
     </button>
   );

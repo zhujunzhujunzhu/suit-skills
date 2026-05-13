@@ -1,7 +1,7 @@
 import { useDeferredValue, useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import type { SourceItem } from '../api/client';
-import { useLocalStorage } from '../hooks';
+import { useLocalStorage, useFavorites } from '../hooks';
 import {
   averageRating,
   formatCompact,
@@ -42,6 +42,7 @@ export function MarketPage({
   );
   const deferredQuery = useDeferredValue(query);
   const [searchHistory, setSearchHistory] = useLocalStorage<string[]>('market-search-history', []);
+  const { isFavorited, toggleFavorite } = useFavorites();
   const listRef = useRef<HTMLDivElement | null>(null);
 
   const sourceLabelByName = useMemo(
@@ -251,6 +252,8 @@ export function MarketPage({
                       highlightTerms={highlightTerms}
                       skill={skill}
                       onOpen={() => onOpenSkill(skill.id)}
+                      isFavorited={isFavorited(skill.id)}
+                      onToggleFavorite={() => toggleFavorite(skill.id)}
                     />
                   </div>
                 );
