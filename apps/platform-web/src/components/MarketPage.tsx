@@ -41,6 +41,7 @@ export function MarketPage({
     DEFAULT_FILTER_PREFS,
   );
   const deferredQuery = useDeferredValue(query);
+  const [searchHistory, setSearchHistory] = useLocalStorage<string[]>('market-search-history', []);
   const listRef = useRef<HTMLDivElement | null>(null);
 
   const sourceLabelByName = useMemo(
@@ -143,6 +144,9 @@ export function MarketPage({
   }
 
   function handleQueryChange(value: string) {
+    if (value.trim() && !searchHistory.includes(value.trim())) {
+      setSearchHistory([value.trim(), ...searchHistory.slice(0, 4)]);
+    }
     setQuery(value);
     scrollListToTop();
   }
