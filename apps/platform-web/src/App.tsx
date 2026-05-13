@@ -240,8 +240,8 @@ function App() {
         <div className="git-status">
           <span className="status-dot" />
           <div>
-            <strong>Git 未登录</strong>
-            <small>等待服务器账号授权</small>
+            <strong>🔐 Git 授权</strong>
+            <small>点击<a href="#" style={{color: "inherit", textDecoration: "underline"}}>了解如何授权</a></small>
           </div>
         </div>
       </aside>
