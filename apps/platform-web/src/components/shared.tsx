@@ -393,3 +393,22 @@ function timestampValue(value: string): number {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? 0 : date.getTime();
 }
+
+export function LoadingSpinner({ message = '加载中...' }: { message?: string }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '32px', gap: '16px' }}>
+      <div style={{ fontSize: '32px', animation: 'spin 1s linear infinite' }}>⟳</div>
+      <p style={{ color: '#666', fontSize: '14px' }}>{message}</p>
+    </div>
+  );
+}
+
+export function SkeletonLoader({ count = 3 }: { count?: number }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+      {Array.from({ length: count }).map((_, i) => (
+        <div key={i} style={{ height: '100px', background: '#f0f0f0', borderRadius: '4px', animation: 'pulse 1.5s ease-in-out infinite' }} />
+      ))}
+    </div>
+  );
+}
