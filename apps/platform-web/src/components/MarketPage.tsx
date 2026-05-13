@@ -201,6 +201,13 @@ export function MarketPage({
             </button>
           ) : null}
         </div>
+        {hasActiveFilters && (
+          <div className="active-filters" style={{display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "8px"}}>
+            {query.trim() && <span style={{padding: "4px 8px", background: "#f0f0f0", borderRadius: "4px", fontSize: "12px"}}>🔍 {query} <button type="button" onClick={() => handleQueryChange("")} style={{marginLeft: "4px", border: "none", background: "none", cursor: "pointer"}}>✕</button></span>}
+            {category !== '全部' && <span style={{padding: "4px 8px", background: "#f0f0f0", borderRadius: "4px", fontSize: "12px"}}>📁 {category} <button type="button" onClick={() => handleFilterChange(setCategory, '全部')} style={{marginLeft: "4px", border: "none", background: "none", cursor: "pointer"}}>✕</button></span>}
+            {filterPrefs.source !== '全部来源' && <span style={{padding: "4px 8px", background: "#f0f0f0", borderRadius: "4px", fontSize: "12px"}}>📦 {filterPrefs.source} <button type="button" onClick={() => handleSourceChange('全部来源')} style={{marginLeft: "4px", border: "none", background: "none", cursor: "pointer"}}>✕</button></span>}
+          </div>
+        )}
         <select value={category} onChange={(event) => handleFilterChange(setCategory, event.target.value)}>
           {categoryOptions.map((item) => <option key={item} value={item}>{item}</option>)}
         </select>
