@@ -11,12 +11,12 @@
 |------|------|
 | 待处理 | 8 |
 | 进行中 | 0 |
-| 已完成（今日） | 8 |
+| 已完成（今日） | 9 |
 | 需要人工审查 | 0 |
 
 **优先级分布**:
 - 🔴 HIGH: 0 个待处理 + 5 个已完成 ✅
-- 🟡 MEDIUM: 5 个待处理 (2 前端 + 3 后端) + 3 个已完成
+- 🟡 MEDIUM: 5 个待处理 (2 前端 + 3 后端) + 4 个已完成
 - 🟢 LOW: 2 个待处理 + 1 个已完成
 
 **类别分布**:
@@ -24,7 +24,7 @@
 - 📱 产品体验: 3 个待处理 + 7 个已完成
 - 💻 代码质量: 2 个已完成
 - 🔌 后端 API: 3 个待处理
-- ♿ 可访问性: 1 个待处理
+- ♿ 可访问性: 1 个已完成
 
 ---
 
@@ -263,6 +263,87 @@ MarketPage 中有多个 useMemo，但依赖项可能不够精确。
 - 从 [query, category, filterPrefs] 改为 [query, category, filterPrefs.source]
 - 避免当 filterPrefs.sort 改变时不必要的重新计算
 - 验证: TypeScript 检查通过, 构建成功, 测试通过
+
+---
+
+### [A11Y-2026-05-13-001] 改进 platform-web 的可访问性，确保符合 WCAG 2.1 AA 标准 ✅
+
+**类别**: 可访问性 / 代码质量
+**优先级**: MEDIUM
+**预期收益**: 提升用户体验，确保所有用户（包括残障用户）都能使用平台
+**涉及文件**: 
+- src/components/shared.tsx
+- src/components/MarketPage.tsx
+- src/components/NotificationCenter.tsx
+- src/components/NotificationItem.tsx
+- src/components/NotificationBell.tsx
+- src/styles/app.css
+
+**优化建议**: 
+改进 platform-web 的可访问性，确保符合 WCAG 2.1 AA 标准：
+
+1. **ARIA 标签改进**:
+   - 为 PageHeader 添加 role="banner" 和 toolbar 角色
+   - 为 LoadingSpinner 和 SkeletonLoader 添加 role="status" 和 aria-live="polite"
+   - 为 NotificationCenter 添加 ARIA live regions
+   - 为表单输入添加关联的 label 元素
+
+2. **键盘导航支持**:
+   - 所有交互元素都可通过 Tab 键访问
+   - 添加清晰的焦点指示器（2px outline）
+   - 改进分页和筛选控件的键盘支持
+
+3. **颜色对比度改进**:
+   - 表单错误文本从 #b42318 改为 #8b1a1a（更高对比度）
+   - 通知徽章从 var(--danger) 改为 #c41e3a（更高对比度）
+   - 添加白色边框到通知徽章以增强可见性
+
+4. **焦点指示器**:
+   - 为所有按钮添加 focus-visible 样式
+   - 为输入框添加 outline 和 outline-offset
+   - 为筛选按钮添加焦点状态
+
+5. **表单标签和错误提示**:
+   - 为搜索字段添加隐藏的 label 和 aria-describedby
+   - 为分类、来源、排序选择框添加关联的 label
+   - 改进分页按钮的 aria-label
+
+6. **加载状态可访问性**:
+   - LoadingSpinner 使用 aria-live="polite" 通知屏幕阅读器
+   - SkeletonLoader 添加 aria-hidden 到装饰元素
+
+7. **通知中心改进**:
+   - 添加 ARIA live region 到通知列表
+   - 使用 role="tab" 和 role="tablist" 改进分类筛选
+   - 改进分页的 aria-label
+
+**复杂度**: Medium
+**预计时间**: 60 分钟
+**发现时间**: 2026-05-13 13:00:00
+**状态**: ✅ 已完成
+**Commit**: e8721f5
+**完成时间**: 2026-05-13 14:30:00
+
+**实现详情**:
+- ✅ PageHeader 添加 role="banner" 和 toolbar 角色
+- ✅ LoadingSpinner 添加 role="status" 和 aria-live="polite"
+- ✅ SkeletonLoader 添加 role="status" 和 aria-live="polite"
+- ✅ NotificationCenter 添加 ARIA live regions 和 tab roles
+- ✅ MarketPage 搜索字段添加 label 和 aria-describedby
+- ✅ 所有 select 元素添加关联的 label
+- ✅ CSS 改进：添加 focus-visible 样式、改进颜色对比度
+- ✅ 表单错误颜色改为 #8b1a1a（WCAG AA 级别）
+- ✅ 通知徽章颜色改为 #c41e3a 并添加白色边框
+- ✅ 添加 skip-link 样式支持键盘导航
+- ✅ 验证通过 - typecheck, build, test 全部成功
+
+**WCAG 2.1 AA 合规性**:
+- ✅ 1.4.3 对比度（最小值）- 文本和背景颜色对比度 ≥ 4.5:1
+- ✅ 2.1.1 键盘 - 所有功能都可通过键盘访问
+- ✅ 2.4.3 焦点顺序 - 焦点顺序有意义且可见
+- ✅ 2.4.7 焦点可见 - 所有交互元素都有清晰的焦点指示器
+- ✅ 3.3.1 错误识别 - 错误信息清晰可见
+- ✅ 4.1.2 名称、角色、值 - 所有组件都有适当的 ARIA 标签
 
 ---
 
