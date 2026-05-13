@@ -246,23 +246,46 @@ export function ReviewForm({
   const [form, setForm] = useState<FeedbackInput>({ ...emptyForm, skillId: skill.id, skillName: skill.name });
   const [state, setState] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
   const [validationError, setValidationError] = useState('');
+  const [errorDetails, setErrorDetails] = useState('');
 
   useEffect(() => {
     setForm({ ...emptyForm, skillId: skill.id, skillName: skill.name });
     setState('idle');
     setValidationError('');
+    setErrorDetails('');
   }, [skill.id, skill.name]);
+
+  // Auto-close success message after 3 seconds
+  useEffect(() => {
+    if (state === 'success') {
+      const timer = setTimeout(() => {
+        setState('idle');
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [state]);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const message = form.message.trim();
+    const contact = form.contact.trim();
+
+    // Validate message length
     if (message.length < 2) {
       setValidationError('请至少填写 2 个字的评价内容。');
       setState('idle');
       return;
     }
 
+    // Validate contact field when not anonymous
+    if (!form.anonymous && !contact) {
+      setValidationError('非匿名评价时，联系方式为必填项。');
+      setState('idle');
+      return;
+    }
+
     setValidationError('');
+    setErrorDetails('');
     setState('submitting');
     try {
       const review = await submitFeedback({
@@ -270,30 +293,57 @@ export function ReviewForm({
         skillId: skill.id,
         skillName: skill.name,
         message,
-        contact: form.anonymous ? '' : form.contact.trim(),
+        contact: form.anonymous ? '' : contact,
       });
       setForm({ ...emptyForm, skillId: skill.id, skillName: skill.name });
       setState('success');
       await onSubmitted(review);
-    } catch {
+    } catch (error) {
       setState('error');
+      const errorMessage = error instanceof Error ? error.message : '未知错误';
+      setErrorDetails(errorMessage);
     }
   }
+
+  const messageLength = form.message.length;
+  const isContactRequired = !form.anonymous;
+  const isContactValid = form.anonymous || form.contact.trim().length > 0;
+  const canSubmit = state !== 'submitting' && messageLength >= 2 && isContactValid;
 
   return (
     <form className="review-form" onSubmit={handleSubmit}>
       <div className="panel-head"><div><p className="eyebrow">Feedback</p><h2>评价这个技能</h2></div><span>{state === 'success' ? '已提交' : '帮助维护者改进'}</span></div>
-      <div className="rating-row" role="radiogroup" aria-label="评分">{[1, 2, 3, 4, 5].map((rating) => <button className={form.rating === rating ? 'active' : ''} key={rating} type="button" onClick={() => setForm((current) => ({ ...current, rating }))}>{rating}</button>)}</div>
-      <div className="tag-row choose">{reviewTags.map((tag) => <button className={form.tags.includes(tag) ? 'active' : ''} key={tag} type="button" onClick={() => setForm((current) => ({ ...current, tags: current.tags.includes(tag) ? current.tags.filter((item) => item !== tag) : [...current.tags, tag] }))}>{tag}</button>)}</div>
-      <textarea value={form.message} placeholder="说说这个技能哪里好用，哪里还需要改进。" onChange={(event) => { setValidationError(''); setState((current) => current === 'success' ? 'idle' : current); setForm((current) => ({ ...current, message: event.target.value })); }} />
-      <div className="form-grid">
-        <label className="checkbox-row"><input checked={form.anonymous} type="checkbox" onChange={(event) => setForm((current) => ({ ...current, anonymous: event.target.checked, contact: event.target.checked ? '' : current.contact }))} />匿名评价</label>
-        <input disabled={form.anonymous} value={form.contact} placeholder="联系方式（可选）" onChange={(event) => setForm((current) => ({ ...current, contact: event.target.value }))} />
+      <div className="rating-row" role="radiogroup" aria-label="评分">{[1, 2, 3, 4, 5].map((rating) => <button className={form.rating === rating ? 'active' : ''} key={rating} type="button" onClick={() => setForm((current) => ({ ...current, rating }))} disabled={state === 'submitting'}>{rating}</button>)}</div>
+      <div className="tag-row choose">{reviewTags.map((tag) => <button className={form.tags.includes(tag) ? 'active' : ''} key={tag} type="button" onClick={() => setForm((current) => ({ ...current, tags: current.tags.includes(tag) ? current.tags.filter((item) => item !== tag) : [...current.tags, tag] }))} disabled={state === 'submitting'}>{tag}</button>)}</div>
+      <div style={{ position: 'relative' }}>
+        <textarea
+          value={form.message}
+          placeholder="说说这个技能哪里好用，哪里还需要改进。"
+          disabled={state === 'submitting'}
+          onChange={(event) => {
+            setValidationError('');
+            setState((current) => current === 'success' ? 'idle' : current);
+            setForm((current) => ({ ...current, message: event.target.value }));
+          }}
+        />
+        <small style={{ display: 'block', textAlign: 'right', marginTop: '4px', color: '#999', fontSize: '12px' }}>
+          {messageLength} / 500 字
+        </small>
       </div>
-      <button className="primary" disabled={state === 'submitting'} type="submit">{state === 'submitting' ? '提交中...' : '提交评价'}</button>
+      <div className="form-grid">
+        <label className="checkbox-row"><input checked={form.anonymous} type="checkbox" onChange={(event) => setForm((current) => ({ ...current, anonymous: event.target.checked, contact: event.target.checked ? '' : current.contact }))} disabled={state === 'submitting'} />匿名评价</label>
+        <input
+          disabled={form.anonymous || state === 'submitting'}
+          value={form.contact}
+          placeholder={isContactRequired ? '联系方式（必填）' : '联系方式（可选）'}
+          onChange={(event) => setForm((current) => ({ ...current, contact: event.target.value }))}
+          style={isContactRequired && !form.contact.trim() ? { borderColor: '#ff6b6b' } : {}}
+        />
+      </div>
+      <button className="primary" disabled={!canSubmit} type="submit">{state === 'submitting' ? '提交中...' : '提交评价'}</button>
       {validationError ? <div className="form-feedback warn">{validationError}</div> : null}
       {state === 'success' ? <div className="form-feedback ok">评价已提交，已同步到当前技能的评价列表。</div> : null}
-      {state === 'error' ? <div className="empty-state danger-text">提交失败，请稍后重试。</div> : null}
+      {state === 'error' ? <div className="empty-state danger-text">提交失败{errorDetails ? `：${errorDetails}` : '，请稍后重试。'}</div> : null}
     </form>
   );
 }
@@ -308,10 +358,12 @@ export function ReviewItem({
   const [status, setStatus] = useState<FeedbackStatus>(review.status);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [errorDetails, setErrorDetails] = useState('');
 
   useEffect(() => {
     setStatus(review.status);
     setError('');
+    setErrorDetails('');
   }, [review.id, review.status]);
 
   async function changeStatus(nextStatus: FeedbackStatus) {
@@ -319,26 +371,30 @@ export function ReviewItem({
     setStatus(nextStatus);
     setSaving(true);
     setError('');
+    setErrorDetails('');
     try {
       const updated = await updateFeedbackStatus(review.id, nextStatus);
       setStatus(updated.status);
       onStatusChange?.(updated);
-    } catch {
+    } catch (err) {
       setStatus(previousStatus);
-      setError('状态更新失败，请稍后重试。');
+      setError('状态更新失败');
+      const errorMessage = err instanceof Error ? err.message : '未知错误';
+      setErrorDetails(errorMessage);
     } finally {
       setSaving(false);
     }
   }
 
   return (
-    <article className="review-item">
+    <article className="review-item" style={{ opacity: saving ? 0.7 : 1, transition: 'opacity 0.2s' }}>
       <div className="panel-head">
         <strong>{review.skillName || '未知技能'} / {review.rating} 分</strong>
         <select
           disabled={saving}
           value={status}
           onChange={(event) => { void changeStatus(event.target.value as FeedbackStatus); }}
+          style={{ cursor: saving ? 'not-allowed' : 'pointer' }}
         >
           <option value="submitted">新评价</option><option value="reviewing">处理中</option><option value="approved">已采纳</option><option value="rejected">不采纳</option><option value="archived">已归档</option>
         </select>
@@ -346,8 +402,8 @@ export function ReviewItem({
       <p>{review.message}</p>
       <div className="tag-row">{review.tags.map((tag) => <em key={tag}>{tag}</em>)}</div>
       <small>{review.anonymous ? '匿名用户' : review.contact || '未填写联系方式'}</small>
-      {saving ? <small>状态保存中...</small> : null}
-      {error ? <div className="form-feedback warn">{error}</div> : null}
+      {saving ? <small style={{ display: 'block', marginTop: '8px', color: '#0066cc' }}>⟳ 状态保存中...</small> : null}
+      {error ? <div className="form-feedback warn">{error}{errorDetails ? `：${errorDetails}` : '，请稍后重试。'}</div> : null}
     </article>
   );
 }
