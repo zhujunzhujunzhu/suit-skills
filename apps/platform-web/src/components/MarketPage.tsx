@@ -184,13 +184,6 @@ export function MarketPage({
         }
       />
       <section className="toolbar market-toolbar" aria-label="技能市场筛选">
-      {hasActiveFilters ? (
-        <div className="active-filters" aria-label="已应用的过滤器">
-          {query.trim() && <span className="filter-tag">🔍 {query} <button type="button" onClick={() => handleQueryChange("")} aria-label="删除搜索">✕</button></span>}
-          {category !== '全部' && <span className="filter-tag">📁 {category} <button type="button" onClick={() => handleFilterChange(setCategory, '全部')} aria-label="删除分类过滤">✕</button></span>}
-          {filterPrefs.source !== '全部来源' && <span className="filter-tag">📦 {filterPrefs.source} <button type="button" onClick={() => handleSourceChange('全部来源')} aria-label="删除来源过滤">✕</button></span>}
-        </div>
-      ) : null}
         <div className="search-field">
           <input
             value={query}
