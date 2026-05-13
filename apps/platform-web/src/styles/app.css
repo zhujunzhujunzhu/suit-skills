@@ -1750,3 +1750,61 @@ textarea:focus {
     grid-template-columns: 1fr;
   }
 }
+
+/* Mobile Responsive Design */
+@media (max-width: 768px) {
+  .workspace {
+    margin-left: 0;
+  }
+  
+  aside {
+    position: fixed;
+    left: -280px;
+    top: 0;
+    width: 280px;
+    height: 100vh;
+    transition: left 0.3s ease;
+    z-index: 1000;
+  }
+  
+  aside.open {
+    left: 0;
+  }
+  
+  .hamburger-menu {
+    display: block;
+    position: fixed;
+    top: 16px;
+    left: 16px;
+    z-index: 1001;
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 24px;
+  }
+  
+  .toolbar {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  
+  .toolbar select {
+    flex: 1;
+    min-width: 120px;
+  }
+}
+
+@media (max-width: 480px) {
+  .skill-row {
+    flex-direction: column;
+    gap: 8px;
+  }
+  
+  .skill-meta {
+    width: 100%;
+  }
+  
+  .toolbar {
+    padding: 8px;
+  }
+}
