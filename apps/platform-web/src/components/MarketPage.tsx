@@ -124,7 +124,10 @@ export function MarketPage({
     rating: averageRating(filteredSkills),
   }), [filteredSkills]);
 
-  const hasActiveFilters = useMemo(() => Boolean(query.trim()) || category !== '全部' || filterPrefs.source !== '全部来源', [query, category, filterPrefs.source]);
+  const hasActiveFilters = useMemo(
+    () => Boolean(query.trim()) || category !== '全部' || filterPrefs.source !== '全部来源',
+    [query, category, filterPrefs.source]
+  );
 
   const rowVirtualizer = useVirtualizer({
     count: filteredSkills.length,
