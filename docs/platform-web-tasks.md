@@ -1373,3 +1373,44 @@ CREATE TABLE search_history (
 - ✅ 构建 - 成功 (1.45s)
 - ✅ 测试 - 通过 (无相关测试文件)
 - ✅ 功能测试 - 所有空状态类型正常显示
+
+## [OPT-2026-05-13-005] Extract MarketPage subcomponents ✅
+
+**类别**: 架构
+**优先级**: MEDIUM
+**预期收益**: 改进代码可维护性，提升组件复用性
+**涉及文件**: 
+- src/components/MarketPage.tsx (360 → 220 行)
+- src/components/MarketSearch.tsx (新建)
+- src/components/MarketFilter.tsx (新建)
+- src/components/SkillGrid.tsx (新建)
+
+**优化建议**: 
+MarketPage.tsx 包含 360 行代码，混合了搜索、筛选和列表渲染逻辑。
+拆分为三个专注的子组件：
+1. MarketSearch - 搜索输入和历史面板
+2. MarketFilter - 分类/来源/排序下拉菜单
+3. SkillGrid - 虚拟化技能列表渲染
+
+**复杂度**: Medium
+**预计时间**: 20 分钟
+**发现时间**: 2026-05-13 15:00:00
+**状态**: ✅ 已完成
+**Commit**: c0b55a5
+**完成时间**: 2026-05-13 22:50:00
+
+**实现详情**:
+- ✅ MarketSearch 组件 (1.6 KB) - 搜索输入、历史面板、清空功能
+- ✅ MarketFilter 组件 (1.5 KB) - 分类/来源/排序选择器
+- ✅ SkillGrid 组件 (2.4 KB) - 虚拟化列表、空状态处理
+- ✅ MarketPage 重构 - 从 360 行减少到 220 行
+- ✅ TypeScript 检查 - 无错误
+- ✅ 构建 - 成功 (19.85s)
+- ✅ Bundle Size - 稳定 (85.36 KB gzip: 26.11 KB)
+
+**验证通过**:
+- ✅ 类型安全 - 所有组件完整的 TypeScript 类型
+- ✅ 功能完整 - 搜索、筛选、虚拟化列表全部正常
+- ✅ 性能稳定 - 无性能回退
+
+---
