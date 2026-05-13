@@ -179,7 +179,7 @@ export function SkillRow({ skill, onOpen, highlightTerms = [] }: { skill: Skill;
       <span className="skill-meta"><small>作者</small><strong><HighlightText text={skill.author} terms={highlightTerms} /></strong></span>
       <span className="skill-meta"><small>来源</small><strong><HighlightText text={skill.source} terms={highlightTerms} /></strong></span>
       <span className="skill-meta"><small>更新</small><strong>{updatedLabel}</strong></span>
-      <span className="skill-metrics"><strong>{skill.rating.toFixed(1)}</strong><small>{skill.reviews} 评价 / {formatCompact(skill.installs)} 安装</small></span>
+      <span className="skill-metrics"><strong>⭐ {skill.rating.toFixed(1)}</strong><small>📥 {formatCompact(skill.installs)} 安装 · {skill.reviews} 评价 · 📅 {updatedLabel}更新</small></span>
       <span className="open-link">查看详情</span>
     </button>
   );
