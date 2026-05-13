@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "searchHistory": [
+    {
+      "id": "sh-001",
+      "userId": "current-user",
+      "query": "React hooks",
+      "createdAt": "2026-05-13T14:00:00Z"
+    },
+    {
+      "id": "sh-002",
+      "userId": "current-user",
+      "query": "TypeScript utilities",
+      "createdAt": "2026-05-13T13:30:00Z"
+    },
+    {
+      "id": "sh-003",
+      "userId": "current-user",
+      "query": "Vue components",
+      "createdAt": "2026-05-13T13:00:00Z"
+    },
+    {
+      "id": "sh-004",
+      "userId": "current-user",
+      "query": "dashboard",
+      "createdAt": "2026-05-12T15:00:00Z"
+    },
+    {
+      "id": "sh-005",
+      "userId": "current-user",
+      "query": "form validation",
+      "createdAt": "2026-05-12T14:00:00Z"
+    }
+  ]
+}
