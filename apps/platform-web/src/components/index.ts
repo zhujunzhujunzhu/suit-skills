@@ -6,6 +6,7 @@ export { NotificationCenter } from './NotificationCenter';
 export { NotificationBell } from './NotificationBell';
 export { SourcesPage } from './SourcesPage';
 export { ThemeToggle } from './ThemeToggle';
+export { UserManagementPage } from './UserManagementPage';
 export {
   adminOnlyViews,
   navItems,

@@ -7,17 +7,13 @@ import { EmptyState } from './EmptyState';
 export function SkillGrid({
   skills,
   highlightTerms,
-  isFavorited,
   onOpenSkill,
-  onToggleFavorite,
   hasActiveFilters,
   onResetFilters,
 }: {
   skills: Skill[];
   highlightTerms: string[];
-  isFavorited: (id: string) => boolean;
   onOpenSkill: (id: string) => void;
-  onToggleFavorite: (id: string) => void;
   hasActiveFilters: boolean;
   onResetFilters: () => void;
 }) {
@@ -52,8 +48,6 @@ export function SkillGrid({
                     highlightTerms={highlightTerms}
                     skill={skill}
                     onOpen={() => onOpenSkill(skill.id)}
-                    isFavorited={isFavorited(skill.id)}
-                    onToggleFavorite={() => onToggleFavorite(skill.id)}
                   />
                 </div>
               );

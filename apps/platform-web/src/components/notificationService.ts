@@ -31,8 +31,8 @@ const mockNotifications: Notification[] = [
     category: '技能相关',
     read: true,
     createdAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
-    actionUrl: '/reviews',
-    actionLabel: '查看评价',
+    actionUrl: '/skills/skill-java-bugfix',
+    actionLabel: '查看详情',
     icon: '⭐',
   },
   {

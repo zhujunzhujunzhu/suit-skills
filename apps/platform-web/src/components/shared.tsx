@@ -10,7 +10,7 @@ import {
   type SkillFileEntry,
 } from '../api/client';
 
-export type View = 'market' | 'detail' | 'upload' | 'mine' | 'reviews' | 'sources' | 'notifications';
+export type View = 'market' | 'detail' | 'upload' | 'mine' | 'sources' | 'notifications' | 'users';
 export type Role = 'user' | 'admin';
 export type SkillStatus = '已验证' | '待审核' | '新发布';
 
@@ -33,7 +33,7 @@ export interface Skill {
 }
 
 export const ROLE_STORAGE_KEY = 'suit-skills-platform-role';
-export const adminOnlyViews = new Set<View>(['reviews', 'sources']);
+export const adminOnlyViews = new Set<View>(['sources', 'users']);
 
 export const skills: Skill[] = [
   {
@@ -111,8 +111,8 @@ export const navItems: Array<{ view: Exclude<View, 'detail'>; label: string; des
   { view: 'upload', label: '上传技能', desc: '发布自己的技能包' },
   { view: 'mine', label: '我的技能包', desc: '维护与发布记录' },
   { view: 'notifications', label: '通知中心', desc: '查看系统和技能通知' },
-  { view: 'reviews', label: '评价中心', desc: '处理用户反馈' },
   { view: 'sources', label: '源管理', desc: '维护来源与发布' },
+  { view: 'users', label: '用户管理', desc: '账号与角色' },
 ];
 
 export const categories = ['全部', ...Array.from(new Set(skills.map((skill) => skill.category)))];
@@ -166,11 +166,69 @@ export function Badge({ status }: { status: string }) {
   return <span className={`badge ${badgeClass(status)}`}>{status}</span>;
 }
 
-export function SkillRow({ skill, onOpen, highlightTerms = [], isFavorited = false, onToggleFavorite }: { skill: Skill; onOpen: () => void; highlightTerms?: string[]; isFavorited?: boolean; onToggleFavorite?: () => void }) {
+export function ConfirmDialog({
+  open,
+  eyebrow = 'Confirm',
+  title,
+  description,
+  detail,
+  confirmLabel = '确认',
+  cancelLabel = '取消',
+  tone = 'default',
+  busy = false,
+  onConfirm,
+  onCancel,
+}: {
+  open: boolean;
+  eyebrow?: string;
+  title: string;
+  description: string;
+  detail?: string;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  tone?: 'default' | 'danger';
+  busy?: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  useEffect(() => {
+    if (!open) return undefined;
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape' && !busy) onCancel();
+    }
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [busy, onCancel, open]);
+
+  if (!open) return null;
+
+  return (
+    <div className="confirm-dialog-layer" role="presentation">
+      <button className="confirm-dialog-scrim" type="button" aria-label="关闭确认弹框" disabled={busy} onClick={onCancel} />
+      <section className={`confirm-dialog ${tone === 'danger' ? 'danger' : ''}`} role="dialog" aria-modal="true" aria-labelledby="confirm-dialog-title" aria-describedby="confirm-dialog-description">
+        <div className="confirm-dialog-mark" aria-hidden="true">{tone === 'danger' ? '!' : 'i'}</div>
+        <div className="confirm-dialog-copy">
+          <p className="eyebrow">{eyebrow}</p>
+          <h2 id="confirm-dialog-title">{title}</h2>
+          <p id="confirm-dialog-description">{description}</p>
+          {detail ? <small>{detail}</small> : null}
+        </div>
+        <div className="confirm-dialog-actions">
+          <button className="ghost" type="button" disabled={busy} onClick={onCancel}>{cancelLabel}</button>
+          <button className={tone === 'danger' ? 'danger solid' : 'primary'} type="button" disabled={busy} onClick={onConfirm}>{busy ? '处理中...' : confirmLabel}</button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+export function SkillRow({ skill, onOpen, highlightTerms = [] }: { skill: Skill; onOpen: () => void; highlightTerms?: string[] }) {
   const updatedDaysAgo = Math.floor((Date.now() - skill.updatedAtValue) / (1000 * 60 * 60 * 24));
   const updatedLabel = updatedDaysAgo === 0 ? '今天' : updatedDaysAgo === 1 ? '昨天' : `${updatedDaysAgo}天前`;
   return (
-    <button className="skill-row" type="button" role="link" aria-label="查看技能详情: ${skill.name}" tabIndex={0} onClick={onOpen}>
+    <button className="skill-row" type="button" role="link" aria-label={`查看技能详情: ${skill.name}`} onClick={onOpen}>
       <span className="skill-icon">{skill.name.slice(0, 2).toUpperCase()}</span>
       <span className="skill-main">
         <span className="skill-title" role="heading" aria-level={3}><strong><HighlightText text={skill.name} terms={highlightTerms} /></strong><Badge status={skill.status} /></span>
@@ -181,20 +239,6 @@ export function SkillRow({ skill, onOpen, highlightTerms = [], isFavorited = fal
       <span className="skill-meta"><small>来源</small><strong><HighlightText text={skill.source} terms={highlightTerms} /></strong></span>
       <span className="skill-meta"><small>更新</small><strong>{updatedLabel}</strong></span>
       <span className="skill-metrics"><strong>⭐ {skill.rating.toFixed(1)}</strong><small>📥 {formatCompact(skill.installs)} 安装 · {skill.reviews} 评价 · 📅 {updatedLabel}更新</small></span>
-      {onToggleFavorite && (
-        <button
-          className="favorite-btn"
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onToggleFavorite();
-          }}
-          aria-label={isFavorited ? '取消收藏' : '收藏'}
-        >
-          {isFavorited ? '❤️' : '🤍'}
-        </button>
-      )}
-      <span className="open-link">查看详情</span>
     </button>
   );
 }

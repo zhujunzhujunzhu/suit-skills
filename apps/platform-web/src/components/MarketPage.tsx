@@ -1,6 +1,6 @@
 ﻿import { useDeferredValue, useMemo, useState } from 'react';
 import type { SourceItem } from '../api/client';
-import { useLocalStorage, useFavorites } from '../hooks';
+import { useLocalStorage } from '../hooks';
 import {
   averageRating,
   formatCompact,
@@ -44,7 +44,6 @@ export function MarketPage({
   );
   const deferredQuery = useDeferredValue(query);
   const [searchHistory, setSearchHistory] = useLocalStorage<string[]>('market-search-history', []);
-  const { isFavorited, toggleFavorite } = useFavorites();
 
   const sourceLabelByName = useMemo(
     () => new Map(sourceConfig.map((item) => [item.name, item.label])),
@@ -96,14 +95,22 @@ export function MarketPage({
     const enabledLabels = new Set(
       sourceConfig.filter((item) => item.enabled).map((item) => item.label),
     );
+    const configuredNames = new Set(sourceConfig.map((item) => item.name));
+    const enabledNames = new Set(sourceConfig.filter((item) => item.enabled).map((item) => item.name));
 
     return indexedSkills
       .filter(({ skill, searchableText }) => {
         const matchesQuery = !terms.length || terms.every((term) => searchableText.includes(term));
         const matchesCategory = category === '全部' || categoryGroupFor(skill.category) === category;
-        const matchesSource = filterPrefs.source === '全部来源' || skill.source === filterPrefs.source;
+        const skillSourceLabel = sourceLabelByName.get(skill.source);
+        const matchesSource =
+          filterPrefs.source === '全部来源' ||
+          skill.source === filterPrefs.source ||
+          skillSourceLabel === filterPrefs.source;
         const enabledSource =
-          !configuredLabels.has(skill.source) || enabledLabels.has(skill.source);
+          (!configuredNames.has(skill.source) && !configuredLabels.has(skill.source)) ||
+          enabledNames.has(skill.source) ||
+          enabledLabels.has(skill.source);
         return matchesQuery && matchesCategory && matchesSource && enabledSource;
       })
       .sort((a, b) => {
@@ -131,6 +138,10 @@ export function MarketPage({
   );
 
   function scrollListToTop() {
+    document.querySelector('.virtual-skill-list')?.scrollTo({
+      top: 0,
+      behavior: 'smooth',
+    });
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
@@ -210,9 +221,7 @@ export function MarketPage({
       <SkillGrid
         skills={filteredSkills}
         highlightTerms={highlightTerms}
-        isFavorited={isFavorited}
         onOpenSkill={onOpenSkill}
-        onToggleFavorite={toggleFavorite}
         hasActiveFilters={hasActiveFilters}
         onResetFilters={resetFilters}
       />

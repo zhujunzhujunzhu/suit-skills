@@ -15,6 +15,9 @@ const appVersion = packageJson.version ?? '0.0.0';
 export default defineConfig({
   root: fileURLToPath(new URL('.', import.meta.url)),
   plugins: [react()],
+  esbuild: {
+    charset: 'ascii',
+  },
   define: {
     __APP_VERSION__: JSON.stringify(appVersion),
   },

@@ -21,7 +21,6 @@ import {
   MarketPage,
   MySkillsPage,
   NotificationCenter,
-  NotificationBell,
   navItems,
   ROLE_STORAGE_KEY,
   readStoredRole,
@@ -29,6 +28,7 @@ import {
   skillFromApi,
   skills,
   ThemeToggle,
+  UserManagementPage,
   type Role,
   type Skill,
   type View,
@@ -38,7 +38,6 @@ import { useTheme } from './hooks';
 const SkillDetailPage = lazy(() => import('./components/SkillDetailPage').then(m => ({ default: m.SkillDetailPage })));
 const SkillDirectoryPage = lazy(() => import('./components/SkillDetailPage').then(m => ({ default: m.SkillDirectoryPage })));
 const UploadPage = lazy(() => import('./components/UploadPage').then(m => ({ default: m.UploadPage })));
-const ReviewCenter = lazy(() => import('./components/ReviewCenter').then(m => ({ default: m.ReviewCenter })));
 
 type SkillSourceView = 'market' | 'mine';
 
@@ -47,8 +46,8 @@ const viewPaths: Record<Exclude<View, 'detail'>, string> = {
   upload: '/upload',
   mine: '/mine',
   notifications: '/notifications',
-  reviews: '/reviews',
   sources: '/sources',
+  users: '/users',
 };
 
 function viewFromPath(pathname: string): Exclude<View, 'detail'> | null {
@@ -135,6 +134,12 @@ function App() {
     setUser(null);
     setRole(null);
     requestNavigate('/market', { replace: true });
+  }
+
+  function updateCurrentUser(nextUser: AuthUser) {
+    setUser(nextUser);
+    setRole(nextUser.role);
+    localStorage.setItem(ROLE_STORAGE_KEY, nextUser.role);
   }
 
   function routeAdmin(element: React.ReactNode) {
@@ -254,9 +259,6 @@ function App() {
       </aside>
 
       <section className="workspace">
-        <header className="workspace-header">
-          <NotificationBell />
-        </header>
         <Routes>
           <Route path="/" element={<Navigate replace to="/market" />} />
           <Route
@@ -279,6 +281,7 @@ function App() {
               <Suspense fallback={<div className="page"><section className="empty-state"><p>加载中...</p></section></div>}>
                 <UploadPage
                   sourceConfig={sourceConfig}
+                  canPublish={role === 'admin'}
                   onUploaded={(skill) =>
                     setMarketSkills((current) => [
                       skill,
@@ -293,17 +296,22 @@ function App() {
           />
           <Route
             path="/mine"
-            element={<MySkillsPage fallbackSkills={marketSkills} onOpenSkill={(skillId) => openSkill(skillId, 'mine')} />}
+            element={<MySkillsPage fallbackSkills={marketSkills} role={role} onOpenSkill={(skillId) => openSkill(skillId, 'mine')} onPublished={refreshMarket} />}
           />
           <Route
             path="/notifications"
             element={<NotificationCenter />}
           />
-          <Route path="/reviews" element={routeAdmin(<Suspense fallback={<div className="page"><section className="empty-state"><p>加载中...</p></section></div>}><ReviewCenter /></Suspense>)} />
           <Route
             path="/sources"
             element={routeAdmin(
               <SourcesPage sources={sourceConfig} onSourcesChange={setSourceConfig} />,
+            )}
+          />
+          <Route
+            path="/users"
+            element={routeAdmin(
+              <UserManagementPage currentUser={user} onCurrentUserChange={updateCurrentUser} />,
             )}
           />
           <Route path="*" element={<StatusPage title="页面不存在" description="当前路径无效，可能是链接过期或地址输入有误。" actionLabel="返回技能市场" onAction={() => requestNavigate('/market', { replace: true })} />} />

@@ -71,9 +71,6 @@ export function LoginPage() {
           >
             {submitting ? '登录中...' : '登录'}
           </button>
-          <div className="form-links">
-            <a href="#" className="forgot-password">忘记密码？</a>
-          </div>
           {!authConfig.enabled ? (
             <p className="form-hint">
               {authConfig.apiAvailable

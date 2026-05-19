@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 export function MarketSearch({
   query,
@@ -18,6 +18,10 @@ export function MarketSearch({
   onClearHistory: () => void;
 }) {
   const [inputValue, setInputValue] = useState(query);
+
+  useEffect(() => {
+    setInputValue(query);
+  }, [query]);
 
   function handleInputChange(value: string) {
     setInputValue(value);

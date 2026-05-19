@@ -3,6 +3,7 @@ import type { ComponentPropsWithoutRef, ReactNode } from 'react';
 import type { ExtraProps } from 'react-markdown';
 import ReactMarkdown from 'react-markdown';
 import {
+  buildInstallPackageCommand,
   getSkillFile,
   listFeedback,
   listSkillFiles,
@@ -24,6 +25,13 @@ import {
   type Skill,
 } from './shared';
 
+const installTargetOptions = [
+  { id: 'agents', label: 'Agents' },
+  { id: 'codex', label: 'Codex' },
+  { id: 'claude', label: 'Claude' },
+  { id: 'cursor', label: 'Cursor' },
+];
+
 export function SkillDetailPage({
   backLabel,
   skill,
@@ -37,6 +45,9 @@ export function SkillDetailPage({
 }) {
   const [reviews, setReviews] = useState<FeedbackItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [installScope, setInstallScope] = useState<'global' | 'local'>('global');
+  const [installTargets, setInstallTargets] = useState<string[]>(['agents']);
+  const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
 
   async function refreshReviews() {
     setLoading(true);
@@ -69,6 +80,28 @@ export function SkillDetailPage({
   const reviewCount = reviews.length || skill.reviews;
   const distribution = ratingDistribution(reviews);
   const statusCounts = reviewStatusCounts(reviews);
+  const installCommand = useMemo(
+    () => buildInstallPackageCommand(skill.id, { scope: installScope, targets: installTargets }),
+    [installScope, installTargets, skill.id],
+  );
+
+  function toggleInstallTarget(target: string) {
+    setInstallTargets((current) =>
+      current.includes(target)
+        ? current.filter((item) => item !== target)
+        : [...current, target],
+    );
+    setCopyState('idle');
+  }
+
+  async function copyInstallCommand() {
+    try {
+      await navigator.clipboard?.writeText(installCommand);
+      setCopyState('copied');
+    } catch {
+      setCopyState('failed');
+    }
+  }
 
   return (
     <div className="page skill-detail-page">
@@ -116,12 +149,54 @@ export function SkillDetailPage({
               技能目录中可查看完整包结构、SKILL.md、meta.json、示例文件，并维护文件内容。
             </p>
           </section>
-          <div className="install-box detail-install-box">
-            <span>安装命令</span>
-            <code>{skill.command}</code>
-            <button type="button" onClick={() => navigator.clipboard?.writeText(skill.command)}>
-              复制
-            </button>
+          <div className="install-box detail-install-box package-install-box">
+            <div className="install-box-head">
+              <div>
+                <span>一键安装命令</span>
+                <small>公开 package 地址，无需登录即可安装</small>
+              </div>
+              <button type="button" onClick={() => void copyInstallCommand()}>
+                {copyState === 'copied' ? '已复制' : '复制'}
+              </button>
+            </div>
+            <div className="install-options" aria-label="安装选项">
+              <div className="segmented-control" role="group" aria-label="安装范围">
+                <button
+                  className={installScope === 'global' ? 'active' : ''}
+                  type="button"
+                  onClick={() => {
+                    setInstallScope('global');
+                    setCopyState('idle');
+                  }}
+                >
+                  全局
+                </button>
+                <button
+                  className={installScope === 'local' ? 'active' : ''}
+                  type="button"
+                  onClick={() => {
+                    setInstallScope('local');
+                    setCopyState('idle');
+                  }}
+                >
+                  当前项目
+                </button>
+              </div>
+              <div className="install-targets" aria-label="目标环境">
+                {installTargetOptions.map((target) => (
+                  <label className="checkbox-row compact" key={target.id}>
+                    <input
+                      checked={installTargets.includes(target.id)}
+                      type="checkbox"
+                      onChange={() => toggleInstallTarget(target.id)}
+                    />
+                    {target.label}
+                  </label>
+                ))}
+              </div>
+            </div>
+            <code>{installCommand}</code>
+            {copyState === 'failed' ? <small className="copy-error">复制失败，请手动复制命令。</small> : null}
           </div>
         </article>
         <aside className="skill-review-workbench" aria-label={`${skill.name} 的评价情况`}>

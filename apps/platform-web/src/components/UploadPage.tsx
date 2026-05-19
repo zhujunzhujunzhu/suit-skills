@@ -1,10 +1,9 @@
-﻿import { type FormEvent, useState } from 'react';
-import { parseSkillPackage, submitSkillPackageForReview, updateSkillPackageMetadata, uploadSkill, type PackageUploadRecord, type SkillInput, type SkillItem, type SourceItem } from '../api/client';
+﻿import { type DragEvent, type FormEvent, useRef, useState } from 'react';
+import { parseSkillPackage, publishSkillPackage, updateSkillPackageMetadata, uploadSkill, type PackageUploadRecord, type SkillInput, type SkillItem, type SourceItem } from '../api/client';
 import type { UploadFileEntry } from '../uploadPackaging';
 import { Badge, PageHeader, skillFromApi, skillInputFromForm, type Skill } from './shared';
 import { EmptyState } from './EmptyState';
 
-type DirectoryInputElement = HTMLInputElement & { webkitdirectory: boolean; directory: boolean };
 type FileWithRelativePath = File & { webkitRelativePath?: string };
 type FileSystemEntryLike = { name: string; isFile: boolean; isDirectory: boolean };
 type FileSystemFileEntryLike = FileSystemEntryLike & { file: (success: (file: File) => void, error?: (error: DOMException) => void) => void };
@@ -54,11 +53,13 @@ function uploadEntriesFromFileList(files: FileList | null): UploadFileEntry[] {
 
 export function UploadPage({
   sourceConfig,
+  canPublish: canPublishDirectly,
   onOpenMine,
   onOpenSkill,
   onUploaded,
 }: {
   sourceConfig: SourceItem[];
+  canPublish: boolean;
   onOpenMine: () => void;
   onOpenSkill: (skillId: string) => void;
   onUploaded: (skill: Skill) => void;
@@ -68,13 +69,15 @@ export function UploadPage({
   const [form, setForm] = useState<SkillInput>({ name: '', description: '', author: '', source: 'default', category: '', version: '0.1.0', tags: [], gitUrl: '' });
   const [status, setStatus] = useState<'idle' | 'parsing' | 'submitting' | 'success' | 'error'>('idle');
   const [message, setMessage] = useState('');
-  const [uploadStatus, setUploadStatus] = useState<'draft' | 'reviewing' | 'published'>('draft');
+  const [intent, setIntent] = useState<'save' | 'publish'>('save');
   const publishableSources = sourceConfig.filter((source) => source.enabled && source.publishEnabled);
   const publishableSourceNames = new Set(publishableSources.map((source) => source.name));
   const selectedSource = form.source && publishableSourceNames.has(form.source)
     ? form.source
     : publishableSources[0]?.name ?? '';
-  const canSubmit = Boolean(form.name.trim() && form.description.trim() && selectedSource) && status !== 'submitting' && status !== 'parsing';
+  const canEdit = status !== 'submitting' && status !== 'parsing';
+  const canSave = Boolean(form.name.trim() && form.description.trim()) && canEdit;
+  const canPublish = canPublishDirectly && Boolean(upload && form.name.trim() && form.description.trim() && selectedSource) && canEdit;
 
   async function parseEntries(entries: UploadFileEntry[]) {
     setStatus('parsing');
@@ -92,7 +95,7 @@ export function UploadPage({
           : publishableSources[0]?.name ?? '',
       });
       setStatus('idle');
-      setMessage('技能包已解析，请确认或调整下方信息后提交审核。');
+      setMessage(canPublishDirectly ? '技能包已解析，请确认或调整下方信息。可以直接保存，也可以立即发布到市场。' : '技能包已解析，请确认或调整下方信息。保存后由管理员发布到市场。');
     } catch (error) {
       setStatus('error');
       setMessage(error instanceof Error ? error.message : '技能包解析失败，请检查文件或文件夹格式。');
@@ -101,18 +104,28 @@ export function UploadPage({
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!form.name.trim() || !form.description.trim() || !selectedSource) return;
-    const submitForm = { ...form, source: selectedSource };
+    if (!form.name.trim() || !form.description.trim()) return;
+    const submitter = (event.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null;
+    const action = submitter?.value === 'publish' ? 'publish' : 'save';
+    const shouldPublish = action === 'publish';
+    if (shouldPublish && !canPublish) {
+      setStatus('error');
+      setMessage(!upload ? '请先选择并解析技能包，再发布到市场。' : '请先配置可发布的来源，再发布到市场。');
+      return;
+    }
+    setIntent(action);
+    const source = shouldPublish ? selectedSource : selectedSource || form.source || 'default';
+    const submitForm = { ...form, source };
     setStatus('submitting');
     setMessage('');
     try {
       if (upload) {
         const updated = await updateSkillPackageMetadata(upload.id, skillInputFromForm(submitForm));
-        const submitted = await submitSkillPackageForReview(updated.id);
-        const nextSkill = skillFromApi(submitted.metadata);
+        const result = shouldPublish ? await publishSkillPackage(updated.id) : updated;
+        const nextSkill = skillFromApi(result.metadata);
         onUploaded(nextSkill);
         setUploadedSkill(nextSkill);
-        setUpload(submitted);
+        setUpload(result);
       } else {
         const submitted = await uploadSkill(skillInputFromForm(submitForm));
         const nextSkill = skillFromApi(submitted);
@@ -120,7 +133,7 @@ export function UploadPage({
         setUploadedSkill(nextSkill);
       }
       setStatus('success');
-      setMessage(`✅ ${upload ? '审核中' : '已上传'} - 可在"我的技能包"查看详情`);
+      setMessage(`✅ ${shouldPublish ? '已发布' : '已保存'} - 可在"我的技能包"查看详情`);
     } catch (error) {
       setStatus('error');
       setMessage(error instanceof Error ? error.message : '提交失败，请稍后重试。');
@@ -129,7 +142,23 @@ export function UploadPage({
 
   return (
     <div className="page">
-      <PageHeader eyebrow="Upload" title="上传技能" description="拖拽或选择技能文件夹 / zip 包，平台会从 SKILL.md 生成草稿。" actions={<button className="primary" form="upload-skill-form" type="submit" disabled={!canSubmit}>{status === 'submitting' ? '提交中...' : upload ? '提交审核' : '创建草稿'}</button>} />
+      <PageHeader
+        eyebrow="Upload"
+        title="上传技能"
+        description="拖拽或选择技能文件夹 / zip 包，平台会从 SKILL.md 生成草稿。确认后可直接保存或发布。"
+        actions={(
+          <>
+            <button className="ghost" form="upload-skill-form" type="submit" name="uploadAction" value="save" disabled={!canSave} onClick={() => setIntent('save')}>
+              {status === 'submitting' && intent === 'save' ? '保存中...' : '保存'}
+            </button>
+            {canPublishDirectly ? (
+              <button className="primary" form="upload-skill-form" type="submit" name="uploadAction" value="publish" disabled={!canPublish} onClick={() => setIntent('publish')}>
+                {status === 'submitting' && intent === 'publish' ? '发布中...' : '发布'}
+              </button>
+            ) : null}
+          </>
+        )}
+      />
       <section className="upload-layout">
         <form className="form-card" id="upload-skill-form" onSubmit={handleSubmit}>
           <h2>技能包文件</h2>
@@ -169,7 +198,7 @@ export function UploadPage({
           <div className="form-grid"><label><span>作者</span><input value={form.author ?? ''} placeholder="Current user" onChange={(event) => setForm((current) => ({ ...current, author: event.target.value }))} /></label><label><span>来源</span><select disabled={!publishableSources.length} value={selectedSource} onChange={(event) => setForm((current) => ({ ...current, source: event.target.value }))}>{publishableSources.length ? publishableSources.map((source) => <option key={source.name} value={source.name}>{source.label || source.name}</option>) : <option value="">暂无可发布源</option>}</select></label></div>
           <label><span>标签</span><input value={form.tags?.join(', ') ?? ''} placeholder="React, UI, Dashboard" onChange={(event) => setForm((current) => ({ ...current, tags: event.target.value.split(',').map((tag) => tag.trim()).filter(Boolean) }))} /></label>
         </form>
-        <section className="check-card"><h2>上传校验</h2>{upload ? <><div className="check-row"><span>文件</span><strong>{upload.fileName}</strong></div><div className="check-row"><span>状态</span><Badge status={uploadStatusLabel(upload.status)} /></div>{upload.validation.map((item) => <div className="check-row" key={item.code}><span>{item.message}</span><Badge status={validationStatusLabel(item.severity)} /></div>)}</> : <EmptyState type="no-data" title="选择技能包" description="选择技能包后会显示 SKILL.md 解析结果、结构校验和提交状态。" ariaLabel="等待选择技能包" />}<div className="upload-note"><strong>发布流程</strong><p>提交后记录会进入审核队列。管理员通过后，服务端会同步到市场。</p></div></section>
+        <section className="check-card"><h2>上传校验</h2>{upload ? <><div className="check-row"><span>文件</span><strong>{upload.fileName}</strong></div><div className="check-row"><span>状态</span><Badge status={uploadStatusLabel(upload.status)} /></div>{upload.validation.map((item) => <div className="check-row" key={item.code}><span>{item.message}</span><Badge status={validationStatusLabel(item.severity)} /></div>)}</> : <EmptyState type="no-data" title="选择技能包" description="选择技能包后会显示 SKILL.md 解析结果、结构校验和提交状态。" ariaLabel="等待选择技能包" />}<div className="upload-note"><strong>发布流程</strong><p>{canPublishDirectly ? '保存会保留当前草稿；发布会直接同步到已配置的发布源并上架到市场。' : '保存会保留当前草稿；发布、删除和源管理由管理员处理。'}</p></div></section>
       </section>
     </div>
   );
@@ -184,22 +213,42 @@ function SkillPackagePicker({
   parsing: boolean;
   onSelect: (entries: UploadFileEntry[]) => void;
 }) {
+  const [dragActive, setDragActive] = useState(false);
+  const zipInputRef = useRef<HTMLInputElement | null>(null);
+
+  function updateDragState(event: DragEvent<HTMLDivElement>, active: boolean) {
+    event.preventDefault();
+    setDragActive(active);
+  }
+
+  function handleZipSelection(files: FileList | null) {
+    const entries = uploadEntriesFromFileList(files);
+    if (entries.length) onSelect(entries);
+  }
+
   return (
-    <label
-      className="drop-zone"
-      onDragOver={(event) => event.preventDefault()}
+    <div
+      className={`drop-zone ${dragActive ? 'is-dragging' : ''}`}
+      role="region"
+      aria-label="上传技能包"
+      onDragEnter={(event) => updateDragState(event, true)}
+      onDragOver={(event) => updateDragState(event, true)}
+      onDragLeave={(event) => updateDragState(event, false)}
       onDrop={(event) => {
         event.preventDefault();
+        setDragActive(false);
         void collectDroppedUploadFiles(event.dataTransfer).then(onSelect);
       }}
     >
-      <strong>{parsing ? '正在解析技能包...' : fileName ?? '拖拽文件夹或 .zip 到这里'}</strong>
-      <span>{fileName ? '已生成可编辑草稿，可重新选择文件覆盖。' : '支持选择技能文件夹、zip 包，也可以直接拖入包含 SKILL.md 的技能目录。'}</span>
+      <div className="drop-zone-icon" aria-hidden="true">{parsing ? '...' : fileName ? 'OK' : '+'}</div>
+      <strong>{parsing ? '正在解析技能包...' : fileName ?? '拖拽技能包到这里'}</strong>
+      <span>{fileName ? '已生成可编辑草稿，可重新选择 zip 或拖入新文件夹覆盖。' : '推荐拖拽包含 SKILL.md 的技能目录；也可以选择 .zip 包上传。'}</span>
       <div className="upload-pickers">
-        <span className="file-picker">选择 zip<input type="file" accept=".zip" onChange={(event) => { onSelect(uploadEntriesFromFileList(event.target.files)); event.currentTarget.value = ''; }} /></span>
-        <span className="file-picker">选择文件夹<input ref={(node) => { if (!node) return; const input = node as DirectoryInputElement; input.webkitdirectory = true; input.directory = true; }} type="file" multiple onChange={(event) => { onSelect(uploadEntriesFromFileList(event.target.files)); event.currentTarget.value = ''; }} /></span>
+        <button className="file-picker" type="button" disabled={parsing} onClick={() => zipInputRef.current?.click()}>选择 zip</button>
+        <span className="drop-hint">文件夹请直接拖入此区域</span>
       </div>
-    </label>
+      <input ref={zipInputRef} className="visually-hidden-file" type="file" accept=".zip" onChange={(event) => { handleZipSelection(event.target.files); event.currentTarget.value = ''; }} />
+    </div>
   );
 }
 
@@ -208,7 +257,7 @@ function skillInputFromItem(item: SkillItem): SkillInput {
 }
 
 function uploadStatusLabel(status: PackageUploadRecord['status']): string {
-  const labels: Record<PackageUploadRecord['status'], string> = { parsed: '已解析', waiting_review: '待审核', rejected: '已驳回', publishing: '发布中', published: '已发布', publish_failed: '发布失败' };
+  const labels: Record<PackageUploadRecord['status'], string> = { parsed: '已保存', waiting_review: '待发布', rejected: '已驳回', publishing: '发布中', published: '已发布', publish_failed: '发布失败' };
   return labels[status];
 }
 
