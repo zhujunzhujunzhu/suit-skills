@@ -190,6 +190,7 @@ export interface OAuthConfig {
   sessionSecret: string;
   adminEmails: string[];
   adminDomains: string[];
+  bootstrapPassword?: string;
 }
 
 export interface AuthUser {
@@ -198,6 +199,19 @@ export interface AuthUser {
   name: string;
   avatarUrl?: string;
   role: 'user' | 'admin';
+}
+
+export interface PlatformUserRecord extends AuthUser {
+  disabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+  passwordUpdatedAt?: string;
+  hasPassword: boolean;
+}
+
+export interface PlatformUserListResponse {
+  items: PlatformUserRecord[];
+  total: number;
 }
 
 export interface EvaluationStoreData {

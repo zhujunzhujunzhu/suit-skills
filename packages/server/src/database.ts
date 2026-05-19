@@ -2,6 +2,7 @@ import {
   createPool,
   type Pool,
   type PoolConnection,
+  type ResultSetHeader,
   type RowDataPacket,
 } from 'mysql2/promise';
 import type {
@@ -16,6 +17,7 @@ import type {
   SkillStoreData,
   SourceRecord,
   SourceStoreData,
+  AuthUser,
 } from './types.js';
 
 type Queryable = Pool | PoolConnection;
@@ -24,10 +26,48 @@ type DbRow = RowDataPacket & Record<string, unknown>;
 export interface DocumentDatabase {
   readDocument(collection: string): Promise<string | null>;
   writeDocument(collection: string, value: string): Promise<void>;
+  listAuthUsers(): Promise<AuthUserRecord[]>;
+  findAuthUserByEmail(email: string): Promise<AuthUserRecord | null>;
+  findAuthUserById(id: string): Promise<AuthUserRecord | null>;
+  upsertAuthUser(input: UpsertAuthUserInput): Promise<AuthUserRecord>;
+  deleteAuthUser(id: string): Promise<boolean>;
+  createAuthSession(input: AuthSessionInput): Promise<void>;
+  findAuthSession(sessionId: string): Promise<AuthSessionRecord | null>;
+  deleteAuthSession(sessionId: string): Promise<void>;
+  deleteExpiredAuthSessions(nowIso: string): Promise<void>;
   close(): Promise<void>;
 }
 
+export interface AuthUserRecord extends AuthUser {
+  passwordHash?: string;
+  disabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+  passwordUpdatedAt?: string;
+}
+
+export interface UpsertAuthUserInput extends AuthUser {
+  passwordHash?: string;
+  disabled?: boolean;
+}
+
+export interface AuthSessionInput {
+  id: string;
+  userId: string;
+  expiresAt: string;
+}
+
+export interface AuthSessionRecord {
+  id: string;
+  user: AuthUserRecord;
+  expiresAt: string;
+  createdAt: string;
+}
+
 export function createDocumentDatabase(databaseUrl: string): DocumentDatabase {
+  if (databaseUrl.startsWith('sqlite://')) {
+    return new MemoryPlatformDatabase();
+  }
   return new MySqlPlatformDatabase(databaseUrl);
 }
 
@@ -151,9 +191,22 @@ class MySqlPlatformDatabase implements DocumentDatabase {
         email VARCHAR(320) NOT NULL UNIQUE,
         name VARCHAR(191) NOT NULL,
         avatar_url TEXT,
+        password_hash TEXT,
+        password_updated_at VARCHAR(64),
+        disabled TINYINT(1) NOT NULL DEFAULT 0,
         role ENUM('user', 'admin') NOT NULL,
         created_at VARCHAR(64) NOT NULL,
         updated_at VARCHAR(64) NOT NULL
+      ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
+      `CREATE TABLE IF NOT EXISTS platform_sessions (
+        id VARCHAR(191) PRIMARY KEY,
+        user_id VARCHAR(191) NOT NULL,
+        expires_at VARCHAR(64) NOT NULL,
+        created_at VARCHAR(64) NOT NULL,
+        INDEX idx_platform_sessions_user_id (user_id),
+        INDEX idx_platform_sessions_expires_at (expires_at),
+        CONSTRAINT fk_platform_sessions_user_id
+          FOREIGN KEY (user_id) REFERENCES platform_users(id) ON DELETE CASCADE
       ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
       `CREATE TABLE IF NOT EXISTS platform_sources (
         name VARCHAR(191) PRIMARY KEY,
@@ -298,11 +351,141 @@ class MySqlPlatformDatabase implements DocumentDatabase {
     await this.addColumnIfMissing('platform_sources', 'skills_directory', 'TEXT');
     await this.addColumnIfMissing('platform_sources', 'publish_enabled', 'TINYINT(1) NOT NULL DEFAULT 0');
     await this.addColumnIfMissing('platform_sources', 'domestic_mirror_json', 'JSON');
+    await this.addColumnIfMissing('platform_users', 'password_hash', 'TEXT');
+    await this.addColumnIfMissing('platform_users', 'password_updated_at', 'VARCHAR(64)');
+    await this.addColumnIfMissing('platform_users', 'disabled', 'TINYINT(1) NOT NULL DEFAULT 0');
     await this.migrateLegacyDocuments();
     await this.pool.execute(
       `INSERT IGNORE INTO platform_schema_migrations (version, applied_at) VALUES (?, ?)`,
       [1, new Date().toISOString()],
     );
+  }
+
+  async findAuthUserByEmail(email: string): Promise<AuthUserRecord | null> {
+    await this.ready;
+    const rows = await rowsOf(
+      this.pool,
+      `SELECT * FROM platform_users WHERE email = ? LIMIT 1`,
+      [email.toLowerCase()],
+    );
+    return rows[0] ? authUserFromRow(rows[0]) : null;
+  }
+
+  async listAuthUsers(): Promise<AuthUserRecord[]> {
+    await this.ready;
+    const rows = await rowsOf(
+      this.pool,
+      `SELECT * FROM platform_users ORDER BY created_at DESC, email ASC`,
+    );
+    return rows.map(authUserFromRow);
+  }
+
+  async findAuthUserById(id: string): Promise<AuthUserRecord | null> {
+    await this.ready;
+    const rows = await rowsOf(
+      this.pool,
+      `SELECT * FROM platform_users WHERE id = ? LIMIT 1`,
+      [id],
+    );
+    return rows[0] ? authUserFromRow(rows[0]) : null;
+  }
+
+  async upsertAuthUser(input: UpsertAuthUserInput): Promise<AuthUserRecord> {
+    await this.ready;
+    const existing = await this.findAuthUserByEmail(input.email);
+    const now = new Date().toISOString();
+    const id = existing?.id ?? input.id;
+    const passwordHash = input.passwordHash ?? existing?.passwordHash ?? null;
+    const passwordUpdatedAt =
+      input.passwordHash && input.passwordHash !== existing?.passwordHash
+        ? now
+        : existing?.passwordUpdatedAt ?? null;
+    const disabled = input.disabled ?? existing?.disabled ?? false;
+
+    await this.pool.execute(
+      `INSERT INTO platform_users
+        (id, email, name, avatar_url, password_hash, password_updated_at, disabled, role, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE
+          name = VALUES(name),
+          avatar_url = VALUES(avatar_url),
+          password_hash = VALUES(password_hash),
+          password_updated_at = VALUES(password_updated_at),
+          disabled = VALUES(disabled),
+          role = VALUES(role),
+          updated_at = VALUES(updated_at)`,
+      [
+        id,
+        input.email.toLowerCase(),
+        input.name,
+        input.avatarUrl ?? null,
+        passwordHash,
+        passwordUpdatedAt,
+        disabled ? 1 : 0,
+        input.role,
+        existing?.createdAt ?? now,
+        now,
+      ],
+    );
+
+    const user = await this.findAuthUserById(id);
+    if (!user) throw new Error(`Failed to load auth user after upsert: ${id}`);
+    return user;
+  }
+
+  async deleteAuthUser(id: string): Promise<boolean> {
+    await this.ready;
+    const [result] = await this.pool.execute<ResultSetHeader>(
+      `DELETE FROM platform_users WHERE id = ?`,
+      [id],
+    );
+    return result.affectedRows > 0;
+  }
+
+  async createAuthSession(input: AuthSessionInput): Promise<void> {
+    await this.ready;
+    await this.deleteExpiredAuthSessions(new Date().toISOString());
+    await this.pool.execute(
+      `INSERT INTO platform_sessions (id, user_id, expires_at, created_at)
+       VALUES (?, ?, ?, ?)`,
+      [input.id, input.userId, input.expiresAt, new Date().toISOString()],
+    );
+  }
+
+  async findAuthSession(sessionId: string): Promise<AuthSessionRecord | null> {
+    await this.ready;
+    const rows = await rowsOf(
+      this.pool,
+      `SELECT
+          s.id AS session_id,
+          s.expires_at,
+          s.created_at AS session_created_at,
+          u.*
+        FROM platform_sessions s
+        INNER JOIN platform_users u ON u.id = s.user_id
+        WHERE s.id = ?
+        LIMIT 1`,
+      [sessionId],
+    );
+    const row = rows[0];
+    if (!row) return null;
+    const user = authUserFromRow(row);
+    return {
+      id: text(row.session_id),
+      user,
+      expiresAt: text(row.expires_at),
+      createdAt: text(row.session_created_at),
+    };
+  }
+
+  async deleteAuthSession(sessionId: string): Promise<void> {
+    await this.ready;
+    await this.pool.execute(`DELETE FROM platform_sessions WHERE id = ?`, [sessionId]);
+  }
+
+  async deleteExpiredAuthSessions(nowIso: string): Promise<void> {
+    await this.ready;
+    await this.pool.execute(`DELETE FROM platform_sessions WHERE expires_at <= ?`, [nowIso]);
   }
 
   private async migrateLegacyDocuments(): Promise<void> {
@@ -861,6 +1044,128 @@ async function rowsOf(db: Queryable, sql: string, params: any[] = []): Promise<D
 
 function stringifyStore(value: unknown): string | null {
   return value === null ? null : JSON.stringify(value, null, 2);
+}
+
+class MemoryPlatformDatabase implements DocumentDatabase {
+  private readonly documents = new Map<string, string>();
+  private readonly usersById = new Map<string, AuthUserRecord>();
+  private readonly userIdsByEmail = new Map<string, string>();
+  private readonly sessions = new Map<string, { id: string; userId: string; expiresAt: string; createdAt: string }>();
+
+  async readDocument(collection: string): Promise<string | null> {
+    return this.documents.get(collection) ?? null;
+  }
+
+  async writeDocument(collection: string, value: string): Promise<void> {
+    this.documents.set(collection, value);
+  }
+
+  async findAuthUserByEmail(email: string): Promise<AuthUserRecord | null> {
+    const id = this.userIdsByEmail.get(email.toLowerCase());
+    return id ? this.findAuthUserById(id) : null;
+  }
+
+  async listAuthUsers(): Promise<AuthUserRecord[]> {
+    return [...this.usersById.values()].sort((a, b) => {
+      const created = b.createdAt.localeCompare(a.createdAt);
+      return created || a.email.localeCompare(b.email);
+    });
+  }
+
+  async findAuthUserById(id: string): Promise<AuthUserRecord | null> {
+    return this.usersById.get(id) ?? null;
+  }
+
+  async upsertAuthUser(input: UpsertAuthUserInput): Promise<AuthUserRecord> {
+    const email = input.email.toLowerCase();
+    const existingId = this.userIdsByEmail.get(email);
+    const existing = existingId ? this.usersById.get(existingId) : this.usersById.get(input.id);
+    const now = new Date().toISOString();
+    const id = existing?.id ?? input.id;
+    const record: AuthUserRecord = {
+      id,
+      email,
+      name: input.name,
+      avatarUrl: input.avatarUrl,
+      role: input.role,
+      passwordHash: input.passwordHash ?? existing?.passwordHash,
+      passwordUpdatedAt:
+        input.passwordHash && input.passwordHash !== existing?.passwordHash
+          ? now
+          : existing?.passwordUpdatedAt,
+      disabled: input.disabled ?? existing?.disabled ?? false,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    };
+    this.usersById.set(id, record);
+    this.userIdsByEmail.set(email, id);
+    return record;
+  }
+
+  async deleteAuthUser(id: string): Promise<boolean> {
+    const existing = this.usersById.get(id);
+    if (!existing) return false;
+    this.usersById.delete(id);
+    this.userIdsByEmail.delete(existing.email);
+    for (const [sessionId, session] of this.sessions) {
+      if (session.userId === id) {
+        this.sessions.delete(sessionId);
+      }
+    }
+    return true;
+  }
+
+  async createAuthSession(input: AuthSessionInput): Promise<void> {
+    await this.deleteExpiredAuthSessions(new Date().toISOString());
+    this.sessions.set(input.id, {
+      id: input.id,
+      userId: input.userId,
+      expiresAt: input.expiresAt,
+      createdAt: new Date().toISOString(),
+    });
+  }
+
+  async findAuthSession(sessionId: string): Promise<AuthSessionRecord | null> {
+    const session = this.sessions.get(sessionId);
+    if (!session) return null;
+    const user = this.usersById.get(session.userId);
+    if (!user) return null;
+    return {
+      id: session.id,
+      user,
+      expiresAt: session.expiresAt,
+      createdAt: session.createdAt,
+    };
+  }
+
+  async deleteAuthSession(sessionId: string): Promise<void> {
+    this.sessions.delete(sessionId);
+  }
+
+  async deleteExpiredAuthSessions(nowIso: string): Promise<void> {
+    for (const [id, session] of this.sessions) {
+      if (session.expiresAt <= nowIso) {
+        this.sessions.delete(id);
+      }
+    }
+  }
+
+  async close(): Promise<void> {}
+}
+
+function authUserFromRow(row: DbRow): AuthUserRecord {
+  return {
+    id: text(row.id),
+    email: text(row.email),
+    name: text(row.name),
+    avatarUrl: optionalText(row.avatar_url),
+    role: text(row.role) === 'admin' ? 'admin' : 'user',
+    passwordHash: optionalText(row.password_hash),
+    passwordUpdatedAt: optionalText(row.password_updated_at),
+    disabled: bool(row.disabled),
+    createdAt: text(row.created_at),
+    updatedAt: text(row.updated_at),
+  };
 }
 
 function jsonText(value: unknown): string {

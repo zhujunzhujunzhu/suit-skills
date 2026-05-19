@@ -1,11 +1,11 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
-import { existsSync, readdirSync, readFileSync, statSync, type Dirent } from 'node:fs';
+import { existsSync, lstatSync, readdirSync, readFileSync, statSync, type Dirent } from 'node:fs';
 import { cp, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { basename, dirname, join, normalize, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
+import { createHmac, randomBytes, randomUUID, scrypt as nodeScrypt, timingSafeEqual } from 'node:crypto';
 import {
   readSkillMarkdownMetadata,
   refreshCache,
@@ -27,7 +27,13 @@ import {
   type UploadedFile,
 } from './http.js';
 import { DEFAULT_GIT_CONFIG, DEFAULT_SKILLS, DEFAULT_SOURCES } from './defaults.js';
-import { createDocumentDatabase, JsonDocumentStore } from './database.js';
+import {
+  createDocumentDatabase,
+  JsonDocumentStore,
+  type AuthSessionInput,
+  type AuthUserRecord,
+  type DocumentDatabase,
+} from './database.js';
 import type {
   EvaluationListResponse,
   EvaluationRecord,
@@ -54,6 +60,8 @@ import type {
   PackageValidationItem,
   ParsedSkillPackage,
   PlatformApiConfig,
+  PlatformUserListResponse,
+  PlatformUserRecord,
   ServerPackageInfo,
   SkillFileDetail,
   SkillFileEntry,
@@ -93,6 +101,8 @@ export type {
   PackageValidationItem,
   ParsedSkillPackage,
   PlatformApiConfig,
+  PlatformUserListResponse,
+  PlatformUserRecord,
   ServerPackageInfo,
   SkillFileDetail,
   SkillFileEntry,
@@ -110,6 +120,7 @@ export type {
 } from './types.js';
 
 const execFileAsync = promisify(execFile);
+const scryptAsync = promisify(nodeScrypt);
 
 export const serverPackageInfo: ServerPackageInfo = {
   name: '@suit-skills/server',
@@ -741,6 +752,42 @@ class SkillStore {
     return record;
   }
 
+  async recordInstall(skill: SkillRecord): Promise<SkillRecord> {
+    let updated: SkillRecord = {
+      ...skill,
+      installs: skill.installs + 1,
+      updatedAt: new Date().toISOString(),
+    };
+    await this.updateData((data) => {
+      let found = false;
+      const skills = data.skills.map((item) => {
+        if (item.id !== skill.id && item.name !== skill.name) return item;
+        found = true;
+        updated = {
+          ...item,
+          installs: item.installs + 1,
+          updatedAt: updated.updatedAt,
+        };
+        return updated;
+      });
+      return { ...data, skills: found ? skills : [updated, ...skills] };
+    });
+    return updated;
+  }
+
+  async delete(idOrName: string): Promise<SkillRecord | null> {
+    let deleted: SkillRecord | null = null;
+    await this.updateData((data) => {
+      const skills = data.skills.filter((item) => {
+        if (item.id !== idOrName && item.name !== idOrName) return true;
+        deleted = item;
+        return false;
+      });
+      return skills.length === data.skills.length ? data : { ...data, skills };
+    });
+    return deleted;
+  }
+
   private async read(): Promise<SkillStoreData> {
     try {
       const parsed = await this.document.read({ version: 1, skills: DEFAULT_SKILLS });
@@ -829,6 +876,14 @@ class SkillFileStore {
     });
 
     return fileDetail(updated);
+  }
+
+  async deleteSkill(skillId: string): Promise<void> {
+    await this.updateData(async (data) => {
+      if (!(skillId in data.skills)) return data;
+      const { [skillId]: _removed, ...skills } = data.skills;
+      return { ...data, skills };
+    });
   }
 
   private async filesForSkill(skill: SkillRecord): Promise<SkillFileRecord[]> {
@@ -1123,6 +1178,102 @@ interface SourceSkillRow {
   metadata: SkillMarkdownMetadata;
 }
 
+class PublishedSkillCatalog {
+  constructor(
+    private readonly sourceCatalog: SourceBackedSkillCatalog,
+    private readonly skillStore: SkillStore,
+  ) {}
+
+  async list(params: {
+    q?: string;
+    category?: string;
+    source?: string;
+    owner?: string;
+  }): Promise<SkillListResponse> {
+    const [sourceResponse, publishedResponse] = await Promise.all([
+      this.sourceCatalog.list(params),
+      this.skillStore.list(params),
+    ]);
+    const items = mergeSkillRecords(sourceResponse.items, publishedResponse.items);
+    return { items, total: items.length };
+  }
+
+  async get(idOrName: string): Promise<SkillRecord | null> {
+    return (await this.sourceCatalog.get(idOrName)) ?? this.skillStore.get(idOrName);
+  }
+
+  async listFiles(idOrName: string, selectedPath?: string): Promise<SkillFilesResponse | null> {
+    return (
+      (await this.sourceCatalog.listFiles(idOrName, selectedPath)) ??
+      this.listStoredSkillFiles(idOrName, selectedPath)
+    );
+  }
+
+  async getFile(idOrName: string, path: string): Promise<SkillFileDetail | null> {
+    return (
+      (await this.sourceCatalog.getFile(idOrName, path)) ??
+      this.getStoredSkillFile(idOrName, path)
+    );
+  }
+
+  async exportPackage(idOrName: string): Promise<SkillPackageExport | null> {
+    return (
+      (await this.sourceCatalog.exportPackage(idOrName)) ??
+      this.exportStoredPackage(idOrName)
+    );
+  }
+
+  private async listStoredSkillFiles(
+    idOrName: string,
+    selectedPath?: string,
+  ): Promise<SkillFilesResponse | null> {
+    const skill = await this.storedSkill(idOrName);
+    if (!skill) return null;
+    const files = defaultSkillFiles(skill);
+    const selected = normalizeSkillFilePath(selectedPath || 'SKILL.md');
+    const selectedRecord =
+      files.find((file) => file.path === selected) ??
+      files.find((file) => file.path === 'SKILL.md') ??
+      files[0];
+
+    return {
+      root: buildFileTree(files),
+      selectedFile: selectedRecord ? fileDetail(selectedRecord) : undefined,
+    };
+  }
+
+  private async getStoredSkillFile(idOrName: string, path: string): Promise<SkillFileDetail | null> {
+    const skill = await this.storedSkill(idOrName);
+    if (!skill) return null;
+    const safePath = normalizeSkillFilePath(path);
+    const file = defaultSkillFiles(skill).find((item) => item.path === safePath);
+    return file ? fileDetail(file) : null;
+  }
+
+  private async exportStoredPackage(idOrName: string): Promise<SkillPackageExport | null> {
+    const skill = await this.storedSkill(idOrName);
+    if (!skill) return null;
+    return {
+      fileName: skillPackageFileName(skill.name, skill.version),
+      contentType: 'application/zip',
+      body: createZipFromFiles(defaultSkillFiles(skill), skill.name),
+    };
+  }
+
+  private async storedSkill(idOrName: string): Promise<SkillRecord | null> {
+    const direct = await this.skillStore.get(idOrName);
+    if (direct) return direct;
+    const response = await this.skillStore.list({});
+    return response.items.find((skill) => skill.name === idOrName) ?? null;
+  }
+}
+
+interface SkillPackageExport {
+  fileName: string;
+  contentType: 'application/zip';
+  body: Buffer;
+}
+
 class SourceBackedSkillCatalog {
   private readonly rowsCache = new Map<string, { expiresAt: number; rows: SourceSkillRow[] }>();
   private readonly maxAgeMs = 5 * 60_000;
@@ -1178,6 +1329,17 @@ class SourceBackedSkillCatalog {
     const safePath = normalizeSkillFilePath(path);
     const file = this.filesForRow(row).find((item) => item.path === safePath);
     return file ? fileDetail(file) : null;
+  }
+
+  async exportPackage(idOrName: string): Promise<SkillPackageExport | null> {
+    const row = await this.findRow(idOrName);
+    if (!row) return null;
+    const record = this.toSkillRecord(row);
+    return {
+      fileName: skillPackageFileName(record.name, record.version),
+      contentType: 'application/zip',
+      body: createZipFromDirectory(row.skillDir, record.name),
+    };
   }
 
   private async findRow(idOrName: string): Promise<SourceSkillRow | null> {
@@ -1436,6 +1598,35 @@ class PackageUploadStore {
     return data.uploads.find((item) => item.id === id) ?? null;
   }
 
+  async delete(id: string): Promise<boolean> {
+    let deleted: PackageUploadRecord | null = null;
+    await this.updateData((data) => {
+      const uploads = data.uploads.filter((record) => {
+        if (record.id !== id) return true;
+        deleted = record;
+        return false;
+      });
+      return uploads.length === data.uploads.length ? data : { ...data, uploads };
+    });
+    if (!deleted) return false;
+    await this.removeUploadFiles(deleted);
+    return true;
+  }
+
+  async deleteBySkillId(skillId: string): Promise<number> {
+    const deleted: PackageUploadRecord[] = [];
+    await this.updateData((data) => {
+      const uploads = data.uploads.filter((record) => {
+        if (record.metadata.id !== skillId) return true;
+        deleted.push(record);
+        return false;
+      });
+      return deleted.length === 0 ? data : { ...data, uploads };
+    });
+    await Promise.all(deleted.map((record) => this.removeUploadFiles(record)));
+    return deleted.length;
+  }
+
   async parsePackage(file: UploadedFile, owner: string): Promise<PackageUploadRecord> {
     const now = new Date().toISOString();
     const id = randomUUID();
@@ -1593,6 +1784,14 @@ class PackageUploadStore {
   ): Promise<void> {
     await this.document.write(updater(await this.read()));
   }
+
+  private async removeUploadFiles(record: PackageUploadRecord): Promise<void> {
+    const root = resolve(this.uploadDir);
+    const uploadRoot = resolve(this.uploadDir, record.id);
+    const isInsideUploadDir = uploadRoot === root || uploadRoot.startsWith(`${root}${sep}`);
+    if (!isInsideUploadDir) return;
+    await rm(uploadRoot, { recursive: true, force: true });
+  }
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): PlatformApiConfig {
@@ -1687,6 +1886,7 @@ function loadOAuthConfig(
     adminDomains: splitCsv(env.PLATFORM_ADMIN_DOMAINS).map((domain) =>
       domain.replace(/^@/, '').toLowerCase(),
     ),
+    bootstrapPassword: env.PLATFORM_AUTH_BOOTSTRAP_PASSWORD,
   };
 }
 
@@ -1729,9 +1929,10 @@ async function handleOAuthPasswordLogin(
   req: IncomingMessage,
   res: ServerResponse,
   config: PlatformApiConfig,
+  database: DocumentDatabase,
 ): Promise<void> {
   if (!config.auth.enabled) {
-    throw new ApiError(503, 'OAUTH_NOT_CONFIGURED', 'OAuth login is not configured');
+    throw new ApiError(503, 'AUTH_NOT_CONFIGURED', 'Login is not configured');
   }
   const body = await readJsonBody(req);
   if (!isPlainObject(body)) {
@@ -1741,32 +1942,22 @@ async function handleOAuthPasswordLogin(
   const password = requiredString(body.password, 'password');
   const user =
     config.auth.mode === 'local'
-      ? createLocalAuthUser(username, config.auth)
+      ? await authenticateDatabaseUser(database, username, password)
       : await exchangeOAuthPassword(config.auth, username, password).then((token) =>
           fetchOAuthUser(config.auth, token.access_token),
         );
-  const session = signPayload(
-    { user, expiresAt: Date.now() + SESSION_TTL_MS },
-    config.auth.sessionSecret,
-  );
-  setCookie(res, AUTH_COOKIE_NAME, session, Math.floor(SESSION_TTL_MS / 1000));
-  sendJson(res, 200, { user });
-}
-
-function createLocalAuthUser(username: string, auth: OAuthConfig): AuthUser {
-  const email = username.includes('@') ? username.toLowerCase() : `${username}@local.dev`;
-  return {
-    id: `local:${email}`,
-    email,
-    name: username,
-    role: resolveUserRole(email, auth),
-  };
+  const storedUser =
+    config.auth.mode === 'local' ? user : await database.upsertAuthUser(user);
+  const sessionId = await createDatabaseSession(database, storedUser);
+  setCookie(res, AUTH_COOKIE_NAME, sessionId, Math.floor(SESSION_TTL_MS / 1000));
+  sendJson(res, 200, { user: publicAuthUser(storedUser) });
 }
 
 async function handleOAuthCallback(
   req: IncomingMessage,
   res: ServerResponse,
   config: PlatformApiConfig,
+  database: DocumentDatabase,
   url: URL,
 ): Promise<void> {
   if (!config.auth.enabled) {
@@ -1803,13 +1994,11 @@ async function handleOAuthCallback(
 
   const token = await exchangeOAuthCode(config.auth, code);
   const user = await fetchOAuthUser(config.auth, token.access_token);
-  const session = signPayload(
-    { user, expiresAt: Date.now() + SESSION_TTL_MS },
-    config.auth.sessionSecret,
-  );
+  const storedUser = await database.upsertAuthUser(user);
+  const sessionId = await createDatabaseSession(database, storedUser);
 
   clearCookie(res, OAUTH_STATE_COOKIE_NAME);
-  setCookie(res, AUTH_COOKIE_NAME, session, Math.floor(SESSION_TTL_MS / 1000));
+  setCookie(res, AUTH_COOKIE_NAME, sessionId, Math.floor(SESSION_TTL_MS / 1000));
   redirectToApp(res, config, normalizeAppRedirect(String(statePayload.redirect || '/market')));
 }
 
@@ -1915,36 +2104,277 @@ function resolveUserRole(email: string, auth: OAuthConfig): 'user' | 'admin' {
   return domain && auth.adminDomains.includes(domain) ? 'admin' : 'user';
 }
 
-function readSessionUser(
-  req: IncomingMessage,
+async function ensureAuthBootstrap(
+  database: DocumentDatabase,
   auth: OAuthConfig,
-): AuthUser | null {
-  if (!auth.enabled) return null;
-  const cookie = readCookie(req, AUTH_COOKIE_NAME);
-  if (!cookie) return null;
-  const payload = verifyPayload<{ user?: unknown; expiresAt?: unknown }>(
-    cookie,
-    auth.sessionSecret,
-  );
-  if (!payload || typeof payload.expiresAt !== 'number' || payload.expiresAt < Date.now()) {
-    return null;
+): Promise<void> {
+  if (!auth.enabled || auth.mode !== 'local' || !auth.bootstrapPassword) return;
+  const passwordHashPromises = new Map<string, Promise<string>>();
+
+  for (const rawEmail of auth.adminEmails) {
+    const email = rawEmail.toLowerCase();
+    if (!email) continue;
+    const existing = await database.findAuthUserByEmail(email);
+    const passwordHash = await cachedBootstrapPasswordHash(auth.bootstrapPassword, passwordHashPromises);
+
+    await database.upsertAuthUser({
+      id: existing?.id ?? `local:${email}`,
+      email,
+      name: existing?.name ?? email,
+      avatarUrl: existing?.avatarUrl,
+      role: 'admin',
+      passwordHash,
+      disabled: existing?.disabled ?? false,
+    });
   }
-  return normalizeAuthUser(payload.user);
 }
 
-function normalizeAuthUser(value: unknown): AuthUser | null {
-  if (!isPlainObject(value)) return null;
-  const id = textValue(value.id);
-  if (!id) return null;
-  const email = textValue(value.email);
-  const role = value.role === 'admin' ? 'admin' : 'user';
-  return {
-    id,
-    email,
-    name: textValue(value.name) || email || id,
-    avatarUrl: textValue(value.avatarUrl) || undefined,
-    role,
+async function cachedBootstrapPasswordHash(
+  password: string,
+  cache: Map<string, Promise<string>>,
+): Promise<string> {
+  const cached = cache.get(password);
+  if (cached) return cached;
+  const promise = hashPassword(password);
+  cache.set(password, promise);
+  return promise;
+}
+
+async function authenticateDatabaseUser(
+  database: DocumentDatabase,
+  username: string,
+  password: string,
+): Promise<AuthUserRecord> {
+  const email = normalizeLoginEmail(username);
+  const user = await database.findAuthUserByEmail(email);
+  if (!user || user.disabled || !user.passwordHash) {
+    throw new ApiError(401, 'INVALID_CREDENTIALS', 'Invalid username or password');
+  }
+  const valid = await verifyPassword(password, user.passwordHash);
+  if (!valid) {
+    throw new ApiError(401, 'INVALID_CREDENTIALS', 'Invalid username or password');
+  }
+  return user;
+}
+
+function normalizeLoginEmail(username: string): string {
+  const trimmed = username.trim().toLowerCase();
+  return trimmed.includes('@') ? trimmed : `${trimmed}@local.dev`;
+}
+
+async function createDatabaseSession(
+  database: DocumentDatabase,
+  user: AuthUser,
+): Promise<string> {
+  const session: AuthSessionInput = {
+    id: randomBytes(32).toString('base64url'),
+    userId: user.id,
+    expiresAt: new Date(Date.now() + SESSION_TTL_MS).toISOString(),
   };
+  await database.createAuthSession(session);
+  return session.id;
+}
+
+async function readSessionUser(
+  req: IncomingMessage,
+  auth: OAuthConfig,
+  database: DocumentDatabase,
+): Promise<AuthUser | null> {
+  if (!auth.enabled) return null;
+  const sessionId = readCookie(req, AUTH_COOKIE_NAME);
+  if (!sessionId) return null;
+  const session = await database.findAuthSession(sessionId);
+  if (!session) return null;
+  if (new Date(session.expiresAt).getTime() <= Date.now()) {
+    await database.deleteAuthSession(sessionId);
+    return null;
+  }
+  if (session.user.disabled) {
+    return null;
+  }
+  return publicAuthUser(session.user);
+}
+
+async function deleteCurrentSession(
+  req: IncomingMessage,
+  database: DocumentDatabase,
+): Promise<void> {
+  const sessionId = readCookie(req, AUTH_COOKIE_NAME);
+  if (sessionId) {
+    await database.deleteAuthSession(sessionId);
+  }
+}
+
+async function requireAdmin(
+  req: IncomingMessage,
+  auth: OAuthConfig,
+  database: DocumentDatabase,
+): Promise<AuthUser> {
+  if (!auth.enabled) {
+    return {
+      id: 'local:admin@local.dev',
+      email: 'admin@local.dev',
+      name: 'Local Admin',
+      role: 'admin',
+    };
+  }
+  const user = await readSessionUser(req, auth, database);
+  if (!user) {
+    throw new ApiError(401, 'UNAUTHENTICATED', 'Not logged in');
+  }
+  if (user.role !== 'admin') {
+    throw new ApiError(403, 'FORBIDDEN', 'Admin role is required');
+  }
+  return user;
+}
+
+function publicAuthUser(user: AuthUser): AuthUser {
+  return {
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    avatarUrl: user.avatarUrl,
+    role: user.role,
+  };
+}
+
+function publicPlatformUser(user: AuthUserRecord): PlatformUserRecord {
+  return {
+    ...publicAuthUser(user),
+    disabled: user.disabled,
+    createdAt: user.createdAt,
+    updatedAt: user.updatedAt,
+    passwordUpdatedAt: user.passwordUpdatedAt,
+    hasPassword: Boolean(user.passwordHash),
+  };
+}
+
+async function listPlatformUsers(database: DocumentDatabase): Promise<PlatformUserListResponse> {
+  const items = (await database.listAuthUsers()).map(publicPlatformUser);
+  return { items, total: items.length };
+}
+
+async function createPlatformUser(
+  database: DocumentDatabase,
+  input: unknown,
+): Promise<AuthUserRecord> {
+  if (!isPlainObject(input)) {
+    throw new ApiError(400, 'INVALID_BODY', 'Request body must be a JSON object');
+  }
+  const email = normalizeLoginEmail(requiredString(input.email, 'email'));
+  const existing = await database.findAuthUserByEmail(email);
+  if (existing) {
+    throw new ApiError(409, 'USER_EXISTS', 'User email already exists');
+  }
+  const password = requiredString(input.password, 'password');
+  if (password.length < 6) {
+    throw new ApiError(400, 'WEAK_PASSWORD', 'password must be at least 6 characters');
+  }
+  const role = parsePlatformRole(input.role);
+  const disabled = input.disabled === true;
+  return database.upsertAuthUser({
+    id: `local:${email}`,
+    email,
+    name: optionalString(input.name, 'name') ?? email,
+    role,
+    passwordHash: await hashPassword(password),
+    disabled,
+  });
+}
+
+async function updatePlatformUser(
+  database: DocumentDatabase,
+  id: string,
+  input: unknown,
+  currentUser: AuthUser,
+): Promise<AuthUserRecord> {
+  if (!isPlainObject(input)) {
+    throw new ApiError(400, 'INVALID_BODY', 'Request body must be a JSON object');
+  }
+  const existing = await database.findAuthUserById(id);
+  if (!existing) {
+    throw new ApiError(404, 'NOT_FOUND', 'User not found');
+  }
+  const disabled = input.disabled === undefined ? existing.disabled : parseBoolean(input.disabled, 'disabled');
+  const role = input.role === undefined ? existing.role : parsePlatformRole(input.role);
+  if (existing.id === currentUser.id && (disabled || role !== 'admin')) {
+    throw new ApiError(400, 'INVALID_SELF_UPDATE', 'Cannot remove your own admin access');
+  }
+  return database.upsertAuthUser({
+    id: existing.id,
+    email: existing.email,
+    name: optionalString(input.name, 'name') ?? existing.name,
+    avatarUrl: existing.avatarUrl,
+    role,
+    passwordHash: existing.passwordHash,
+    disabled,
+  });
+}
+
+async function deletePlatformUser(
+  database: DocumentDatabase,
+  id: string,
+  currentUser: AuthUser,
+): Promise<void> {
+  const existing = await database.findAuthUserById(id);
+  if (!existing) {
+    throw new ApiError(404, 'NOT_FOUND', 'User not found');
+  }
+  if (existing.id === currentUser.id) {
+    throw new ApiError(400, 'INVALID_SELF_DELETE', 'Cannot delete your own account');
+  }
+  await database.deleteAuthUser(existing.id);
+}
+
+async function resetPlatformUserPassword(
+  database: DocumentDatabase,
+  id: string,
+  input: unknown,
+): Promise<AuthUserRecord> {
+  if (!isPlainObject(input)) {
+    throw new ApiError(400, 'INVALID_BODY', 'Request body must be a JSON object');
+  }
+  const existing = await database.findAuthUserById(id);
+  if (!existing) {
+    throw new ApiError(404, 'NOT_FOUND', 'User not found');
+  }
+  const password = requiredString(input.password, 'password');
+  if (password.length < 6) {
+    throw new ApiError(400, 'WEAK_PASSWORD', 'password must be at least 6 characters');
+  }
+  return database.upsertAuthUser({
+    id: existing.id,
+    email: existing.email,
+    name: existing.name,
+    avatarUrl: existing.avatarUrl,
+    role: existing.role,
+    passwordHash: await hashPassword(password),
+    disabled: existing.disabled,
+  });
+}
+
+function parsePlatformRole(value: unknown): AuthUser['role'] {
+  if (value === 'admin' || value === 'user') return value;
+  throw new ApiError(400, 'INVALID_ROLE', 'role must be admin or user');
+}
+
+function parseBoolean(value: unknown, name: string): boolean {
+  if (typeof value === 'boolean') return value;
+  throw new ApiError(400, 'INVALID_FIELD', `${name} must be a boolean`);
+}
+
+async function hashPassword(password: string): Promise<string> {
+  const salt = randomBytes(16).toString('base64url');
+  const key = (await scryptAsync(password, salt, 64)) as Buffer;
+  return `scrypt$${salt}$${key.toString('base64url')}`;
+}
+
+async function verifyPassword(password: string, storedHash: string): Promise<boolean> {
+  const [algorithm, salt, expectedText] = storedHash.split('$');
+  if (algorithm !== 'scrypt' || !salt || !expectedText) return false;
+  const expected = Buffer.from(expectedText, 'base64url');
+  const actual = (await scryptAsync(password, salt, expected.length)) as Buffer;
+  return actual.length === expected.length && timingSafeEqual(actual, expected);
 }
 
 function signPayload(value: unknown, secret: string): string {
@@ -2028,6 +2458,7 @@ function normalizeAppRedirect(path: string | undefined): string {
 
 export function createPlatformApiServer(config = loadConfig()): ReturnType<typeof createServer> {
   const db = createDocumentDatabase(config.databaseUrl);
+  const authBootstrapPromise = ensureAuthBootstrap(db, config.auth);
   const store = new EvaluationStore(new JsonDocumentStore(db, 'evaluations'));
   const skillStore = new SkillStore(new JsonDocumentStore(db, 'skills'));
   const skillFileStore = new SkillFileStore(
@@ -2037,6 +2468,7 @@ export function createPlatformApiServer(config = loadConfig()): ReturnType<typeo
   const gitConfigStore = new GitConfigStore(new JsonDocumentStore(db, 'git-config'));
   const sourceStore = new SourceStore(new JsonDocumentStore(db, 'sources'));
   const sourceSkillCatalog = new SourceBackedSkillCatalog(sourceStore);
+  const publishedSkillCatalog = new PublishedSkillCatalog(sourceSkillCatalog, skillStore);
   const uploadStore = new PackageUploadStore(
     new JsonDocumentStore(db, 'uploads'),
     config.uploadDir,
@@ -2049,10 +2481,12 @@ export function createPlatformApiServer(config = loadConfig()): ReturnType<typeo
     void handleRequest(
       req,
       res,
+      db,
+      authBootstrapPromise,
       config,
       store,
       skillStore,
-      sourceSkillCatalog,
+      publishedSkillCatalog,
       skillFileStore,
       gitConfigStore,
       sourceStore,
@@ -2085,10 +2519,12 @@ export async function startPlatformApiServer(
 async function handleRequest(
   req: IncomingMessage,
   res: ServerResponse,
+  database: DocumentDatabase,
+  authBootstrapPromise: Promise<void>,
   config: PlatformApiConfig,
   store: EvaluationStore,
   skillStore: SkillStore,
-  sourceSkillCatalog: SourceBackedSkillCatalog,
+  publishedSkillCatalog: PublishedSkillCatalog,
   skillFileStore: SkillFileStore,
   gitConfigStore: GitConfigStore,
   sourceStore: SourceStore,
@@ -2106,6 +2542,7 @@ async function handleRequest(
   }
 
   try {
+    await authBootstrapPromise;
     const url = requestUrl(req, config);
     const pathname = normalizeResourcePath(url.pathname);
 
@@ -2139,17 +2576,17 @@ async function handleRequest(
     }
 
     if (req.method === 'POST' && pathname === '/api/auth/login') {
-      await handleOAuthPasswordLogin(req, res, config);
+      await handleOAuthPasswordLogin(req, res, config, database);
       return;
     }
 
     if (req.method === 'GET' && pathname === '/api/auth/callback') {
-      await handleOAuthCallback(req, res, config, url);
+      await handleOAuthCallback(req, res, config, database, url);
       return;
     }
 
     if (req.method === 'GET' && pathname === '/api/auth/me') {
-      const user = readSessionUser(req, config.auth);
+      const user = await readSessionUser(req, config.auth, database);
       if (!user) {
         sendJson(res, 401, errorBody('UNAUTHENTICATED', 'Not logged in'));
         return;
@@ -2159,17 +2596,91 @@ async function handleRequest(
     }
 
     if (req.method === 'POST' && pathname === '/api/auth/logout') {
+      await deleteCurrentSession(req, database);
       clearCookie(res, AUTH_COOKIE_NAME);
       sendJson(res, 200, { ok: true });
       return;
     }
 
+    const publicSkillPackageMatch = pathname.match(/^\/api\/skills\/([^/]+)\/package$/);
+    if (req.method === 'GET' && publicSkillPackageMatch) {
+      const skillIdOrName = decodeURIComponent(publicSkillPackageMatch[1]!);
+      const zip = await publishedSkillCatalog.exportPackage(skillIdOrName);
+      if (!zip) {
+        sendJson(res, 404, errorBody('NOT_FOUND', 'Skill package not found'));
+        return;
+      }
+      const skill = await publishedSkillCatalog.get(skillIdOrName);
+      if (skill) {
+        await skillStore.recordInstall(skill);
+      }
+      res.writeHead(200, {
+        'content-type': zip.contentType,
+        'content-disposition': `attachment; filename="${zip.fileName}"`,
+        'cache-control': 'no-store',
+      });
+      res.end(zip.body);
+      return;
+    }
+
     if (config.auth.enabled && pathname.startsWith('/api/')) {
-      const user = readSessionUser(req, config.auth);
+      const user = await readSessionUser(req, config.auth, database);
       if (!user) {
         sendJson(res, 401, errorBody('UNAUTHENTICATED', 'Not logged in'));
         return;
       }
+    }
+
+    const adminUserMatch = pathname.match(/^\/api\/admin\/users\/([^/]+)$/);
+    const adminUserPasswordMatch = pathname.match(/^\/api\/admin\/users\/([^/]+)\/password$/);
+
+    if (req.method === 'GET' && pathname === '/api/admin/users') {
+      await requireAdmin(req, config.auth, database);
+      sendJson(res, 200, await listPlatformUsers(database));
+      return;
+    }
+
+    if (req.method === 'POST' && pathname === '/api/admin/users') {
+      const currentUser = await requireAdmin(req, config.auth, database);
+      const created = await createPlatformUser(database, await readJsonBody(req));
+      sendJson(res, 201, {
+        user: publicPlatformUser(created),
+        currentUser: currentUser.id === created.id ? publicAuthUser(created) : undefined,
+      });
+      return;
+    }
+
+    if (req.method === 'PATCH' && adminUserMatch) {
+      const currentUser = await requireAdmin(req, config.auth, database);
+      const updated = await updatePlatformUser(
+        database,
+        decodeURIComponent(adminUserMatch[1]!),
+        await readJsonBody(req),
+        currentUser,
+      );
+      sendJson(res, 200, {
+        user: publicPlatformUser(updated),
+        currentUser: currentUser.id === updated.id ? publicAuthUser(updated) : undefined,
+      });
+      return;
+    }
+
+    if (req.method === 'DELETE' && adminUserMatch) {
+      const currentUser = await requireAdmin(req, config.auth, database);
+      await deletePlatformUser(database, decodeURIComponent(adminUserMatch[1]!), currentUser);
+      sendJson(res, 200, { ok: true });
+      return;
+    }
+
+    if (req.method === 'POST' && adminUserPasswordMatch) {
+      await requireAdmin(req, config.auth, database);
+      const updated = await resetPlatformUserPassword(
+        database,
+        decodeURIComponent(adminUserPasswordMatch[1]!),
+        await readJsonBody(req),
+      );
+      sendJson(res, 200, { user: publicPlatformUser(updated) });
+      return;
     }
 
     if (req.method === 'GET' && pathname === '/api/uploads') {
@@ -2188,6 +2699,16 @@ async function handleRequest(
     }
 
     const uploadMatch = pathname.match(/^\/api\/uploads\/([^/]+)$/);
+    if (req.method === 'DELETE' && uploadMatch) {
+      const deleted = await uploadStore.delete(decodeURIComponent(uploadMatch[1]!));
+      if (!deleted) {
+        sendJson(res, 404, errorBody('NOT_FOUND', 'Upload record not found'));
+        return;
+      }
+      sendJson(res, 200, { ok: true });
+      return;
+    }
+
     if (req.method === 'PATCH' && uploadMatch) {
       const record = await uploadStore.updateMetadata(
         decodeURIComponent(uploadMatch[1]!),
@@ -2201,9 +2722,38 @@ async function handleRequest(
       return;
     }
 
+    const uploadMetadataMatch = pathname.match(/^\/api\/uploads\/([^/]+)\/metadata$/);
+    if (req.method === 'PATCH' && uploadMetadataMatch) {
+      const record = await uploadStore.updateMetadata(
+        decodeURIComponent(uploadMetadataMatch[1]!),
+        await readJsonBody(req),
+      );
+      if (!record) {
+        sendJson(res, 404, errorBody('NOT_FOUND', 'Upload record not found'));
+        return;
+      }
+      sendJson(res, 200, record);
+      return;
+    }
+
     const submitUploadMatch = pathname.match(/^\/api\/uploads\/([^/]+)\/submit$/);
     if (req.method === 'POST' && submitUploadMatch) {
       const record = await uploadStore.submit(decodeURIComponent(submitUploadMatch[1]!));
+      if (!record) {
+        sendJson(res, 404, errorBody('NOT_FOUND', 'Upload record not found'));
+        return;
+      }
+      sendJson(res, 200, record);
+      return;
+    }
+
+    const publishUploadMatch = pathname.match(/^\/api\/uploads\/([^/]+)\/publish$/);
+    if (req.method === 'POST' && publishUploadMatch) {
+      const record = await uploadStore.publish(
+        decodeURIComponent(publishUploadMatch[1]!),
+        sourceStore,
+        skillStore,
+      );
       if (!record) {
         sendJson(res, 404, errorBody('NOT_FOUND', 'Upload record not found'));
         return;
@@ -2233,17 +2783,20 @@ async function handleRequest(
     }
 
     if (req.method === 'POST' && pathname === '/api/sources') {
+      await requireAdmin(req, config.auth, database);
       sendJson(res, 201, await sourceStore.create(await readJsonBody(req)));
       return;
     }
 
     if (req.method === 'POST' && pathname === '/api/sources/restore-builtins') {
+      await requireAdmin(req, config.auth, database);
       sendJson(res, 200, await sourceStore.restoreBuiltins());
       return;
     }
 
     const sourceMatch = pathname.match(/^\/api\/sources\/([^/]+)$/);
     if (req.method === 'PATCH' && sourceMatch) {
+      await requireAdmin(req, config.auth, database);
       sendJson(
         res,
         200,
@@ -2256,12 +2809,13 @@ async function handleRequest(
     }
 
     if (req.method === 'DELETE' && sourceMatch) {
+      await requireAdmin(req, config.auth, database);
       sendJson(res, 200, await sourceStore.remove(decodeURIComponent(sourceMatch[1]!)));
       return;
     }
 
     if (req.method === 'GET' && pathname === '/api/skills') {
-      sendJson(res, 200, await sourceSkillCatalog.list(parseSkillQuery(url)));
+      sendJson(res, 200, await publishedSkillCatalog.list(parseSkillQuery(url)));
       return;
     }
 
@@ -2277,8 +2831,21 @@ async function handleRequest(
     }
 
     const skillMatch = pathname.match(/^\/api\/skills\/([^/]+)$/);
+    if (req.method === 'DELETE' && skillMatch) {
+      const skillId = decodeURIComponent(skillMatch[1]!);
+      const deleted = await skillStore.delete(skillId);
+      if (!deleted) {
+        sendJson(res, 404, errorBody('NOT_FOUND', 'Skill not found'));
+        return;
+      }
+      await skillFileStore.deleteSkill(deleted.id);
+      await uploadStore.deleteBySkillId(deleted.id);
+      sendJson(res, 200, { ok: true, deleted: deleted.id });
+      return;
+    }
+
     if (req.method === 'GET' && skillMatch) {
-      const record = await sourceSkillCatalog.get(decodeURIComponent(skillMatch[1]!));
+      const record = await publishedSkillCatalog.get(decodeURIComponent(skillMatch[1]!));
       if (!record) {
         sendJson(res, 404, errorBody('NOT_FOUND', 'Skill not found'));
         return;
@@ -2289,7 +2856,7 @@ async function handleRequest(
 
     const skillFilesMatch = pathname.match(/^\/api\/skills\/([^/]+)\/files$/);
     if (req.method === 'GET' && skillFilesMatch) {
-      const record = await sourceSkillCatalog.listFiles(
+      const record = await publishedSkillCatalog.listFiles(
         decodeURIComponent(skillFilesMatch[1]!),
         url.searchParams.get('path') ?? undefined,
       );
@@ -2303,7 +2870,7 @@ async function handleRequest(
 
     const skillFileContentMatch = pathname.match(/^\/api\/skills\/([^/]+)\/files\/content$/);
     if (skillFileContentMatch && req.method === 'GET') {
-      const file = await sourceSkillCatalog.getFile(
+      const file = await publishedSkillCatalog.getFile(
         decodeURIComponent(skillFileContentMatch[1]!),
         url.searchParams.get('path') ?? '',
       );
@@ -2317,7 +2884,7 @@ async function handleRequest(
 
     const skillFilePathMatch = pathname.match(/^\/api\/skills\/([^/]+)\/files\/(.+)$/);
     if (skillFilePathMatch && req.method === 'GET') {
-      const file = await sourceSkillCatalog.getFile(
+      const file = await publishedSkillCatalog.getFile(
         decodeURIComponent(skillFilePathMatch[1]!),
         decodeURIComponent(skillFilePathMatch[2]!),
       );
@@ -2397,7 +2964,7 @@ async function handleRequest(
     }
 
     if (req.method === 'GET' && pathname === '/api/notifications') {
-      const user = readSessionUser(req, config.auth);
+      const user = await readSessionUser(req, config.auth, database);
       if (!user) {
         sendJson(res, 401, errorBody('UNAUTHENTICATED', 'Not logged in'));
         return;
@@ -2460,7 +3027,7 @@ async function handleRequest(
     }
 
     if (req.method === 'GET' && pathname === '/api/notifications/unread-count') {
-      const user = readSessionUser(req, config.auth);
+      const user = await readSessionUser(req, config.auth, database);
       if (!user) {
         sendJson(res, 401, errorBody('UNAUTHENTICATED', 'Not logged in'));
         return;
@@ -2471,7 +3038,7 @@ async function handleRequest(
     }
 
     if (req.method === 'GET' && pathname === '/api/favorites') {
-      const user = readSessionUser(req, config.auth);
+      const user = await readSessionUser(req, config.auth, database);
       if (!user) {
         sendJson(res, 401, errorBody('UNAUTHENTICATED', 'Not logged in'));
         return;
@@ -2484,7 +3051,7 @@ async function handleRequest(
 
     const favoriteMatch = pathname.match(/^\/api\/favorites\/([^/]+)$/);
     if (req.method === 'POST' && favoriteMatch) {
-      const user = readSessionUser(req, config.auth);
+      const user = await readSessionUser(req, config.auth, database);
       if (!user) {
         sendJson(res, 401, errorBody('UNAUTHENTICATED', 'Not logged in'));
         return;
@@ -2496,7 +3063,7 @@ async function handleRequest(
     }
 
     if (req.method === 'DELETE' && favoriteMatch) {
-      const user = readSessionUser(req, config.auth);
+      const user = await readSessionUser(req, config.auth, database);
       if (!user) {
         sendJson(res, 401, errorBody('UNAUTHENTICATED', 'Not logged in'));
         return;
@@ -2513,7 +3080,7 @@ async function handleRequest(
 
     const checkFavoriteMatch = pathname.match(/^\/api\/favorites\/check\/([^/]+)$/);
     if (req.method === 'GET' && checkFavoriteMatch) {
-      const user = readSessionUser(req, config.auth);
+      const user = await readSessionUser(req, config.auth, database);
       if (!user) {
         sendJson(res, 401, errorBody('UNAUTHENTICATED', 'Not logged in'));
         return;
@@ -2525,7 +3092,7 @@ async function handleRequest(
     }
 
     if (req.method === 'GET' && pathname === '/api/search-history') {
-      const user = readSessionUser(req, config.auth);
+      const user = await readSessionUser(req, config.auth, database);
       if (!user) {
         sendJson(res, 401, errorBody('UNAUTHENTICATED', 'Not logged in'));
         return;
@@ -2537,7 +3104,7 @@ async function handleRequest(
     }
 
     if (req.method === 'POST' && pathname === '/api/search-history') {
-      const user = readSessionUser(req, config.auth);
+      const user = await readSessionUser(req, config.auth, database);
       if (!user) {
         sendJson(res, 401, errorBody('UNAUTHENTICATED', 'Not logged in'));
         return;
@@ -2554,7 +3121,7 @@ async function handleRequest(
 
     const searchHistoryMatch = pathname.match(/^\/api\/search-history\/([^/]+)$/);
     if (req.method === 'DELETE' && searchHistoryMatch) {
-      const user = readSessionUser(req, config.auth);
+      const user = await readSessionUser(req, config.auth, database);
       if (!user) {
         sendJson(res, 401, errorBody('UNAUTHENTICATED', 'Not logged in'));
         return;
@@ -2569,7 +3136,7 @@ async function handleRequest(
     }
 
     if (req.method === 'DELETE' && pathname === '/api/search-history') {
-      const user = readSessionUser(req, config.auth);
+      const user = await readSessionUser(req, config.auth, database);
       if (!user) {
         sendJson(res, 401, errorBody('UNAUTHENTICATED', 'Not logged in'));
         return;
@@ -2691,6 +3258,24 @@ function parseSkillQuery(url: URL): {
     source: optionalQueryString(url, 'source'),
     owner: optionalQueryString(url, 'owner'),
   });
+}
+
+function mergeSkillRecords(
+  sourceItems: SkillRecord[],
+  publishedItems: SkillRecord[],
+): SkillRecord[] {
+  const merged = new Map<string, SkillRecord>();
+  for (const item of sourceItems) {
+    merged.set(skillRecordKey(item), item);
+  }
+  for (const item of publishedItems) {
+    merged.set(skillRecordKey(item), item);
+  }
+  return [...merged.values()].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+}
+
+function skillRecordKey(item: SkillRecord): string {
+  return item.name.trim().toLowerCase() || item.id;
 }
 
 function parseUploadQuery(url: URL): {
@@ -2952,6 +3537,59 @@ function collectSourceFiles(dir: string): string[] {
   return files.sort((a, b) => a.localeCompare(b));
 }
 
+function createZipFromDirectory(rootDir: string, zipRootName: string): Buffer {
+  const zip = new AdmZip();
+  const root = resolve(rootDir);
+  const safeRootName = sanitizeZipRootName(zipRootName);
+
+  for (const filePath of collectZipFiles(root)) {
+    const rel = normalize(filePath.slice(root.length + 1)).replace(/\\/g, '/');
+    zip.addFile(`${safeRootName}/${rel}`, readFileSync(filePath));
+  }
+
+  return zip.toBuffer();
+}
+
+function createZipFromFiles(files: SkillFileRecord[], zipRootName: string): Buffer {
+  const zip = new AdmZip();
+  const safeRootName = sanitizeZipRootName(zipRootName);
+  for (const file of files) {
+    zip.addFile(`${safeRootName}/${file.path}`, Buffer.from(file.content, 'utf8'));
+  }
+  return zip.toBuffer();
+}
+
+function collectZipFiles(dir: string): string[] {
+  const files: string[] = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (entry.name === '.git') continue;
+    const fullPath = join(dir, entry.name);
+    const fileStat = lstatSync(fullPath);
+    if (fileStat.isSymbolicLink()) continue;
+    if (fileStat.isDirectory()) {
+      files.push(...collectZipFiles(fullPath));
+    } else if (fileStat.isFile()) {
+      files.push(fullPath);
+    }
+  }
+  return files.sort((a, b) => a.localeCompare(b));
+}
+
+function sanitizeZipRootName(value: string): string {
+  return value.replace(/[^a-z0-9._-]/gi, '-') || 'skill-package';
+}
+
+function skillPackageFileName(name: string, version: string): string {
+  const cleanName = sanitizeZipRootName(name).replace(/^-+|-+$/g, '') || 'skill-package';
+  if (!version || version === 'unknown') {
+    return `${cleanName}.zip`;
+  }
+  const cleanVersion = version
+    .replace(/[^a-z0-9._-]/gi, '-')
+    .replace(/^-+|-+$/g, '');
+  return cleanVersion ? `${cleanName}-${cleanVersion}.zip` : `${cleanName}.zip`;
+}
+
 function parseFrontmatter(markdown: string): Record<string, unknown> | undefined {
   const match = markdown.match(/^---\r?\n([\s\S]*?)\r?\n---/);
   if (!match) return undefined;
@@ -3072,8 +3710,9 @@ async function publishPackageToSource(
   await rm(workDir, { recursive: true, force: true });
   await execGit(['clone', repoUrl, workDir], process.cwd());
 
-  if (source.branch) {
-    await execGit(['checkout', source.branch], workDir).catch(() => undefined);
+  const publishBranch = source.branch?.trim();
+  if (publishBranch) {
+    await checkoutPublishBranch(workDir, publishBranch);
   }
   await execGit(['config', 'user.email', 'platform@example.local'], workDir);
   await execGit(['config', 'user.name', 'Suit Skills Platform'], workDir);
@@ -3096,9 +3735,21 @@ async function publishPackageToSource(
   const commit = (await execGit(['rev-parse', 'HEAD'], workDir)).trim();
 
   if (!isLocalGitUrl(repoUrl) || repoUrl.endsWith('.git')) {
-    await execGit(['push', 'origin', source.branch || 'HEAD'], workDir);
+    await execGit(['push', 'origin', publishBranch ? `HEAD:${publishBranch}` : 'HEAD'], workDir);
   }
   return commit;
+}
+
+async function checkoutPublishBranch(workDir: string, branch: string): Promise<void> {
+  const hasRemoteBranch = await execGit(['fetch', 'origin', branch], workDir)
+    .then(() => true)
+    .catch(() => false);
+  if (!hasRemoteBranch) {
+    await execGit(['checkout', '-B', branch], workDir);
+    return;
+  }
+  await execGit(['checkout', '-B', branch, `origin/${branch}`], workDir);
+  await execGit(['pull', '--ff-only', 'origin', branch], workDir);
 }
 
 async function execGit(args: string[], cwd: string): Promise<string> {

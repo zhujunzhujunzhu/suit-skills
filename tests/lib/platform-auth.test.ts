@@ -86,7 +86,7 @@ describe('platform oauth auth flow', () => {
     baseUrl = `http://127.0.0.1:${port}`;
 
     try {
-      const login = await originalFetch(`${baseUrl}/api/auth/login?redirect=/reviews`, {
+      const login = await originalFetch(`${baseUrl}/api/auth/login?redirect=/notifications`, {
         redirect: 'manual',
       });
       expect(login.status).toBe(302);
@@ -104,7 +104,7 @@ describe('platform oauth auth flow', () => {
         },
       );
       expect(callback.status).toBe(302);
-      expect(callback.headers.get('location')).toBe('http://platform.example.test/reviews');
+      expect(callback.headers.get('location')).toBe('http://platform.example.test/notifications');
       const sessionCookie = callback.headers
         .get('set-cookie')
         ?.split(',')
@@ -238,6 +238,7 @@ describe('platform oauth auth flow', () => {
       PLATFORM_API_UPLOADS_FILE: join(tmp, 'uploads.json'),
       PLATFORM_API_UPLOAD_DIR: join(tmp, 'uploads'),
       PLATFORM_ADMIN_EMAILS: 'admin@local.dev',
+      PLATFORM_AUTH_BOOTSTRAP_PASSWORD: 'secret',
     };
     const { loadConfig } = await import('../../packages/server/src/index.js');
     const server = createPlatformApiServer(loadConfig(config));
@@ -261,7 +262,7 @@ describe('platform oauth auth flow', () => {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           username: 'admin@local.dev',
-          password: 'anything',
+          password: 'secret',
         }),
       });
       expect(login.status).toBe(200);
@@ -273,6 +274,17 @@ describe('platform oauth auth flow', () => {
           role: 'admin',
         },
       });
+      expect(login.headers.get('set-cookie')).toContain('clawhub_session=');
+
+      const badLogin = await fetch(`${baseUrl}/api/auth/login`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          username: 'admin@local.dev',
+          password: 'wrong-password',
+        }),
+      });
+      expect(badLogin.status).toBe(401);
     } finally {
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }

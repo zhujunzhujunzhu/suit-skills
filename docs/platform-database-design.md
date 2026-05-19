@@ -68,9 +68,23 @@ erDiagram
 | `email` | TEXT | NOT NULL, UNIQUE | 用户邮箱 |
 | `name` | TEXT | NOT NULL | 展示名称 |
 | `avatar_url` | TEXT | NULL | 头像地址 |
+| `password_hash` | TEXT | NULL | 本地数据库账号密码哈希，OAuth 用户可为空 |
+| `password_updated_at` | TEXT | NULL | 密码更新时间 |
+| `disabled` | INTEGER | NOT NULL, DEFAULT 0 | 是否禁用 |
 | `role` | TEXT | NOT NULL, CHECK `user/admin` | 平台角色 |
 | `created_at` | TEXT | NOT NULL | 创建时间 |
 | `updated_at` | TEXT | NOT NULL | 更新时间 |
+
+## platform_sessions
+
+数据库登录会话表。浏览器 Cookie 仅保存随机 session id，服务端通过此表恢复当前用户。
+
+| 字段 | 类型 | 约束 | 说明 |
+| --- | --- | --- | --- |
+| `id` | TEXT | PRIMARY KEY | 随机会话 ID |
+| `user_id` | TEXT | NOT NULL, FK platform_users(id) | 登录用户 |
+| `expires_at` | TEXT | NOT NULL | 过期时间 |
+| `created_at` | TEXT | NOT NULL | 创建时间 |
 
 ## platform_sources
 
@@ -289,6 +303,7 @@ SQLite 当前使用：
 
 ## 当前注意事项
 
-- `platform_users` 已设计但当前登录会话仍通过 HttpOnly cookie 管理，用户持久化可在后续迭代接入。
+- `platform_users` 已接入本地数据库账号登录；OAuth 登录成功后也会同步用户基础信息。
+- `platform_sessions` 管理登录态，HttpOnly cookie 仅保存随机 session id。
 - `platform_upload_metadata` 与 `platform_published_skills` 分离，只有审核发布成功后的技能才进入 `platform_published_skills`。
 - `platform_evaluations.skill_id` 未设置外键，用于支持历史评价快照和离线/草稿技能引用。

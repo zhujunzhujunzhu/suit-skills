@@ -40,12 +40,13 @@ Docker 部署需要：
 | `PLATFORM_WEB_APP_URL` | `https://skills.example.com` | 前端访问地址，用于登录后跳转 |
 | `PLATFORM_API_PUBLIC_URL` | `https://skills.example.com` | API 对外地址；同源反代时填前端域名 |
 | `PLATFORM_API_CORS_ORIGIN` | `https://skills.example.com` | 允许跨域来源；同源反代也建议显式配置 |
-| `PLATFORM_AUTH_MODE` | `local` | 本地账号模式；接入 OAuth 时改为 `oauth` |
+| `PLATFORM_AUTH_MODE` | `local` | 本地数据库账号模式；接入 OAuth 时改为 `oauth` |
 | `PLATFORM_AUTH_SESSION_SECRET` | 随机长字符串 | Cookie 会话签名密钥，生产环境必须修改 |
 | `PLATFORM_ADMIN_EMAILS` | `admin@example.com,ops@example.com` | 管理员邮箱列表 |
 | `PLATFORM_ADMIN_DOMAINS` | `example.com` | 管理员邮箱域名列表，可选 |
+| `PLATFORM_AUTH_BOOTSTRAP_PASSWORD` | 初始密码 | 首次启动时为未设置密码的管理员账号写入哈希 |
 
-本地账号模式下，登录用户名使用邮箱，密码当前不做服务端校验，适合内网或受保护环境。公网生产环境建议接入 OAuth，并在网关层启用 HTTPS。
+本地账号模式下，登录用户名使用邮箱，密码会在数据库中校验。首次部署时先通过 `PLATFORM_AUTH_BOOTSTRAP_PASSWORD` 为管理员账号初始化密码，然后再通过数据库或后续管理界面维护普通用户。
 
 如果数据库密码包含 `@`、`#`、`:`、`/` 等 URL 特殊字符，请在 `PLATFORM_DATABASE_URL` 中做 URL 编码，或改用只包含字母、数字、下划线的数据库密码。
 
@@ -97,6 +98,7 @@ PLATFORM_API_CORS_ORIGIN=https://skills.example.com
 PLATFORM_AUTH_MODE=local
 PLATFORM_AUTH_SESSION_SECRET=replace-with-a-long-random-secret
 PLATFORM_ADMIN_EMAILS=admin@example.com
+PLATFORM_AUTH_BOOTSTRAP_PASSWORD=replace-with-a-strong-initial-password
 ```
 
 如果需要持久化上传包目录，可额外指定：
