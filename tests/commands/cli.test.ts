@@ -16,6 +16,7 @@ import {
   createProgramForTest,
   runCliUserArgs,
 } from '../../apps/cli/src/cli/run.js';
+import { createZipFromDirectory } from '../../apps/cli/src/lib/web/zip.js';
 import type { SkillMeta } from '@suit-skills/core';
 
 function writeSkill(
@@ -442,6 +443,82 @@ describe('阶段 9 CLI', () => {
       await expect(
         runCliUserArgs(prog, ['install', 'Code-Review']),
       ).rejects.toThrow('Invalid skill name');
+    });
+
+    it('install-package 从本地 zip 安装到全局并链接目标', async () => {
+      const packageRoot = join(tmp, 'package-root', 'package-helper');
+      mkdirSync(packageRoot, { recursive: true });
+      writeFileSync(
+        join(packageRoot, 'SKILL.md'),
+        [
+          '---',
+          'name: package-helper',
+          'version: 1.2.3',
+          'description: Package helper',
+          '---',
+          '',
+          '# package-helper',
+          '',
+        ].join('\n'),
+      );
+      writeFileSync(join(packageRoot, 'notes.txt'), 'from zip');
+      const zipPath = join(projectDir, 'package-helper.zip');
+      writeFileSync(zipPath, createZipFromDirectory(packageRoot, 'package-helper'));
+
+      const prog = createProgramForTest(ctx());
+      await runCliUserArgs(prog, [
+        'install-package',
+        'package-helper.zip',
+        '--global',
+        '--env',
+        'codex',
+      ]);
+
+      expect(
+        existsSync(
+          join(userHome, '.agents', 'skills', 'package-helper', 'SKILL.md'),
+        ),
+      ).toBe(true);
+      expect(
+        existsSync(
+          join(userHome, '.codex', 'skills', 'package-helper', 'notes.txt'),
+        ),
+      ).toBe(true);
+    });
+
+    it('install-package 从 URL 下载 zip 并按 --local 安装', async () => {
+      const packageRoot = join(tmp, 'url-package-root', 'url-helper');
+      mkdirSync(packageRoot, { recursive: true });
+      writeFileSync(
+        join(packageRoot, 'SKILL.md'),
+        [
+          '---',
+          'name: url-helper',
+          'version: 2.0.0',
+          '---',
+          '',
+          '# url-helper',
+          '',
+        ].join('\n'),
+      );
+      const zip = createZipFromDirectory(packageRoot, 'url-helper');
+      const fetchSpy = vi
+        .spyOn(globalThis, 'fetch')
+        .mockResolvedValue(new Response(zip, { status: 200 }));
+
+      const prog = createProgramForTest(ctx());
+      await runCliUserArgs(prog, [
+        'install-package',
+        'https://platform.example.test/api/skills/skill-url-helper/package',
+        '--local',
+        '--env',
+        'agents',
+      ]);
+
+      expect(fetchSpy).toHaveBeenCalledOnce();
+      expect(
+        existsSync(join(projectDir, '.agents', 'skills', 'url-helper', 'SKILL.md')),
+      ).toBe(true);
     });
   });
 

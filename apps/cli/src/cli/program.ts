@@ -5,6 +5,7 @@ import { registerList } from '../commands/list.js';
 import { registerSearch } from '../commands/search.js';
 import { registerInfo } from '../commands/info.js';
 import { registerInstall } from '../commands/install.js';
+import { registerInstallPackage } from '../commands/install-package.js';
 import { registerInstalled } from '../commands/installed.js';
 import { registerUpdate } from '../commands/update.js';
 import { registerRemove } from '../commands/remove.js';
@@ -29,6 +30,7 @@ export function buildProgram(ctx: CliContext): Command {
   registerSearch(program, ctx);
   registerInfo(program, ctx);
   registerInstall(program, ctx);
+  registerInstallPackage(program, ctx);
   registerInstalled(program, ctx);
   registerUpdate(program, ctx);
   registerRemove(program, ctx);
