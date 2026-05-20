@@ -8,6 +8,10 @@ dist/
 src-tauri/binaries/
 src-tauri/gen/
 src-tauri/target/
+apps/desktop/binaries/
+apps/desktop/gen/
+packages/server/data/
+serverInfo.md
 .agents/
 .codex/
 .claude/
