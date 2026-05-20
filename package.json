@@ -1,6 +1,6 @@
 {
   "name": "suit-skills",
-  "version": "0.0.15",
+  "version": "0.0.16",
   "type": "module",
   "description": "A CLI tool for skills management with Web console and Desktop app",
   "main": "dist/index.js",
