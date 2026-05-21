@@ -1,0 +1,34 @@
+:root {
+  color-scheme: dark;
+  --surface: #121411;
+  --surface-lowest: #0d0f0c;
+  --surface-low: #1a1d18;
+  --surface-mid: #22251f;
+  --surface-high: #2d3129;
+  --surface-bright: #3b4035;
+  --surface-hover: rgba(183, 224, 90, 0.1);
+  --text: #ece9dc;
+  --foreground: #ece9dc;
+  --muted: #c9c5b3;
+  --text-secondary: #a6a18f;
+  --faint: #898574;
+  --outline: rgba(120, 126, 99, 0.42);
+  --outline-soft: rgba(120, 126, 99, 0.2);
+  --primary: #b7e05a;
+  --primary-strong: #7ea32b;
+  --primary-ink: #161d0b;
+  --secondary: #efbd67;
+  --tertiary: #e9907b;
+  --accent: #b7e05a;
+  --accent-muted: rgba(183, 224, 90, 0.18);
+  --warning: #efbd67;
+  --error: #ff9d88;
+  --danger: #ff9d88;
+  --radius: 14px;
+  --shadow-soft: 0 18px 42px rgba(3, 10, 8, 0.22);
+  --shadow-strong: 0 28px 90px rgba(2, 8, 6, 0.3);
+  --panel-glow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  --mono: "SFMono-Regular", "Cascadia Mono", "JetBrains Mono", Consolas, monospace;
+  --sans: Aptos, "Segoe UI Variable Text", "Segoe UI", ui-sans-serif, sans-serif;
+  --display: "Aptos Display", Bahnschrift, Aptos, "Segoe UI Variable Display", sans-serif;
+}

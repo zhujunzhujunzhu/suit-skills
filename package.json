@@ -5,6 +5,8 @@
   "description": "A CLI tool for skills management with Web console and Desktop app",
   "workspaces": [
     "packages/*",
+    "apps/cli",
+    "apps/local-web",
     "apps/platform-web"
   ],
   "main": "dist/index.js",
@@ -29,6 +31,8 @@
   "scripts": {
     "build": "tsc",
     "build:all": "npm run build && npm run build:web",
+    "build:hub-cli": "npm --workspace @suit-skills/app-cli run build",
+    "build:local-web": "npm --workspace @suit-skills/app-local-web run build",
     "sync:version": "node scripts/sync-version.mjs",
     "build:web": "vite build --config web/vite.config.ts",
     "build:platform": "npm --workspace @suit-skills/server run build && npm --workspace @suit-skills/app-platform-web run build",
@@ -49,6 +53,7 @@
     "start": "node dist/index.js",
     "clean": "rm -rf dist",
     "typecheck": "tsc --noEmit",
+    "typecheck:hub": "npm --workspace @suit-skills/core run build && npm --workspace @suit-skills/app-cli run typecheck && npm --workspace @suit-skills/app-local-web run typecheck && npm --workspace @suit-skills/server run typecheck && npm --workspace @suit-skills/app-platform-web run typecheck",
     "typecheck:platform": "npm --workspace @suit-skills/core run build && npm --workspace @suit-skills/server run typecheck && npm --workspace @suit-skills/app-platform-web run typecheck",
     "test": "vitest run",
     "test:e2e": "playwright test",
