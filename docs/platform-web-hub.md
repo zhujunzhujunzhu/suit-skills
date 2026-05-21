@@ -9,7 +9,7 @@
 
 ## 当前仓库状态
 
-当前仓库已有 `apps/platform-web/` 目录占位，但还没有纳入主构建脚本，也没有可维护的源码入口。
+当前仓库已恢复 `apps/platform-web/`，并保留为独立 Hub 应用。它不会替代根目录的本地 Web 控制台。
 
 ## 建议边界
 
@@ -26,10 +26,9 @@ Hub 后续应优先覆盖：
 
 ## 后续接入建议
 
-等 `apps/platform-web` 有源码后，再补齐：
+当前接入脚本：
 
-- 独立 `package.json`
-- 开发脚本
-- 构建脚本
-- CI 校验
-- 与 `packages/server` / `packages/core` 的接口边界
+- `npm run dev:platform-web`
+- `npm run build:platform`
+- `npm run build:platform-web`
+- `npm run typecheck:platform`
