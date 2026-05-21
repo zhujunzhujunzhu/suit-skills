@@ -2,7 +2,7 @@
 
 ## 项目定位
 
-`suit-skills` 是一个用于管理 AI Agent skills 的本地工具，覆盖三种入口：
+`suit-skills` 是一个用于管理 AI Agent skills 的本地工具，覆盖四种入口：
 
 - CLI
 - Web 控制台
@@ -17,14 +17,21 @@
 - 导出已安装 skill，复制 package，链接到其它目标
 - 在 Web 中查看 skill 详情、翻译内容、编辑已安装 skill
 - 提供 Tauri 桌面端和 sidecar 构建流程
-- 保留 `apps/platform-web/` 作为平台 Hub 入口，用于后续在线技能分发和团队协作
+- 提供 `apps/platform-web/` 平台 Hub，用于在线技能市场、上传审核、团队共享和平台部署
 
 ## 代码结构
 
-- `src/`：CLI、配置、安装逻辑、Web API、桌面辅助命令
-- `web/`：Web 控制台
-- `src-tauri/`：Tauri 桌面壳
+- `apps/cli/`：CLI 入口、本地 Web API、桌面 sidecar 命令
+- `apps/local-web/`：本地 Web 控制台
+- `apps/platform-web/`：Platform Web Hub 前端
+- `apps/desktop/`：Tauri 桌面壳
+- `packages/core/`：source、skill、安装目标、配置等核心逻辑
+- `packages/server/`：Platform Web Hub API 服务
+- `packages/evaluator/`：评测相关扩展包
+- `packages/ui/`：共享 UI 基础包
 - `docs/`：用户文档、开发说明、功能说明
+
+旧的根目录 `src/`、`web/`、`src-tauri/` 已迁移到 `apps/*` 与 `packages/*`。如果发现主应用目录比 Hub 分支少，是因为入口被合并到 workspace 后删除了重复旧副本，不代表功能丢失。
 
 ## 配置模型
 

@@ -6,6 +6,7 @@
 - [用户手册](./user-manual.md)
 - [Web 控制台说明](./web-console.md)
 - [Platform Web Hub](./platform-web-hub.md)
+- [平台部署手册](./platform-deployment-manual.md)
 - [源管理说明](./source-management.md)
 - [桌面端说明](./desktop.md)
 - [Skill 编辑与 AI 辅助](./skill-editing-and-ai.md)
@@ -13,4 +14,4 @@
 - [开发说明](./development.md)
 - [NPM 发布指南](../PUBLISH.md)
 
-历史的任务清单、审计记录、一次性方案稿已经移除，不再作为维护文档保留。
+历史的任务清单、审计记录、一次性方案稿已经移除，不再作为维护文档保留。Hub 功能已合并到 workspace 结构中，维护文档以当前 `apps/*` 和 `packages/*` 路径为准。

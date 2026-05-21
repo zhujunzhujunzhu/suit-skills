@@ -1,6 +1,6 @@
 # 桌面端说明
 
-桌面应用基于 Tauri，Web 页面在桌面窗口中运行，CLI 作为 sidecar 提供能力。
+桌面应用位于 `apps/desktop/`，基于 Tauri。Web 页面在桌面窗口中运行，CLI 作为 sidecar 提供能力。
 
 ## 构建
 
@@ -30,4 +30,6 @@ npm run build:desktop
 
 ## 打包产物
 
-Windows 和 macOS 的安装包由 `npm run tauri:build` 生成，产物在 `src-tauri/target/release/bundle/`。
+Windows 和 macOS 的安装包由 `npm run tauri:build` 生成，产物在 `apps/desktop/target/release/bundle/`。
+
+旧的 `src-tauri/` 目录已迁移到 `apps/desktop/`，桌面脚本和图标生成脚本也都指向新目录。

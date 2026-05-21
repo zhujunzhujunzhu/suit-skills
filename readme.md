@@ -16,7 +16,7 @@
 - 支持导出已安装 skill、复制安装包、将已安装 skill 链接到其他目标。
 - 支持国内镜像配置，便于访问常见开源 skill source。
 - 提供 Tauri 桌面应用构建入口。
-- 保留 Platform Web Hub 入口，用于后续在线技能分发和团队协作。
+- 提供 Platform Web Hub，用于在线技能市场、上传审核、source 发布和团队协作。
 
 ## 环境要求
 
@@ -231,10 +231,18 @@ npm run build:desktop
 构建产物位于：
 
 ```text
-src-tauri/target/release/bundle/
+apps/desktop/target/release/bundle/
 ```
 
 ## 本地开发
+
+当前仓库采用 npm workspaces。入口目录：
+
+- `apps/cli/`：CLI、本地 Web API、桌面 sidecar 命令
+- `apps/local-web/`：本地 Web 控制台
+- `apps/platform-web/`：Platform Web Hub
+- `apps/desktop/`：Tauri 桌面应用
+- `packages/core/`、`packages/server/`、`packages/evaluator/`、`packages/ui/`：共享包和平台服务
 
 ```bash
 # 安装依赖
@@ -246,6 +254,9 @@ npm run dev
 # Web 开发模式
 npm run dev:web
 
+# Platform Web Hub 开发模式
+npm run dev:platform-web
+
 # 类型检查
 npm run typecheck
 
@@ -255,7 +266,10 @@ npm test
 # E2E 测试
 npm run test:e2e
 
-# 构建 CLI 和 Web
+# Platform Web Hub E2E 测试
+npm run test:e2e:platform
+
+# 构建全部 workspace
 npm run build:all
 ```
 
