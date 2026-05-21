@@ -21,4 +21,5 @@ serverInfo.md
 .claude/worktrees/
 .playwright-mcp/
 screenshots/
+test-results/
 apps/desktop/target/

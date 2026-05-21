@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
-const apiBase = 'http://127.0.0.1:4591';
+const apiPort = process.env.PLAYWRIGHT_PLATFORM_API_PORT ?? '14591';
+const apiBase = `http://127.0.0.1:${apiPort}`;
 
 async function gotoMarket(page: Page) {
   await page.goto('/skills-hub/');
