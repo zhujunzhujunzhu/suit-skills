@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { collectMarkdownTranslationTasks } from '../../web/src/lib/markdown';
+import { collectMarkdownTranslationTasks } from '../../apps/local-web/src/lib/markdown';
 
 describe('collectMarkdownTranslationTasks', () => {
   it('ignores frontmatter and captures common markdown blocks', () => {

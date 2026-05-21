@@ -1,0 +1,16 @@
+{
+  "name": "@suit-skills/evaluator",
+  "version": "1.0.1",
+  "type": "module",
+  "private": true,
+  "description": "Evaluation jobs, runners, scorers, and reports for Suit Skills.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@suit-skills/core": "1.0.1"
+  }
+}

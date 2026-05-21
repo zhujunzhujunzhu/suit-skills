@@ -2,12 +2,12 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import ReactMarkdown from 'react-markdown';
 import { describe, expect, it } from 'vitest';
-import '../../web/src/i18n';
+import '../../apps/local-web/src/i18n';
 import {
   TranslateMarkdownView,
   normalizeSkillRelativePath,
-} from '../../web/src/views/SkillDetailView';
-import { markdownRemarkPlugins } from '../../web/src/lib/markdown';
+} from '../../apps/local-web/src/views/SkillDetailView';
+import { markdownRemarkPlugins } from '../../apps/local-web/src/lib/markdown';
 
 describe('markdown rendering pipeline', () => {
   it('strips frontmatter and renders gfm tables', () => {

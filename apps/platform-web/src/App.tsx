@@ -8,6 +8,7 @@ import {
   useParams,
 } from 'react-router-dom';
 import {
+  getAuthConfig,
   getCurrentUser,
   listSkills,
   listSources,
@@ -83,11 +84,21 @@ function App() {
   const [syncingMarket, setSyncingMarket] = useState(false);
 
   useEffect(() => {
-    getCurrentUser().then((currentUser) => {
+    Promise.all([getAuthConfig(), getCurrentUser()]).then(([authConfig, currentUser]) => {
       if (currentUser) {
         setUser(currentUser);
         setRole(currentUser.role);
         localStorage.setItem(ROLE_STORAGE_KEY, currentUser.role);
+      } else if (authConfig.apiAvailable && !authConfig.enabled) {
+        const localAdmin: AuthUser = {
+          id: 'local:admin@local.dev',
+          email: 'admin@local.dev',
+          name: 'Local Admin',
+          role: 'admin',
+        };
+        setUser(localAdmin);
+        setRole('admin');
+        localStorage.setItem(ROLE_STORAGE_KEY, 'admin');
       } else {
         setUser(null);
         setRole(null);

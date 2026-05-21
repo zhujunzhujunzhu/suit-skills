@@ -5,14 +5,12 @@
   "description": "A CLI tool for skills management with Web console and Desktop app",
   "workspaces": [
     "packages/*",
-    "apps/cli",
-    "apps/local-web",
-    "apps/platform-web"
+    "apps/*"
   ],
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "main": "apps/cli/dist/index.js",
+  "types": "apps/cli/dist/index.d.ts",
   "bin": {
-    "suit-skills": "dist/index.js"
+    "suit-skills": "apps/cli/dist/index.js"
   },
   "authors": [
     {
@@ -29,48 +27,54 @@
     "url": "git+https://github.com/zhujunzhujunzhu/suit-skills.git"
   },
   "scripts": {
-    "build": "tsc",
-    "build:all": "npm run build && npm run build:web",
+    "build": "npm run build:workspaces",
+    "build:workspaces": "npm run build --workspaces --if-present",
+    "build:all": "npm run build",
     "build:hub-cli": "npm --workspace @suit-skills/app-cli run build",
     "build:local-web": "npm --workspace @suit-skills/app-local-web run build",
     "sync:version": "node scripts/sync-version.mjs",
-    "build:web": "vite build --config web/vite.config.ts",
+    "build:web": "npm --workspace @suit-skills/app-local-web run build",
     "build:platform": "npm --workspace @suit-skills/server run build && npm --workspace @suit-skills/app-platform-web run build",
     "build:platform-web": "npm --workspace @suit-skills/app-platform-web run build",
     "build:sidecar": "node scripts/build-sidecar.mjs",
     "build:desktop": "npm run build:all && npm run build:sidecar && npm run tauri:build",
     "prepack": "npm run build:all",
-    "dev": "tsx src/index.ts",
+    "dev": "tsx apps/cli/src/index.ts",
     "dev:web": "node scripts/dev-web.mjs",
-    "dev:web:vite": "vite --config web/vite.config.ts",
+    "dev:web:vite": "npm --workspace @suit-skills/app-local-web run dev",
     "dev:platform-web": "node scripts/dev-platform-web.mjs",
     "dev:platform-web:vite": "npm --workspace @suit-skills/app-platform-web run dev",
     "start:platform-api": "npm --workspace @suit-skills/server run start",
-    "dev:tauri": "tauri dev",
-    "tauri": "tauri",
-    "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build",
-    "start": "node dist/index.js",
+    "dev:tauri": "npm --workspace @suit-skills/app-desktop run tauri:dev",
+    "tauri": "npm --workspace @suit-skills/app-desktop run tauri --",
+    "tauri:dev": "npm --workspace @suit-skills/app-desktop run tauri:dev",
+    "tauri:build": "npm --workspace @suit-skills/app-desktop run tauri:build",
+    "start": "node apps/cli/dist/index.js",
     "clean": "rm -rf dist",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "npm run typecheck --workspaces --if-present",
     "typecheck:hub": "npm --workspace @suit-skills/core run build && npm --workspace @suit-skills/app-cli run typecheck && npm --workspace @suit-skills/app-local-web run typecheck && npm --workspace @suit-skills/server run typecheck && npm --workspace @suit-skills/app-platform-web run typecheck",
     "typecheck:platform": "npm --workspace @suit-skills/core run build && npm --workspace @suit-skills/server run typecheck && npm --workspace @suit-skills/app-platform-web run typecheck",
     "test": "vitest run",
     "test:e2e": "playwright test",
+    "test:e2e:platform": "playwright test --config playwright.platform.config.ts",
     "test:watch": "vitest"
   },
   "pkg": {
-    "scripts": "dist/**/*.js",
+    "scripts": "apps/cli/dist/**/*.js",
     "assets": "dist/**/*",
     "targets": [
       "node18-win-x64"
     ],
-    "outputPath": "src-tauri/binaries"
+    "outputPath": "apps/desktop/binaries"
   },
   "files": [
-    "dist",
+    "apps/cli/dist",
+    "dist/web",
     "readme.md",
     "imgs/*.png"
+  ],
+  "bundledDependencies": [
+    "@suit-skills/core"
   ],
   "keywords": [
     "cli",

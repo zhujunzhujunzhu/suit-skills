@@ -179,7 +179,7 @@ export interface PlatformApiConfig {
 
 export interface OAuthConfig {
   enabled: boolean;
-  mode: 'oauth' | 'local';
+  mode: 'oauth' | 'local' | 'none';
   clientId: string;
   clientSecret: string;
   authorizationUrl: string;

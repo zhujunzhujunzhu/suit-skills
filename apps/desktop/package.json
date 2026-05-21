@@ -1,0 +1,12 @@
+{
+  "name": "@suit-skills/app-desktop",
+  "version": "1.0.1",
+  "type": "module",
+  "private": true,
+  "description": "Suit Skills Tauri desktop application.",
+  "scripts": {
+    "tauri": "tauri",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build"
+  }
+}

@@ -92,7 +92,7 @@ async function main() {
       PLATFORM_AUTH_MODE: process.env.PLATFORM_AUTH_MODE ?? 'local',
       PLATFORM_ADMIN_EMAILS: process.env.PLATFORM_ADMIN_EMAILS ?? 'admin@local.dev',
       PLATFORM_AUTH_BOOTSTRAP_PASSWORD:
-        process.env.PLATFORM_AUTH_BOOTSTRAP_PASSWORD ?? '123456',
+        process.env.PLATFORM_AUTH_BOOTSTRAP_PASSWORD ?? 'dev-local-admin-password',
       PLATFORM_WEB_APP_URL: process.env.PLATFORM_WEB_APP_URL ?? 'http://localhost:1430',
       PLATFORM_DATABASE_URL:
         process.env.PLATFORM_DATABASE_URL ??
@@ -115,7 +115,7 @@ async function main() {
   });
 
   console.log(`[dev-platform-web] Vite is proxying /api to http://127.0.0.1:${port}`);
-  console.log('[dev-platform-web] Local admin login: admin / 123456 (reset on start)');
+  console.log('[dev-platform-web] Local admin login uses PLATFORM_AUTH_BOOTSTRAP_PASSWORD');
 }
 
 function shutdown() {

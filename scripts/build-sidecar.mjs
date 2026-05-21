@@ -46,12 +46,12 @@ function pkgTargetForHost(host) {
 const host = rustHostTriple();
 const pkgTarget = pkgTargetForHost(host);
 const outputName = `suit-skills-${host}${host.includes('windows') ? '.exe' : ''}`;
-const outputPath = join('src-tauri', 'binaries', outputName);
+const outputPath = join('apps', 'desktop', 'binaries', outputName);
 
-mkdirSync(join(root, 'src-tauri', 'binaries'), { recursive: true });
+mkdirSync(join(root, 'apps', 'desktop', 'binaries'), { recursive: true });
 
 await build({
-  entryPoints: [join(root, 'dist', 'index.js')],
+  entryPoints: [join(root, 'apps', 'cli', 'dist', 'index.js')],
   bundle: true,
   platform: 'node',
   format: 'cjs',

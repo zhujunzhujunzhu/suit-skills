@@ -9,6 +9,8 @@ const viteBin = join(root, 'node_modules', 'vite', 'bin', 'vite.js');
 const DEFAULT_PORT = 4587;
 const MAX_ATTEMPTS = 3;
 
+const children = new Set();
+
 function checkPortAvailable(port) {
   return new Promise((resolve) => {
     const server = net.createServer();
@@ -63,8 +65,11 @@ function run(name, args, env = {}) {
     stdio: 'inherit',
     shell: false,
   });
+  children.add(child);
   child.on('exit', (code, signal) => {
-    if (signal || code) {
+    children.delete(child);
+    if (!shuttingDown && (signal || code)) {
+      console.error(`[${name}] exited unexpectedly`);
       shutdown();
     }
   });
@@ -79,28 +84,33 @@ async function main() {
   const { port, attempts } = await findAvailablePort(DEFAULT_PORT);
 
   if (attempts > 1) {
-    console.log(`[dev-web] 端口 ${DEFAULT_PORT} 被占用，已自动尝试到 ${port}`);
+    console.log(`[dev-web] Port ${DEFAULT_PORT} is busy; using ${port}`);
   }
 
-  // 先启动后端 API
-  const apiChild = run('api', [tsxBin, 'src/index.ts', 'web', '--port', String(port), '--no-open']);
+  const apiChild = run('api', [
+    tsxBin,
+    'apps/cli/src/index.ts',
+    'web',
+    '--port',
+    String(port),
+    '--no-open',
+  ]);
 
-  // 等待后端 API 就绪
-  console.log(`[dev-web] 等待后端 API 在端口 ${port} 启动...`);
+  console.log(`[dev-web] Waiting for API on port ${port}...`);
   try {
     await waitForPort(port);
-    console.log(`[dev-web] 后端 API 已就绪，端口 ${port}`);
+    console.log(`[dev-web] API is ready on port ${port}`);
   } catch (error) {
-    console.error('[dev-web] 后端 API 启动失败:', error.message);
+    console.error('[dev-web] API failed to start:', error.message);
+    apiChild.kill();
     process.exit(1);
   }
 
-  // 启动 Vite，传入实际端口
-  run('vite', [viteBin, '--config', 'web/vite.config.ts'], {
+  run('vite', [viteBin, '--config', 'apps/local-web/vite.config.ts', '--host', '127.0.0.1'], {
     SUIT_SKILLS_API_PORT: String(port),
   });
 
-  console.log(`[dev-web] Vite 开发服务器已启动，API 代理到端口 ${port}`);
+  console.log(`[dev-web] Vite dev server started; proxying API to port ${port}`);
 }
 
 let shuttingDown = false;
@@ -108,6 +118,9 @@ let shuttingDown = false;
 function shutdown() {
   if (shuttingDown) return;
   shuttingDown = true;
+  for (const child of children) {
+    child.kill();
+  }
   process.exit(0);
 }
 

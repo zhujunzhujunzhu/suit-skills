@@ -8,7 +8,7 @@ const tauriGetConfigValue = vi.fn();
 const tauriSetConfigValue = vi.fn();
 const tauriInstallSkill = vi.fn();
 
-vi.mock('../../web/src/api/tauri.ts', () => ({
+vi.mock('../../apps/local-web/src/api/tauri.ts', () => ({
   tauriGetConfigValue,
   tauriGetDesktopBootstrap,
   tauriGetInstalledSkills,
@@ -40,7 +40,7 @@ describe('web api client performance guards', () => {
 
   it('reuses the Tauri installed cache across skill list and detail requests', async () => {
     setWindow(true);
-    const { fetchSkillDetail, fetchSkills } = await import('../../web/src/api/client.ts');
+    const { fetchSkillDetail, fetchSkills } = await import('../../apps/local-web/src/api/client.ts');
     tauriGetSkillsList.mockResolvedValue({
       items: [{ name: 'alpha', sourceName: 'default', tags: [] }],
     });
@@ -72,7 +72,7 @@ describe('web api client performance guards', () => {
 
   it('invalidates the Tauri installed cache after a mutation', async () => {
     setWindow(true);
-    const { fetchSkillDetail, fetchSkills, installSkill } = await import('../../web/src/api/client.ts');
+    const { fetchSkillDetail, fetchSkills, installSkill } = await import('../../apps/local-web/src/api/client.ts');
     tauriGetSkillsList.mockResolvedValue({
       items: [{ name: 'alpha', sourceName: 'default', tags: [] }],
     });
@@ -105,7 +105,7 @@ describe('web api client performance guards', () => {
 
   it('preserves AbortError instead of wrapping it as a network failure', async () => {
     setWindow(false);
-    const { fetchSkills } = await import('../../web/src/api/client.ts');
+    const { fetchSkills } = await import('../../apps/local-web/src/api/client.ts');
     const abortError = new Error('The operation was aborted.');
     abortError.name = 'AbortError';
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(abortError));
@@ -120,7 +120,7 @@ describe('web api client performance guards', () => {
 
   it('hydrates desktop bootstrap data in one Tauri request', async () => {
     setWindow(true);
-    const { fetchDesktopBootstrap } = await import('../../web/src/api/client.ts');
+    const { fetchDesktopBootstrap } = await import('../../apps/local-web/src/api/client.ts');
     tauriGetDesktopBootstrap.mockResolvedValue({
       sources: {
         defaultSource: 'default',

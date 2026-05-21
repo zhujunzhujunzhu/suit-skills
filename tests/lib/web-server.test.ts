@@ -8,10 +8,10 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createCliContext } from '../../src/cli/context.js';
-import { captureInstalledSkillBaseline } from '../../src/lib/baseline.js';
-import { getDefaultConfig } from '../../src/lib/config.js';
-import { createWebServer } from '../../src/lib/web/server.js';
+import { createCliContext } from '../../apps/cli/src/cli/context.js';
+import { captureInstalledSkillBaseline } from '@suit-skills/core';
+import { getDefaultConfig } from '@suit-skills/core';
+import { createWebServer } from '../../apps/cli/src/lib/web/server.js';
 
 describe('web server desktop downloads', () => {
   let tmp: string;

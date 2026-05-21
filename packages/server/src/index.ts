@@ -1862,15 +1862,17 @@ function loadOAuthConfig(
   const hasOAuthPasswordConfig = Boolean(
     clientId && clientSecret && tokenUrl && userInfoUrl && sessionSecret,
   );
+  const authMode = (env.PLATFORM_AUTH_MODE ?? '').toLowerCase();
+  const authDisabled = authMode === 'none' || authMode === 'disabled' || authMode === 'off';
   const localMode =
-    env.PLATFORM_AUTH_MODE === 'local' ||
-    (env.PLATFORM_AUTH_MODE !== 'oauth' && !hasOAuthPasswordConfig);
+    !authDisabled &&
+    (authMode === 'local' || (authMode !== 'oauth' && !hasOAuthPasswordConfig));
   const effectiveSessionSecret =
     sessionSecret || 'local-dev-clawhub-session-secret-change-before-production';
 
   return {
-    enabled: localMode || hasOAuthPasswordConfig,
-    mode: localMode ? 'local' : 'oauth',
+    enabled: !authDisabled && (localMode || hasOAuthPasswordConfig),
+    mode: authDisabled ? 'none' : localMode ? 'local' : 'oauth',
     clientId,
     clientSecret,
     authorizationUrl,

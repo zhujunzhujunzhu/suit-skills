@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import type { SkillMeta, Source, Config, AgentMapping, InstallTarget } from '../src/types/index.js';
+import type { SkillMeta, Source, Config, AgentMapping, InstallTarget } from '@suit-skills/core';
 
 describe('类型定义', () => {
   it('能够构造合法的 SkillMeta', () => {

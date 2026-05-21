@@ -9,10 +9,10 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createCliContext } from '../../src/cli/context.js';
-import { captureInstalledSkillBaseline } from '../../src/lib/baseline.js';
-import { getDefaultConfig } from '../../src/lib/config.js';
-import { getSourceCacheDir } from '../../src/lib/cache.js';
+import { createCliContext } from '../../apps/cli/src/cli/context.js';
+import { captureInstalledSkillBaseline } from '@suit-skills/core';
+import { getDefaultConfig } from '@suit-skills/core';
+import { getSourceCacheDir } from '@suit-skills/core';
 import {
   addWebSource,
   exportWebInstalledSkill,
@@ -32,7 +32,7 @@ import {
   restoreWebBuiltinSources,
   saveWebInstalledSkillFile,
   updateWebSource,
-} from '../../src/lib/web/api.js';
+} from '../../apps/cli/src/lib/web/api.js';
 
 function writeSkill(
   cacheRoot: string,
@@ -712,7 +712,7 @@ describe('web api', () => {
       ),
     );
 
-    const preview = await import('../../src/lib/web/api.js').then((api) =>
+    const preview = await import('../../apps/cli/src/lib/web/api.js').then((api) =>
       api.generateWebInstalledSkillAiEdit(ctx(), 'ai-helper', {
         target: 'claude',
         scope: 'project',
@@ -731,7 +731,7 @@ describe('web api', () => {
       },
     ]);
 
-    const { applyWebInstalledSkillAiEdit } = await import('../../src/lib/web/api.js');
+    const { applyWebInstalledSkillAiEdit } = await import('../../apps/cli/src/lib/web/api.js');
     const applied = applyWebInstalledSkillAiEdit(ctx(), 'ai-helper', {
       target: 'claude',
       scope: 'project',

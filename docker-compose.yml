@@ -1,0 +1,66 @@
+# syntax=docker/dockerfile:1
+# Copy .env.example to .env and fill in secrets before running.
+
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: suit-skills-platform-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-changeme-root}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-platform_web}
+      MYSQL_USER: ${MYSQL_USER:-platform_user}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-changeme-platform}
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - mysql_data:/var/lib/mysql
+    # Uncomment to expose MySQL for direct access / administration:
+    # ports:
+    #   - "3306:3306"
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$${MYSQL_ROOT_PASSWORD:-changeme-root} --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  api:
+    build:
+      context: .
+      target: api
+    container_name: suit-skills-platform-api
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      PLATFORM_API_HOST: 0.0.0.0
+      PLATFORM_API_PORT: 4591
+      # Composed from individual vars; override the whole URL via PLATFORM_DATABASE_URL in .env
+      PLATFORM_DATABASE_URL: "${PLATFORM_DATABASE_URL:-mysql://${MYSQL_USER:-platform_user}:${MYSQL_PASSWORD:-changeme-platform}@mysql:3306/${MYSQL_DATABASE:-platform_web}}"
+      PLATFORM_WEB_APP_URL: "${PLATFORM_WEB_APP_URL:-http://localhost:8080}"
+      PLATFORM_API_PUBLIC_URL: "${PLATFORM_API_PUBLIC_URL:-http://localhost:8080}"
+      PLATFORM_API_CORS_ORIGIN: "${PLATFORM_API_CORS_ORIGIN:-http://localhost:8080}"
+      PLATFORM_AUTH_MODE: "${PLATFORM_AUTH_MODE:-local}"
+      PLATFORM_AUTH_SESSION_SECRET: "${PLATFORM_AUTH_SESSION_SECRET:-changeme-session-secret-please-replace}"
+      PLATFORM_ADMIN_EMAILS: "${PLATFORM_ADMIN_EMAILS:-admin@local.dev}"
+    volumes:
+      - platform_uploads:/app/packages/server/data/uploads
+
+  web:
+    build:
+      context: .
+      target: web
+    container_name: suit-skills-platform-web
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_started
+    ports:
+      - "${WEB_PORT:-8080}:80"
+
+volumes:
+  mysql_data:
+  platform_uploads:
