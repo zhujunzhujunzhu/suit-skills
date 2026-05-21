@@ -1,6 +1,6 @@
 {
   "name": "@suit-skills/server",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "type": "module",
   "private": true,
   "description": "Private deployment and online platform API server for Suit Skills.",
@@ -12,7 +12,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@suit-skills/core": "1.0.2",
+    "@suit-skills/core": "1.0.3",
     "@types/adm-zip": "^0.5.8",
     "adm-zip": "^0.5.17",
     "mysql2": "^3.22.3"

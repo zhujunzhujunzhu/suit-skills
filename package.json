@@ -1,6 +1,6 @@
 {
   "name": "suit-skills",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "type": "module",
   "description": "A CLI tool for skills management with Web console and Desktop app",
   "workspaces": [
@@ -108,6 +108,7 @@
     "@inquirer/prompts": "^8.4.1",
     "@tauri-apps/api": "^2.10.1",
     "@tauri-apps/plugin-dialog": "^2.7.0",
+    "adm-zip": "^0.5.17",
     "commander": "^14.0.3",
     "i18next": "^26.0.5",
     "mdast-util-to-string": "^4.0.0",
