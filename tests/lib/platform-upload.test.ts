@@ -7,6 +7,8 @@ import { join } from 'node:path';
 import { createPlatformApiServer } from '../../packages/server/src/index.js';
 import type { OAuthConfig } from '../../packages/server/src/types.js';
 
+const LONG_GIT_FLOW_TIMEOUT_MS = 60_000;
+
 function git(args: string[], cwd: string): string {
   return execFileSync('git', args, { cwd, encoding: 'utf8' });
 }
@@ -281,7 +283,7 @@ describe('platform upload review flow', () => {
     } finally {
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }
-  });
+  }, LONG_GIT_FLOW_TIMEOUT_MS);
 
   it('rejects standalone meta.json uploads', async () => {
     const tmp = mkdtempSync(join(tmpdir(), 'platform-upload-json-'));
