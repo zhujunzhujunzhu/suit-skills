@@ -8,6 +8,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { createCliContext } from '../../apps/cli/src/cli/context.js';
 import { captureInstalledSkillBaseline } from '@suit-skills/core';
 import { getDefaultConfig } from '@suit-skills/core';
@@ -43,18 +44,37 @@ describe('web server desktop downloads', () => {
 
   it('proxies desktop downloads as attachments', async () => {
     const originalFetch = globalThis.fetch;
+    const artifactRepo = join(tmp, 'artifact-repo');
+    mkdirSync(join(artifactRepo, 'desktop-windows-setup-msi', 'msi'), {
+      recursive: true,
+    });
+    const artifactPath = join(
+      artifactRepo,
+      'desktop-windows-setup-msi',
+      'msi',
+      'Suit Skills_1.0.1_x64_en-US.msi',
+    );
+    const payload = new Uint8Array([0x4d, 0x53, 0x49, 0x21]);
+    writeFileSync(artifactPath, payload);
+    spawnSync('git', ['init', '-b', 'desktop-artifacts'], { cwd: artifactRepo });
+    spawnSync('git', ['config', 'user.email', 'test@example.test'], { cwd: artifactRepo });
+    spawnSync('git', ['config', 'user.name', 'Test'], { cwd: artifactRepo });
+    spawnSync('git', ['add', '.'], { cwd: artifactRepo });
+    spawnSync('git', ['commit', '-m', 'artifact'], { cwd: artifactRepo });
+
     const manifest = {
-      version: '0.0.12',
+      version: '1.0.1',
       pub_date: '2026-04-20T16:19:20.229Z',
       notes: 'Source ref: master, Commit: 6e8c97f',
       platforms: {
         'windows-x86_64': {
-          filename: 'Suit Skills_0.0.11_x64_en-US.msi',
-          url: 'https://cdn.example.test/Suit%20Skills_0.0.11_x64_en-US.msi',
+          filename: 'Suit Skills_1.0.1_x64_en-US.msi',
+          repo: artifactRepo,
+          branch: 'desktop-artifacts',
+          path: 'desktop-windows-setup-msi/msi/Suit Skills_1.0.1_x64_en-US.msi',
         },
       },
     };
-    const payload = new Uint8Array([0x4d, 0x53, 0x49, 0x21]);
 
     vi.stubGlobal(
       'fetch',
@@ -64,15 +84,6 @@ describe('web server desktop downloads', () => {
           new Response(JSON.stringify(manifest), {
             status: 200,
             headers: { 'content-type': 'application/json' },
-          }),
-        )
-        .mockResolvedValueOnce(
-          new Response(payload, {
-            status: 200,
-            headers: {
-              'content-type': 'application/x-msi',
-              'content-length': String(payload.byteLength),
-            },
           }),
         ),
     );
@@ -98,9 +109,9 @@ describe('web server desktop downloads', () => {
       );
       expect(response.status).toBe(200);
       expect(response.headers.get('content-disposition')).toContain(
-        'Suit Skills_0.0.11_x64_en-US.msi',
+        'Suit Skills_1.0.1_x64_en-US.msi',
       );
-      expect(response.headers.get('content-type')).toBe('application/x-msi');
+      expect(response.headers.get('content-type')).toBe('application/octet-stream');
       expect(new Uint8Array(await response.arrayBuffer())).toEqual(payload);
     } finally {
       await new Promise<void>((resolve, reject) =>
