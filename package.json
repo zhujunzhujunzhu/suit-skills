@@ -51,7 +51,7 @@
     "tauri:build": "npm --workspace @suit-skills/app-desktop run tauri:build",
     "start": "node apps/cli/dist/index.js",
     "clean": "rm -rf dist",
-    "typecheck": "npm run typecheck --workspaces --if-present",
+    "typecheck": "npm --workspace @suit-skills/core run build && npm run typecheck --workspaces --if-present",
     "typecheck:hub": "npm --workspace @suit-skills/core run build && npm --workspace @suit-skills/app-cli run typecheck && npm --workspace @suit-skills/app-local-web run typecheck && npm --workspace @suit-skills/server run typecheck && npm --workspace @suit-skills/app-platform-web run typecheck",
     "typecheck:platform": "npm --workspace @suit-skills/core run build && npm --workspace @suit-skills/server run typecheck && npm --workspace @suit-skills/app-platform-web run typecheck",
     "test": "vitest run",
