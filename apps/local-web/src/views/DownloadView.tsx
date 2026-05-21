@@ -1,7 +1,8 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import {
   compareSemver,
   detectPlatform,
+  downloadAndOpenDesktopInstaller,
   GITEE_REPO_URL,
   getDesktopDownloadHref,
   PLATFORM_LABELS,
@@ -44,6 +45,8 @@ export default function DownloadView({
   webVersion: string;
 }) {
   const detectedPlatform = useMemo(() => detectPlatform(), []);
+  const [installingPlatform, setInstallingPlatform] = useState<DesktopPlatform | null>(null);
+  const [downloadError, setDownloadError] = useState('');
   const release = latestDesktopRelease;
   const currentRuntimeVersion = isDesktop ? currentVersion : webVersion;
   const currentRuntimeLabel = isDesktop ? '桌面端' : 'Web 端';
@@ -62,6 +65,22 @@ export default function DownloadView({
     'darwin-aarch64',
     'darwin-x86_64',
   ];
+
+  async function installDesktopAsset(platform: DesktopPlatform) {
+    setDownloadError('');
+    setInstallingPlatform(platform);
+    try {
+      await downloadAndOpenDesktopInstaller(platform);
+    } catch (error) {
+      setDownloadError(
+        error instanceof Error
+          ? error.message
+          : '下载安装包失败，请稍后重试。',
+      );
+    } finally {
+      setInstallingPlatform(null);
+    }
+  }
 
   return (
     <section className="download-page">
@@ -132,6 +151,7 @@ export default function DownloadView({
               const asset = release.platforms[key];
               const meta = PLATFORM_LABELS[key];
               const isCurrent = key === detectedPlatform;
+              const installing = installingPlatform === key;
               return (
                 <div
                   key={key}
@@ -143,13 +163,21 @@ export default function DownloadView({
                     <span>{meta.arch}</span>
                     <code>{asset?.filename ?? meta.ext}</code>
                   </div>
-                  {asset ? (
+                  {asset && isDesktop ? (
+                    <button
+                      type="button"
+                      className="button primary"
+                      disabled={installingPlatform !== null}
+                      onClick={() => void installDesktopAsset(key)}
+                    >
+                      <IconDownload />
+                      {installing ? '准备中...' : '下载并安装'}
+                    </button>
+                  ) : asset ? (
                     <a
                       href={getDesktopDownloadHref(key, asset, isDesktop)}
                       className="button primary"
-                      download={!isDesktop ? asset.filename : undefined}
-                      target={isDesktop ? '_blank' : undefined}
-                      rel={isDesktop ? 'noreferrer' : undefined}
+                      download={asset.filename}
                     >
                       <IconDownload />
                       下载
@@ -161,6 +189,12 @@ export default function DownloadView({
               );
             })}
           </div>
+
+          {downloadError ? (
+            <div className="download-error download-error--compact">
+              <p>{downloadError}</p>
+            </div>
+          ) : null}
 
           {release.notes ? (
             <div className="download-notes">

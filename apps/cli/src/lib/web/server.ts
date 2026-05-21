@@ -1,10 +1,9 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { createReadStream, existsSync, statSync } from 'node:fs';
 import { extname, join, normalize, resolve, sep } from 'node:path';
-import { Readable } from 'node:stream';
-import { pipeline } from 'node:stream/promises';
 import type { CliContext } from '../../cli/context.js';
 import { moduleDir } from '@suit-skills/core';
+import { resolveDesktopArtifact } from './desktop-artifacts.js';
 import {
   fetchDesktopReleaseManifest,
   fetchDesktopReleaseManifestText,
@@ -192,52 +191,29 @@ async function handleApi(
         return;
       }
 
-      let upstream: Response;
+      let artifact;
       try {
-        upstream = await fetch(asset.url, {
-          redirect: 'follow',
-          headers: {
-            accept: 'application/octet-stream, */*',
-            'user-agent': 'Suit-Skills-Web',
-          },
-        });
+        artifact = resolveDesktopArtifact(asset, ctx.configOptions);
       } catch {
         sendJson(res, 502, {
           error: {
             code: 'UPSTREAM_FAILED',
-            message: 'Could not download desktop asset from upstream',
-          },
-        });
-        return;
-      }
-
-      if (!upstream.ok || !upstream.body) {
-        sendJson(res, 502, {
-          error: {
-            code: 'UPSTREAM_FAILED',
-            message: 'Could not download desktop asset from upstream',
+            message: 'Could not prepare desktop artifact from Gitee',
           },
         });
         return;
       }
 
       const headers: Record<string, string> = {
-        'content-type':
-          upstream.headers.get('content-type') || 'application/octet-stream',
+        'content-type': 'application/octet-stream',
         'content-disposition':
-          `attachment; filename="${asset.filename}"; filename*=UTF-8''${encodeURIComponent(asset.filename)}`,
+          `attachment; filename="${artifact.filename}"; filename*=UTF-8''${encodeURIComponent(artifact.filename)}`,
         'cache-control': 'no-store',
+        'content-length': String(artifact.contentLength),
       };
-      const contentLength = upstream.headers.get('content-length');
-      if (contentLength) {
-        headers['content-length'] = contentLength;
-      }
 
       res.writeHead(200, headers);
-      await pipeline(
-        Readable.fromWeb(upstream.body as globalThis.ReadableStream<Uint8Array>),
-        res,
-      );
+      createReadStream(artifact.filePath).pipe(res);
       return;
     }
 

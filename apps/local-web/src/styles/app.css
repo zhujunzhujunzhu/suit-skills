@@ -2613,6 +2613,10 @@ button {
   font-size: 13px;
 }
 
+.download-error--compact {
+  padding: 12px 14px;
+}
+
 @media (max-width: 760px) {
   .download-platforms {
     grid-template-columns: 1fr;

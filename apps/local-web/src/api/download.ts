@@ -11,7 +11,10 @@ export const NPM_LATEST_URL = 'https://registry.npmjs.org/suit-skills/latest';
 
 export interface PlatformAsset {
   filename: string;
-  url: string;
+  url?: string;
+  repo?: string;
+  branch?: string;
+  path?: string;
 }
 
 export interface DesktopRelease {
@@ -115,11 +118,24 @@ export const PLATFORM_LABELS: Record<DesktopPlatform, { os: string; arch: string
 
 export function getDesktopDownloadHref(
   platform: DesktopPlatform,
-  asset: PlatformAsset,
+  _asset: PlatformAsset,
   isDesktopRuntime: boolean,
 ): string {
   if (isDesktopRuntime) {
-    return asset.url;
+    return '#';
   }
   return `/api/desktop/download?platform=${encodeURIComponent(platform)}`;
+}
+
+export async function downloadAndOpenDesktopInstaller(
+  platform: DesktopPlatform,
+): Promise<void> {
+  const { tauriRunCommand } = await import('./tauri');
+  await tauriRunCommand([
+    'desktop-download',
+    '--platform',
+    platform,
+    '--open',
+    '--json',
+  ]);
 }

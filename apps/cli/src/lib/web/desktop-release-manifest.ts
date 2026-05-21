@@ -4,7 +4,10 @@ const MAX_MANIFEST_BYTES = 512 * 1024;
 
 export interface DesktopReleaseAsset {
   filename: string;
-  url: string;
+  url?: string;
+  repo?: string;
+  branch?: string;
+  path?: string;
 }
 
 export interface DesktopReleaseManifest {
