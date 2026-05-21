@@ -1,6 +1,8 @@
 # suit-skills
 
-用于管理 AI Agent skills 的本地工具，支持 CLI、Web 控制台和桌面应用三种使用方式。它可以从远程 skill source 拉取技能库，并将 skill 安装到 Claude Code、Cursor、OpenAI Codex、Gemini CLI、OpenCode、OpenClaw 等常见智能体目录。
+用于管理 AI Agent skills 的本地工具，支持 CLI、Web 控制台、桌面应用和 Platform Web Hub。它可以从远程 skill source 拉取技能库，并将 skill 安装到 Claude Code、Cursor、OpenAI Codex、Gemini CLI、OpenCode、OpenClaw 等常见智能体目录。
+
+更详细的维护文档见 [docs/README.md](./docs/README.md)。
 
 [![GitHub](https://img.shields.io/badge/GitHub-suit--skills-blue?logo=github)](https://github.com/zhujunzhujunzhu/suit-skills)
 [![Gitee](https://img.shields.io/badge/Gitee-suit--skills-red?logo=gitee)](https://gitee.com/zhujun12/suit-skills-cli)
@@ -10,10 +12,11 @@
 
 - 从内置或自定义 source 浏览、搜索、安装和更新 skills。
 - 支持全局安装和项目安装，并可安装到多个 Agent 目标目录。
-- Web 控制台提供技能库、已安装技能、source 管理和目标目录管理界面。
+- Web 控制台提供技能库、已安装技能、source 管理、设置和下载入口。
 - 支持导出已安装 skill、复制安装包、将已安装 skill 链接到其他目标。
 - 支持国内镜像配置，便于访问常见开源 skill source。
 - 提供 Tauri 桌面应用构建入口。
+- 保留 Platform Web Hub 入口，用于后续在线技能分发和团队协作。
 
 ## 环境要求
 
@@ -193,21 +196,22 @@ Web 控制台主要页面：
 - **Library**：浏览、搜索和安装 source 中的 skills。
 - **Installed**：查看、删除、导出和链接已安装 skills。
 - **Sources**：新增、启用、禁用、删除 source，并配置国内镜像。
-- **Targets**：查看和维护可安装的 Agent 目标目录。
+- **Settings**：管理刷新间隔、主题、翻译和 AI 修改配置。
+- **Download**：查看桌面端版本和下载入口。
 
 ### 界面预览
 
 #### 技能库
 
-![技能库](https://unpkg.com/suit-skills@0.0.10/imgs/web-skill-list.png)
+![技能库](./imgs/web-skill-list.png)
 
 #### 已安装技能
 
-![已安装技能](https://unpkg.com/suit-skills@0.0.10/imgs/web-installed.png)
+![已安装技能](./imgs/web-installed.png)
 
 #### Source 管理
 
-![Source 管理](https://unpkg.com/suit-skills@0.0.10/imgs/web-sources.png)
+![Source 管理](./imgs/web-sources.png)
 
 ## 桌面应用
 

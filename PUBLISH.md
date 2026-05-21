@@ -23,9 +23,9 @@
 
 ```bash
 # 更新版本号（本地）
-npm version patch  # 0.0.9 -> 0.0.10
-# 或 npm version minor  # 0.0.9 -> 0.1.0
-# 或 npm version major  # 0.0.9 -> 1.0.0
+npm version patch  # 1.0.1 -> 1.0.2
+# 或 npm version minor  # 1.0.1 -> 1.1.0
+# 或 npm version major  # 1.0.1 -> 2.0.0
 
 # 推送
 git push origin master
@@ -35,9 +35,9 @@ git push origin master
 1. 进入 Actions → Publish npm Package
 2. 点击 Run workflow
 3. 选择版本递增类型：
-   - **patch**: 补丁版本 (0.0.9 → 0.0.10)
-   - **minor**: 次版本号 (0.0.9 → 0.1.0)
-   - **major**: 主版本号 (0.0.9 → 1.0.0)
+   - **patch**: 补丁版本 (1.0.1 → 1.0.2)
+   - **minor**: 次版本号 (1.0.1 → 1.1.0)
+   - **major**: 主版本号 (1.0.1 → 2.0.0)
 4. 点击 Run workflow
 5. Workflow 会自动修改 `package.json` / `package-lock.json` 版本号，提交到当前分支，然后发布
 
