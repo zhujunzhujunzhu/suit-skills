@@ -75,6 +75,11 @@ describe('platform oauth auth flow', () => {
         sessionSecret: 'test-session-secret',
         adminEmails: ['admin@example.com'],
         adminDomains: [],
+        adminMatchPaths: ['email'],
+        userInfoIdPaths: ['sub'],
+        userInfoLoginPaths: ['email'],
+        userInfoNamePaths: ['name'],
+        userInfoAvatarPaths: ['picture'],
       },
     });
     await new Promise<void>((resolve, reject) => {
@@ -193,6 +198,11 @@ describe('platform oauth auth flow', () => {
         sessionSecret: 'test-session-secret',
         adminEmails: [],
         adminDomains: [],
+        adminMatchPaths: ['email'],
+        userInfoIdPaths: ['sub'],
+        userInfoLoginPaths: ['email'],
+        userInfoNamePaths: ['name'],
+        userInfoAvatarPaths: ['picture'],
       },
     });
     await new Promise<void>((resolve, reject) => {
@@ -237,6 +247,7 @@ describe('platform oauth auth flow', () => {
       PLATFORM_API_SOURCES_FILE: join(tmp, 'sources.json'),
       PLATFORM_API_UPLOADS_FILE: join(tmp, 'uploads.json'),
       PLATFORM_API_UPLOAD_DIR: join(tmp, 'uploads'),
+      PLATFORM_DATABASE_URL: `sqlite://${join(tmp, 'platform.sqlite')}`,
       PLATFORM_ADMIN_EMAILS: 'admin@local.dev',
       PLATFORM_AUTH_BOOTSTRAP_PASSWORD: 'secret',
     };
@@ -285,6 +296,232 @@ describe('platform oauth auth flow', () => {
         }),
       });
       expect(badLogin.status).toBe(401);
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
+  it('loads external token auth mode from env userinfo config', async () => {
+    const { loadConfig } = await import('../../packages/server/src/index.js');
+    const config = loadConfig({
+      PLATFORM_AUTH_MODE: 'external-token',
+      PLATFORM_AUTH_SESSION_SECRET: 'test-session-secret',
+      PLATFORM_AUTH_USERINFO_URL: 'https://external.example.test/userinfo',
+      PLATFORM_DATABASE_URL: 'sqlite://memory',
+      PLATFORM_ADMIN_EMAILS: 'admin@example.com',
+    });
+
+    expect(config.auth).toMatchObject({
+      enabled: true,
+      mode: 'external-token',
+      userInfoUrl: 'https://external.example.test/userinfo',
+      adminEmails: ['admin@example.com'],
+    });
+  });
+
+  it('creates an external user from token login and marks admins by email', async () => {
+    const tmp = mkdtempSync(join(tmpdir(), 'platform-external-auth-'));
+    temps.push(tmp);
+    const originalFetch = globalThis.fetch;
+    let baseUrl = '';
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input.toString();
+        if (baseUrl && url.startsWith(baseUrl)) {
+          return originalFetch(input, init);
+        }
+        if (url === 'https://external.example.test/userinfo') {
+          const headers = new Headers(init?.headers);
+          expect(headers.get('authorization')).toBe('Bearer external-token-123');
+          return new Response(
+            JSON.stringify({
+              sub: 'external-user-1',
+              email: 'admin@example.com',
+              name: 'External Admin',
+            }),
+            {
+              status: 200,
+              headers: { 'content-type': 'application/json' },
+            },
+          );
+        }
+        return originalFetch(input, init);
+      }),
+    );
+
+    const server = createPlatformApiServer({
+      host: '127.0.0.1',
+      port: 0,
+      dataFile: join(tmp, 'evaluations.json'),
+      skillsFile: join(tmp, 'skills.json'),
+      gitConfigFile: join(tmp, 'git-config.json'),
+      sourcesFile: join(tmp, 'sources.json'),
+      uploadsFile: join(tmp, 'uploads.json'),
+      uploadDir: join(tmp, 'uploads'),
+      databaseUrl: `sqlite://${join(tmp, 'platform.sqlite')}`,
+      corsOrigins: ['*'],
+      appBaseUrl: 'http://platform.example.test',
+      auth: {
+        enabled: true,
+        mode: 'external-token',
+        clientId: '',
+        clientSecret: '',
+        authorizationUrl: '',
+        tokenUrl: '',
+        userInfoUrl: 'https://external.example.test/userinfo',
+        redirectUri: 'http://127.0.0.1/callback',
+        scopes: [],
+        sessionSecret: 'test-session-secret',
+        adminEmails: ['admin@example.com'],
+        adminDomains: [],
+        adminMatchPaths: ['email'],
+        userInfoIdPaths: ['sub'],
+        userInfoLoginPaths: ['email'],
+        userInfoNamePaths: ['name'],
+        userInfoAvatarPaths: ['picture'],
+      },
+    });
+    await new Promise<void>((resolve, reject) => {
+      server.once('error', reject);
+      server.listen(0, '127.0.0.1', () => resolve());
+    });
+    const address = server.address();
+    const port = typeof address === 'object' && address ? address.port : 0;
+    baseUrl = `http://127.0.0.1:${port}`;
+
+    try {
+      const login = await originalFetch(`${baseUrl}/api/auth/external-token`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ token: 'external-token-123' }),
+      });
+      expect(login.status).toBe(200);
+      expect(await login.json()).toEqual({
+        user: {
+          id: 'external-user-1',
+          email: 'admin@example.com',
+          name: 'External Admin',
+          role: 'admin',
+        },
+      });
+      const sessionCookie = login.headers
+        .get('set-cookie')
+        ?.split(',')
+        .find((cookie) => cookie.trim().startsWith('clawhub_session='));
+      expect(sessionCookie).toBeTruthy();
+
+      const me = await originalFetch(`${baseUrl}/api/auth/me`, {
+        headers: { cookie: sessionCookie ?? '' },
+      });
+      expect(me.status).toBe(200);
+      expect(await me.json()).toEqual({
+        user: {
+          id: 'external-user-1',
+          email: 'admin@example.com',
+          name: 'External Admin',
+          role: 'admin',
+        },
+      });
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
+  it('uses configurable userinfo paths to match admins by username', async () => {
+    const tmp = mkdtempSync(join(tmpdir(), 'platform-external-username-auth-'));
+    temps.push(tmp);
+    const originalFetch = globalThis.fetch;
+    let baseUrl = '';
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input.toString();
+        if (baseUrl && url.startsWith(baseUrl)) {
+          return originalFetch(input, init);
+        }
+        if (url === 'http://117.72.173.21/prod-api/getInfo') {
+          const headers = new Headers(init?.headers);
+          expect(headers.get('authorization')).toBe('Bearer screenshot-token');
+          return new Response(
+            JSON.stringify({
+              code: 200,
+              msg: '操作成功',
+              roles: ['common'],
+              user: {
+                userId: 6,
+                userName: 'zhujun',
+                nickName: '朱俊',
+                admin: false,
+              },
+            }),
+            {
+              status: 200,
+              headers: { 'content-type': 'application/json' },
+            },
+          );
+        }
+        return originalFetch(input, init);
+      }),
+    );
+
+    const server = createPlatformApiServer({
+      host: '127.0.0.1',
+      port: 0,
+      dataFile: join(tmp, 'evaluations.json'),
+      skillsFile: join(tmp, 'skills.json'),
+      gitConfigFile: join(tmp, 'git-config.json'),
+      sourcesFile: join(tmp, 'sources.json'),
+      uploadsFile: join(tmp, 'uploads.json'),
+      uploadDir: join(tmp, 'uploads'),
+      databaseUrl: `sqlite://${join(tmp, 'platform.sqlite')}`,
+      corsOrigins: ['*'],
+      appBaseUrl: 'http://platform.example.test',
+      auth: {
+        enabled: true,
+        mode: 'external-token',
+        clientId: '',
+        clientSecret: '',
+        authorizationUrl: '',
+        tokenUrl: '',
+        userInfoUrl: 'http://117.72.173.21/prod-api/getInfo',
+        redirectUri: 'http://127.0.0.1/callback',
+        scopes: [],
+        sessionSecret: 'test-session-secret',
+        adminEmails: ['zhujun'],
+        adminDomains: [],
+        adminMatchPaths: ['user.userName'],
+        userInfoIdPaths: ['user.userId'],
+        userInfoLoginPaths: ['user.userName'],
+        userInfoNamePaths: ['user.nickName', 'user.userName'],
+        userInfoAvatarPaths: ['user.avatar'],
+      },
+    });
+    await new Promise<void>((resolve, reject) => {
+      server.once('error', reject);
+      server.listen(0, '127.0.0.1', () => resolve());
+    });
+    const address = server.address();
+    const port = typeof address === 'object' && address ? address.port : 0;
+    baseUrl = `http://127.0.0.1:${port}`;
+
+    try {
+      const login = await originalFetch(`${baseUrl}/api/auth/external-token`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ token: 'screenshot-token' }),
+      });
+      expect(login.status).toBe(200);
+      expect(await login.json()).toEqual({
+        user: {
+          id: '6',
+          email: 'zhujun',
+          name: '朱俊',
+          role: 'admin',
+        },
+      });
     } finally {
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }

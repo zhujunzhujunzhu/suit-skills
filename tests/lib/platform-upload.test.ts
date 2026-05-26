@@ -13,7 +13,7 @@ function git(args: string[], cwd: string): string {
   return execFileSync('git', args, { cwd, encoding: 'utf8' });
 }
 
-async function startServer(tmp: string, repoUrl: string) {
+async function startServer(tmp: string, repoUrl: string, seedPublishSource = true) {
   const auth: OAuthConfig = {
     enabled: false,
     mode: 'local',
@@ -27,6 +27,11 @@ async function startServer(tmp: string, repoUrl: string) {
     sessionSecret: '',
     adminEmails: [],
     adminDomains: [],
+    adminMatchPaths: [],
+    userInfoIdPaths: [],
+    userInfoLoginPaths: [],
+    userInfoNamePaths: [],
+    userInfoAvatarPaths: [],
   };
   const server = createPlatformApiServer({
     host: '127.0.0.1',
@@ -49,19 +54,21 @@ async function startServer(tmp: string, repoUrl: string) {
   const address = server.address();
   const port = typeof address === 'object' && address ? address.port : 0;
   const baseUrl = `http://127.0.0.1:${port}`;
-  await fetch(`${baseUrl}/api/sources`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
-      name: 'test-publish',
-      label: 'Test publish source',
-      description: 'Local bare repository for upload publishing',
-      url: repoUrl,
-      branch: 'main',
-      skillsDirectory: 'skills',
-      publishEnabled: true,
-    }),
-  });
+  if (seedPublishSource) {
+    await fetch(`${baseUrl}/api/sources`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        name: 'test-publish',
+        label: 'Test publish source',
+        description: 'Local bare repository for upload publishing',
+        url: repoUrl,
+        branch: 'main',
+        skillsDirectory: 'skills',
+        publishEnabled: true,
+      }),
+    });
+  }
   return { server, baseUrl };
 }
 
@@ -101,6 +108,57 @@ describe('platform upload review flow', () => {
   afterEach(() => {
     for (const dir of temps.splice(0)) {
       rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('filters the private default source out of the sources api', async () => {
+    const tmp = mkdtempSync(join(tmpdir(), 'platform-upload-'));
+    temps.push(tmp);
+    const { server, baseUrl } = await startServer(tmp, '', false);
+    try {
+      const hiddenResponse = await fetch(`${baseUrl}/api/sources`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          name: 'default',
+          label: '默认源',
+          description: 'Private team source',
+          url: 'https://gitee.com/digital-construction-center_1/suit-skills-lib.git',
+          branch: 'main',
+          skillsDirectory: 'skills/',
+          publishEnabled: false,
+        }),
+      });
+      expect(hiddenResponse.status).toBe(201);
+      const hiddenPayload = (await hiddenResponse.json()) as { sources: Array<{ name: string }> };
+      expect(hiddenPayload.sources).toEqual([]);
+
+      await fetch(`${baseUrl}/api/sources`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          name: 'test-publish',
+          label: 'Test publish source',
+          description: 'Public source',
+          url: 'https://example.com/public.git',
+          branch: 'main',
+          skillsDirectory: 'skills/',
+          publishEnabled: true,
+        }),
+      });
+
+      const response = await fetch(`${baseUrl}/api/sources`);
+      expect(response.status).toBe(200);
+      const payload = (await response.json()) as {
+        sources: Array<{ name: string }>;
+        defaultSources: string[];
+      };
+      expect(payload.sources.map((source) => source.name)).toEqual(['test-publish']);
+      expect(payload.defaultSources).toEqual([]);
+    } finally {
+      await new Promise<void>((resolve, reject) =>
+        server.close((error) => (error ? reject(error) : resolve())),
+      );
     }
   });
 

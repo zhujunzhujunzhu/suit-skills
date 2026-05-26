@@ -26,7 +26,7 @@ import {
   sendJson,
   type UploadedFile,
 } from './http.js';
-import { DEFAULT_GIT_CONFIG, DEFAULT_SKILLS, DEFAULT_SOURCES } from './defaults.js';
+import { DEFAULT_GIT_CONFIG, DEFAULT_SOURCES } from './defaults.js';
 import {
   createDocumentDatabase,
   JsonDocumentStore,
@@ -161,6 +161,8 @@ const DEFAULT_SOURCES_FILE = resolve(
   'data',
   'sources.json',
 );
+const PRIVATE_DEFAULT_SOURCE_URL =
+  'https://gitee.com/digital-construction-center_1/suit-skills-lib.git';
 
 const DEFAULT_UPLOADS_FILE = resolve(
   dirname(fileURLToPath(import.meta.url)),
@@ -182,7 +184,7 @@ const DEFAULT_UPLOAD_DIR = resolve(
   'data',
   'uploads',
 );
-const DEFAULT_DATABASE_URL = 'sqlite://memory';
+const DEFAULT_DATABASE_URL = '';
 const AUTH_COOKIE_NAME = 'clawhub_session';
 const OAUTH_STATE_COOKIE_NAME = 'clawhub_oauth_state';
 const SESSION_TTL_MS = 1000 * 60 * 60 * 8;
@@ -223,6 +225,28 @@ class EvaluationStore {
   async get(id: string): Promise<EvaluationRecord | null> {
     const data = await this.read();
     return data.evaluations.find((item) => item.id === id) ?? null;
+  }
+
+  async summarizeBySkill(): Promise<Map<string, { count: number; totalRating: number }>> {
+    const data = await this.read();
+    const summaries = new Map<string, { count: number; totalRating: number }>();
+
+    for (const evaluation of data.evaluations) {
+      if (typeof evaluation.rating !== 'number' || Number.isNaN(evaluation.rating)) continue;
+      const keys = new Set(
+        [evaluation.skillId, evaluation.skillName]
+          .map((value) => value?.trim())
+          .filter((value): value is string => Boolean(value)),
+      );
+      for (const key of keys) {
+        const current = summaries.get(key) ?? { count: 0, totalRating: 0 };
+        current.count += 1;
+        current.totalRating += evaluation.rating;
+        summaries.set(key, current);
+      }
+    }
+
+    return summaries;
   }
 
   async create(input: unknown): Promise<EvaluationRecord> {
@@ -664,6 +688,7 @@ class SkillStore {
 
   constructor(
     private readonly document: JsonDocumentStore<SkillStoreData>,
+    private readonly evaluationStore: EvaluationStore,
   ) {}
 
   async list(params: {
@@ -673,6 +698,7 @@ class SkillStore {
     owner?: string;
   }): Promise<SkillListResponse> {
     const data = await this.read();
+    const summaries = await this.evaluationStore.summarizeBySkill();
     const needle = params.q?.trim().toLowerCase();
     let items = data.skills;
 
@@ -705,12 +731,17 @@ class SkillStore {
       items = items.filter((item) => item.owner === params.owner);
     }
 
-    return { items, total: items.length };
+    return {
+      items: items.map((item) => this.decorateWithEvaluations(item, summaries)),
+      total: items.length,
+    };
   }
 
   async get(id: string): Promise<SkillRecord | null> {
     const data = await this.read();
-    return data.skills.find((item) => item.id === id) ?? null;
+    const summaries = await this.evaluationStore.summarizeBySkill();
+    const skill = data.skills.find((item) => item.id === id) ?? null;
+    return skill ? this.decorateWithEvaluations(skill, summaries) : null;
   }
 
   async upload(input: unknown): Promise<SkillRecord> {
@@ -790,14 +821,14 @@ class SkillStore {
 
   private async read(): Promise<SkillStoreData> {
     try {
-      const parsed = await this.document.read({ version: 1, skills: DEFAULT_SKILLS });
+      const parsed = await this.document.read({ version: 1, skills: [] });
       if (!Array.isArray(parsed.skills)) {
         throw new ApiError(500, 'INVALID_SKILLS_FILE', 'Skills data is malformed');
       }
       const skills = parsed.skills
         .filter(isSkillRecord)
         .map((skill) => this.decorateSkill(skill));
-      return { version: 1, skills: skills.length ? skills : DEFAULT_SKILLS };
+      return { version: 1, skills };
     } catch (error) {
       if (error instanceof ApiError) throw error;
       if (error instanceof SyntaxError) {
@@ -809,6 +840,21 @@ class SkillStore {
 
   private async updateData(updater: (data: SkillStoreData) => SkillStoreData): Promise<void> {
     await this.document.write(updater(await this.read()));
+  }
+
+  private decorateWithEvaluations(
+    skill: SkillRecord,
+    summaries: Map<string, { count: number; totalRating: number }>,
+  ): SkillRecord {
+    const summary = summaries.get(skill.id) ?? summaries.get(skill.name);
+    if (!summary || summary.count === 0) {
+      return { ...skill, rating: 0, reviews: 0 };
+    }
+    return {
+      ...skill,
+      rating: summary.totalRating / summary.count,
+      reviews: summary.count,
+    };
   }
 
   private decorateSkill(skill: SkillRecord): SkillRecord {
@@ -1030,7 +1076,7 @@ class SourceStore {
   async restoreBuiltins(): Promise<SourcesResponse & { added: string[] }> {
     const existing = await this.read();
     const names = new Set(existing.map((source) => source.name));
-    const added = DEFAULT_SOURCES.filter((source) => !source.default && !names.has(source.name));
+    const added = DEFAULT_SOURCES.filter((source) => !names.has(source.name));
     if (added.length > 0) {
       await this.writeSources([...existing, ...added]);
     }
@@ -1057,11 +1103,20 @@ class SourceStore {
       skillsDirectory: patch.skillsDirectory ?? current.skillsDirectory,
       publishEnabled: patch.publishEnabled ?? current.publishEnabled,
       domesticMirror:
-        patch.domesticMirror?.enabled === undefined
+        patch.domesticMirror === undefined
           ? current.domesticMirror
           : current.domesticMirror
-            ? { ...current.domesticMirror, enabled: patch.domesticMirror.enabled }
-            : current.domesticMirror,
+            ? {
+                ...current.domesticMirror,
+                url: patch.domesticMirror.url ?? current.domesticMirror.url,
+                enabled: patch.domesticMirror.enabled ?? current.domesticMirror.enabled,
+              }
+            : patch.domesticMirror.url
+              ? {
+                  url: patch.domesticMirror.url,
+                  enabled: patch.domesticMirror.enabled ?? false,
+                }
+              : current.domesticMirror,
       enabled: patch.enabled ?? current.enabled,
       updatedAt: new Date().toISOString(),
     };
@@ -1082,9 +1137,6 @@ class SourceStore {
     const current = existing.find((source) => source.name === name);
     if (!current) {
       throw new ApiError(404, 'SOURCE_NOT_FOUND', 'Source not found');
-    }
-    if (current.default) {
-      throw new ApiError(400, 'DEFAULT_SOURCE_READONLY', 'Cannot remove default source');
     }
     if (current.enabled && this.enabledCount(existing, name) <= 0) {
       throw new ApiError(400, 'LAST_SOURCE_REMOVED', 'Cannot remove the last enabled source');
@@ -1109,7 +1161,8 @@ class SourceStore {
       }
       storedSources = parsed.sources
         .filter(isSourceRecord)
-        .filter((source) => !this.legacyPlatformBuiltins.has(source.name));
+        .filter((source) => !this.legacyPlatformBuiltins.has(source.name))
+        .filter((source) => !isPrivateDefaultSource(source));
     } catch (error) {
       if (error instanceof SyntaxError) {
         throw new ApiError(500, 'INVALID_SOURCES_FILE', 'Sources data is not valid JSON');
@@ -1120,17 +1173,7 @@ class SourceStore {
       }
     }
 
-    if (storedSources.length === 0) {
-      return DEFAULT_SOURCES.map((source) => ({ ...source }));
-    }
-
-    const storedNames = new Set(storedSources.map((source) => source.name));
-    const hasAnyBuiltin = DEFAULT_SOURCES.some((source) => storedNames.has(source.name));
-    const sources = hasAnyBuiltin
-      ? storedSources
-      : [...DEFAULT_SOURCES, ...storedSources];
-
-    return sources.map((source) => this.decorateSource(source));
+    return storedSources.map((source) => this.decorateSource(source));
   }
 
   private decorateSource(source: SourceRecord): SourceRecord {
@@ -1280,6 +1323,7 @@ class SourceBackedSkillCatalog {
 
   constructor(
     private readonly sourceStore: SourceStore,
+    private readonly evaluationStore: EvaluationStore,
   ) {}
 
   async list(params: {
@@ -1289,22 +1333,24 @@ class SourceBackedSkillCatalog {
     owner?: string;
   }): Promise<SkillListResponse> {
     const rows = await this.rows(params.source);
+    const summaries = await this.evaluationStore.summarizeBySkill();
     const filteredByQuery = params.q?.trim()
       ? this.filterRowsByQuery(rows, params.q)
       : rows;
     const items = filteredByQuery
-      .map((row) => this.toSkillRecord(row))
+      .map((row) => this.decorateWithEvaluations(this.toSkillRecord(row), summaries))
       .filter((item) => (params.category ? item.category === params.category : true))
       .filter((item) => (params.owner ? item.owner === params.owner : true));
     return { items, total: items.length };
   }
 
   async get(idOrName: string): Promise<SkillRecord | null> {
+    const summaries = await this.evaluationStore.summarizeBySkill();
     const row = (await this.rows()).find((item) => {
       const record = this.toSkillRecord(item);
       return record.id === idOrName || record.name === idOrName;
     });
-    return row ? this.toSkillRecord(row) : null;
+    return row ? this.decorateWithEvaluations(this.toSkillRecord(row), summaries) : null;
   }
 
   async listFiles(idOrName: string, selectedPath?: string): Promise<SkillFilesResponse | null> {
@@ -1547,6 +1593,21 @@ class SourceBackedSkillCatalog {
       owner: 'source',
       uploadStatus: 'published',
       gitUrl: this.effectiveUrl(row.source),
+    };
+  }
+
+  private decorateWithEvaluations(
+    skill: SkillRecord,
+    summaries: Map<string, { count: number; totalRating: number }>,
+  ): SkillRecord {
+    const summary = summaries.get(skill.id) ?? summaries.get(skill.name);
+    if (!summary || summary.count === 0) {
+      return { ...skill, rating: 0, reviews: 0 };
+    }
+    return {
+      ...skill,
+      rating: summary.totalRating / summary.count,
+      reviews: summary.count,
     };
   }
 
@@ -1803,6 +1864,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): PlatformApiCon
   const host = env.HOST ?? env.PLATFORM_API_HOST ?? '0.0.0.0';
   const appBaseUrl = (env.PLATFORM_WEB_APP_URL ?? env.APP_BASE_URL ?? 'http://127.0.0.1:1431').replace(/\/$/, '');
   const publicBaseUrl = (env.PLATFORM_API_PUBLIC_URL ?? `http://127.0.0.1:${port}`).replace(/\/$/, '');
+  const databaseUrl = env.PLATFORM_DATABASE_URL ?? env.DATABASE_URL ?? DEFAULT_DATABASE_URL;
+
+  if (!databaseUrl) {
+    throw new Error('PLATFORM_DATABASE_URL or DATABASE_URL must be configured for the platform API');
+  }
 
   return {
     host,
@@ -1827,7 +1893,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): PlatformApiCon
     uploadDir: env.PLATFORM_API_UPLOAD_DIR
       ? resolve(env.PLATFORM_API_UPLOAD_DIR)
       : DEFAULT_UPLOAD_DIR,
-    databaseUrl: env.PLATFORM_DATABASE_URL ?? env.DATABASE_URL ?? DEFAULT_DATABASE_URL,
+    databaseUrl,
     corsOrigins: parseCorsOrigins(env.CORS_ORIGIN ?? env.PLATFORM_API_CORS_ORIGIN),
     appBaseUrl,
     auth: loadOAuthConfig(env, publicBaseUrl),
@@ -1848,6 +1914,8 @@ function loadOAuthConfig(
     env.OIDC_TOKEN_URL ??
     (issuer ? `${issuer}/oauth/token` : '');
   const userInfoUrl =
+    env.PLATFORM_AUTH_USERINFO_URL ??
+    env.PLATFORM_EXTERNAL_USERINFO_URL ??
     env.OAUTH_USERINFO_URL ??
     env.OIDC_USERINFO_URL ??
     (issuer ? `${issuer}/userinfo` : '');
@@ -1859,20 +1927,32 @@ function loadOAuthConfig(
     env.OAUTH_SESSION_SECRET ??
     env.SESSION_SECRET ??
     '';
+  const hasExternalTokenConfig = Boolean(userInfoUrl && sessionSecret);
   const hasOAuthPasswordConfig = Boolean(
     clientId && clientSecret && tokenUrl && userInfoUrl && sessionSecret,
   );
   const authMode = (env.PLATFORM_AUTH_MODE ?? '').toLowerCase();
   const authDisabled = authMode === 'none' || authMode === 'disabled' || authMode === 'off';
+  const requestedOAuthMode = authMode === 'oauth';
+  const requestedExternalTokenMode = authMode === 'external-token';
   const localMode =
     !authDisabled &&
-    (authMode === 'local' || (authMode !== 'oauth' && !hasOAuthPasswordConfig));
+    (authMode === 'local' ||
+      (!requestedOAuthMode && !requestedExternalTokenMode && !hasOAuthPasswordConfig));
+  const externalTokenMode =
+    !authDisabled && requestedExternalTokenMode && hasExternalTokenConfig;
   const effectiveSessionSecret =
     sessionSecret || 'local-dev-clawhub-session-secret-change-before-production';
 
   return {
-    enabled: !authDisabled && (localMode || hasOAuthPasswordConfig),
-    mode: authDisabled ? 'none' : localMode ? 'local' : 'oauth',
+    enabled: !authDisabled && (localMode || hasOAuthPasswordConfig || externalTokenMode),
+    mode: authDisabled
+      ? 'none'
+      : requestedExternalTokenMode
+        ? 'external-token'
+        : localMode
+          ? 'local'
+          : 'oauth',
     clientId,
     clientSecret,
     authorizationUrl,
@@ -1884,9 +1964,37 @@ function loadOAuthConfig(
       `${publicBaseUrl}/api/auth/callback`,
     scopes: splitCsv(env.OAUTH_SCOPES ?? env.OIDC_SCOPES ?? 'openid,profile,email'),
     sessionSecret: effectiveSessionSecret,
-    adminEmails: splitCsv(env.PLATFORM_ADMIN_EMAILS),
+    adminEmails: splitCsv(
+      [
+        env.PLATFORM_ADMIN_EMAILS,
+        env.PLATFORM_ADMIN_USERS,
+        env.PLATFORM_ADMIN_USERNAMES,
+      ]
+        .filter(Boolean)
+        .join(','),
+    ),
     adminDomains: splitCsv(env.PLATFORM_ADMIN_DOMAINS).map((domain) =>
       domain.replace(/^@/, '').toLowerCase(),
+    ),
+    adminMatchPaths: splitCsv(
+      env.PLATFORM_AUTH_ADMIN_MATCH_PATHS ??
+        'user.userName,user.email,email,username,userName,loginName,account',
+    ),
+    userInfoIdPaths: splitCsv(
+      env.PLATFORM_AUTH_USER_ID_PATHS ??
+        'user.userId,user.id,user.userName,userName,sub,id,userId,user_id',
+    ),
+    userInfoLoginPaths: splitCsv(
+      env.PLATFORM_AUTH_USER_LOGIN_PATHS ??
+        'user.email,user.userName,email,username,userName,loginName,account',
+    ),
+    userInfoNamePaths: splitCsv(
+      env.PLATFORM_AUTH_USER_NAME_PATHS ??
+        'user.nickName,user.name,user.userName,name,nickname,displayName,username,userName',
+    ),
+    userInfoAvatarPaths: splitCsv(
+      env.PLATFORM_AUTH_USER_AVATAR_PATHS ??
+        'user.avatar,user.avatarUrl,user.avatar_url,picture,avatar_url,avatarUrl',
     ),
     bootstrapPassword: env.PLATFORM_AUTH_BOOTSTRAP_PASSWORD,
   };
@@ -1950,6 +2058,29 @@ async function handleOAuthPasswordLogin(
         );
   const storedUser =
     config.auth.mode === 'local' ? user : await database.upsertAuthUser(user);
+  const sessionId = await createDatabaseSession(database, storedUser);
+  setCookie(res, AUTH_COOKIE_NAME, sessionId, Math.floor(SESSION_TTL_MS / 1000));
+  sendJson(res, 200, { user: publicAuthUser(storedUser) });
+}
+
+async function handleExternalTokenLogin(
+  req: IncomingMessage,
+  res: ServerResponse,
+  config: PlatformApiConfig,
+  database: DocumentDatabase,
+): Promise<void> {
+  if (!config.auth.enabled || config.auth.mode !== 'external-token') {
+    throw new ApiError(503, 'AUTH_NOT_CONFIGURED', 'External token login is not configured');
+  }
+
+  const body = await readJsonBody(req);
+  if (!isPlainObject(body)) {
+    throw new ApiError(400, 'INVALID_BODY', 'Request body must be a JSON object');
+  }
+
+  const token = requiredString(body.token, 'token');
+  const user = await fetchOAuthUser(config.auth, token);
+  const storedUser = await database.upsertAuthUser(user);
   const sessionId = await createDatabaseSession(database, storedUser);
   setCookie(res, AUTH_COOKIE_NAME, sessionId, Math.floor(SESSION_TTL_MS / 1000));
   sendJson(res, 200, { user: publicAuthUser(storedUser) });
@@ -2075,6 +2206,9 @@ async function fetchOAuthUser(auth: OAuthConfig, accessToken: string): Promise<A
   });
   const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
   if (!response.ok) {
+    if (response.status === 401 || response.status === 403) {
+      throw new ApiError(401, 'INVALID_EXTERNAL_TOKEN', 'External token is invalid or expired');
+    }
     throw new ApiError(
       502,
       'OAUTH_USERINFO_FAILED',
@@ -2082,28 +2216,41 @@ async function fetchOAuthUser(auth: OAuthConfig, accessToken: string): Promise<A
     );
   }
 
-  const email = textValue(payload.email).toLowerCase();
-  const id = textValue(payload.sub) || email || textValue(payload.id);
+  const login = firstTextAtPaths(payload, auth.userInfoLoginPaths).toLowerCase();
+  if (!login) {
+    throw new ApiError(
+      502,
+      'OAUTH_USER_MISSING_LOGIN',
+      'OAuth userinfo did not include an email or username',
+    );
+  }
+  const id = firstTextAtPaths(payload, auth.userInfoIdPaths) || login;
   if (!id) {
     throw new ApiError(502, 'OAUTH_USER_MISSING_ID', 'OAuth userinfo did not include an id');
   }
-  const name = textValue(payload.name) || textValue(payload.nickname) || email || id;
+  const name = firstTextAtPaths(payload, auth.userInfoNamePaths) || login || id;
   return {
     id,
-    email,
+    email: login,
     name,
-    avatarUrl: textValue(payload.picture) || textValue(payload.avatar_url) || undefined,
-    role: resolveUserRole(email, auth),
+    avatarUrl: firstTextAtPaths(payload, auth.userInfoAvatarPaths) || undefined,
+    role: resolveUserRole(collectTextAtPaths(payload, auth.adminMatchPaths, [login]), auth),
   };
 }
 
-function resolveUserRole(email: string, auth: OAuthConfig): 'user' | 'admin' {
-  if (!email) return 'user';
-  if (auth.adminEmails.map((item) => item.toLowerCase()).includes(email)) {
+function resolveUserRole(values: string[], auth: OAuthConfig): 'user' | 'admin' {
+  const candidates = values.map((item) => item.toLowerCase()).filter(Boolean);
+  if (candidates.length === 0) return 'user';
+  const admins = auth.adminEmails.map((item) => item.toLowerCase());
+  if (candidates.some((candidate) => admins.includes(candidate))) {
     return 'admin';
   }
-  const domain = email.split('@')[1]?.toLowerCase();
-  return domain && auth.adminDomains.includes(domain) ? 'admin' : 'user';
+  return candidates.some((candidate) => {
+    const domain = candidate.split('@')[1]?.toLowerCase();
+    return Boolean(domain && auth.adminDomains.includes(domain));
+  })
+    ? 'admin'
+    : 'user';
 }
 
 async function ensureAuthBootstrap(
@@ -2462,14 +2609,14 @@ export function createPlatformApiServer(config = loadConfig()): ReturnType<typeo
   const db = createDocumentDatabase(config.databaseUrl);
   const authBootstrapPromise = ensureAuthBootstrap(db, config.auth);
   const store = new EvaluationStore(new JsonDocumentStore(db, 'evaluations'));
-  const skillStore = new SkillStore(new JsonDocumentStore(db, 'skills'));
+  const skillStore = new SkillStore(new JsonDocumentStore(db, 'skills'), store);
   const skillFileStore = new SkillFileStore(
     new JsonDocumentStore(db, 'skill-files'),
     skillStore,
   );
   const gitConfigStore = new GitConfigStore(new JsonDocumentStore(db, 'git-config'));
   const sourceStore = new SourceStore(new JsonDocumentStore(db, 'sources'));
-  const sourceSkillCatalog = new SourceBackedSkillCatalog(sourceStore);
+  const sourceSkillCatalog = new SourceBackedSkillCatalog(sourceStore, store);
   const publishedSkillCatalog = new PublishedSkillCatalog(sourceSkillCatalog, skillStore);
   const uploadStore = new PackageUploadStore(
     new JsonDocumentStore(db, 'uploads'),
@@ -2579,6 +2726,11 @@ async function handleRequest(
 
     if (req.method === 'POST' && pathname === '/api/auth/login') {
       await handleOAuthPasswordLogin(req, res, config, database);
+      return;
+    }
+
+    if (req.method === 'POST' && pathname === '/api/auth/external-token') {
+      await handleExternalTokenLogin(req, res, config, database);
       return;
     }
 
@@ -3304,6 +3456,22 @@ function optionalQueryString(url: URL, name: string): string | undefined {
   return value && value.trim() ? value.trim() : undefined;
 }
 
+function normalizeSourceUrl(value: string | undefined): string {
+  return (value ?? '')
+    .trim()
+    .replace(/\/+$/, '')
+    .replace(/\.git$/i, '')
+    .toLowerCase();
+}
+
+function isPrivateDefaultSource(source: Pick<SourceRecord, 'url' | 'domesticMirror'>): boolean {
+  const target = normalizeSourceUrl(PRIVATE_DEFAULT_SOURCE_URL);
+  return (
+    normalizeSourceUrl(source.url) === target ||
+    normalizeSourceUrl(source.domesticMirror?.url) === target
+  );
+}
+
 function parseIntegerQuery(
   url: URL,
   name: string,
@@ -3403,17 +3571,20 @@ function parseSourceInput(input: unknown): Pick<
 }
 
 function parseSourcePatch(input: unknown): Partial<
-  Pick<
-    SourceRecord,
-    | 'label'
-    | 'description'
-    | 'enabled'
-    | 'url'
-    | 'branch'
-    | 'skillsDirectory'
-    | 'publishEnabled'
-    | 'domesticMirror'
-  >
+  Omit<
+    Pick<
+      SourceRecord,
+      | 'label'
+      | 'description'
+      | 'enabled'
+      | 'url'
+      | 'branch'
+      | 'skillsDirectory'
+      | 'publishEnabled'
+      | 'domesticMirror'
+    >,
+    'domesticMirror'
+  > & { domesticMirror: Partial<NonNullable<SourceRecord['domesticMirror']>> }
 > {
   if (!isPlainObject(input)) {
     throw new ApiError(400, 'INVALID_BODY', 'Request body must be a JSON object');
@@ -3431,9 +3602,10 @@ function parseSourcePatch(input: unknown): Partial<
   if (
     domesticMirror !== undefined &&
     (!isPlainObject(domesticMirror) ||
-      (domesticMirror.enabled !== undefined && typeof domesticMirror.enabled !== 'boolean'))
+      (domesticMirror.enabled !== undefined && typeof domesticMirror.enabled !== 'boolean') ||
+      (domesticMirror.url !== undefined && typeof domesticMirror.url !== 'string'))
   ) {
-    throw new ApiError(400, 'INVALID_FIELD', 'domesticMirror.enabled must be a boolean');
+    throw new ApiError(400, 'INVALID_FIELD', 'domesticMirror.url must be a string and domesticMirror.enabled must be a boolean');
   }
 
   return compactObject({
@@ -3444,8 +3616,15 @@ function parseSourcePatch(input: unknown): Partial<
     skillsDirectory: optionalString(input.skillsDirectory, 'skillsDirectory'),
     publishEnabled,
     domesticMirror:
-      isPlainObject(domesticMirror) && typeof domesticMirror.enabled === 'boolean'
-        ? { url: '', enabled: domesticMirror.enabled }
+      isPlainObject(domesticMirror) &&
+      (typeof domesticMirror.url === 'string' || typeof domesticMirror.enabled === 'boolean')
+        ? compactObject({
+            url: optionalString(domesticMirror.url, 'domesticMirror.url'),
+            enabled:
+              typeof domesticMirror.enabled === 'boolean'
+                ? domesticMirror.enabled
+                : undefined,
+          })
         : undefined,
     enabled,
   });
@@ -3767,6 +3946,63 @@ function textValue(value: unknown): string {
   if (typeof value === 'string') return value.trim();
   if (typeof value === 'number' || typeof value === 'boolean') return String(value);
   return '';
+}
+
+function firstTextAtPaths(source: unknown, paths: string[]): string {
+  return collectTextAtPaths(source, paths)[0] ?? '';
+}
+
+function collectTextAtPaths(source: unknown, paths: string[], extra: string[] = []): string[] {
+  const values: string[] = [];
+  const seen = new Set<string>();
+
+  function add(value: string): void {
+    const normalized = value.trim();
+    if (!normalized || seen.has(normalized)) return;
+    seen.add(normalized);
+    values.push(normalized);
+  }
+
+  for (const value of extra) {
+    add(value);
+  }
+
+  for (const path of paths) {
+    for (const value of collectTextValues(readPathValue(source, path))) {
+      add(value);
+    }
+  }
+
+  return values;
+}
+
+function collectTextValues(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.flatMap(collectTextValues);
+  }
+  const text = textValue(value);
+  return text ? [text] : [];
+}
+
+function readPathValue(source: unknown, path: string): unknown {
+  const parts = path
+    .replace(/\[(\d+)\]/g, '.$1')
+    .split('.')
+    .map((part) => part.trim())
+    .filter(Boolean);
+  let current = source;
+
+  for (const part of parts) {
+    if (Array.isArray(current) && /^\d+$/.test(part)) {
+      current = current[Number(part)];
+    } else if (isPlainObject(current)) {
+      current = current[part];
+    } else {
+      return undefined;
+    }
+  }
+
+  return current;
 }
 
 function numberValue(value: unknown): number {

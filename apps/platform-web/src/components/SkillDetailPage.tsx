@@ -12,6 +12,7 @@ import {
   type SkillFileDetail,
   type SkillFileEntry,
 } from '../api/client';
+import { useLocalStorage } from '../hooks';
 import { markdownRemarkPlugins } from '../lib/markdown';
 import {
   Badge,
@@ -31,29 +32,65 @@ const installTargetOptions = [
   { id: 'claude', label: 'Claude' },
   { id: 'cursor', label: 'Cursor' },
 ];
+const installTargetIds = new Set(installTargetOptions.map((target) => target.id));
+const INSTALL_SCOPE_STORAGE_KEY = 'suit-skills-platform-install-scope';
+const INSTALL_TARGETS_STORAGE_KEY = 'suit-skills-platform-install-targets';
+
+type InstallScope = 'global' | 'local';
+
+function normalizeInstallScope(value: unknown): InstallScope {
+  return value === 'local' ? 'local' : 'global';
+}
+
+function normalizeInstallTargets(value: unknown): string[] {
+  if (!Array.isArray(value)) return ['agents'];
+  const targets = Array.from(
+    new Set(
+      value.filter(
+        (target): target is string => typeof target === 'string' && installTargetIds.has(target),
+      ),
+    ),
+  );
+  if (value.length > 0 && targets.length === 0) return ['agents'];
+  return targets;
+}
+
+function sameStringArray(left: string[], right: string[]): boolean {
+  return left.length === right.length && left.every((item, index) => item === right[index]);
+}
 
 export function SkillDetailPage({
   backLabel,
   skill,
   onBack,
   onOpenDirectory,
+  onReviewsChanged,
 }: {
   backLabel: string;
   skill: Skill;
   onBack: () => void;
   onOpenDirectory: () => void;
+  onReviewsChanged?: () => void | Promise<void>;
 }) {
   const [reviews, setReviews] = useState<FeedbackItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [installScope, setInstallScope] = useState<'global' | 'local'>('global');
-  const [installTargets, setInstallTargets] = useState<string[]>(['agents']);
+  const [storedInstallScope, setStoredInstallScope] = useLocalStorage<InstallScope>(
+    INSTALL_SCOPE_STORAGE_KEY,
+    'global',
+  );
+  const [storedInstallTargets, setStoredInstallTargets] = useLocalStorage<string[]>(
+    INSTALL_TARGETS_STORAGE_KEY,
+    ['agents'],
+  );
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
 
   async function refreshReviews() {
     setLoading(true);
     try {
-      const next = await listFeedback({ skillId: skill.id, status: 'all' });
+      const next = await listAllSkillFeedback(skill.id);
       setReviews(next);
+    } catch {
+      setReviews([]);
     } finally {
       setLoading(false);
     }
@@ -67,30 +104,48 @@ export function SkillDetailPage({
     setReviews((current) => mergeReviews([review, ...current]));
     setLoading(true);
     try {
-      const next = await listFeedback({ skillId: skill.id, status: 'all' });
+      const next = await listAllSkillFeedback(skill.id);
       setReviews((current) => mergeReviews([...next, review, ...current]));
+    } catch {
+      setReviews((current) => mergeReviews([review, ...current]));
     } finally {
       setLoading(false);
     }
+    void onReviewsChanged?.();
   }
 
   const reviewAverage = reviews.length
     ? reviews.reduce((total, item) => total + item.rating, 0) / reviews.length
-    : skill.rating;
-  const reviewCount = reviews.length || skill.reviews;
+    : 0;
+  const reviewCount = reviews.length;
   const distribution = ratingDistribution(reviews);
-  const statusCounts = reviewStatusCounts(reviews);
+  const installScope = normalizeInstallScope(storedInstallScope);
+  const installTargets = useMemo(
+    () => normalizeInstallTargets(storedInstallTargets),
+    [storedInstallTargets],
+  );
   const installCommand = useMemo(
     () => buildInstallPackageCommand(skill.id, { scope: installScope, targets: installTargets }),
     [installScope, installTargets, skill.id],
   );
 
+  useEffect(() => {
+    if (storedInstallScope !== installScope) {
+      setStoredInstallScope(installScope);
+    }
+  }, [installScope, setStoredInstallScope, storedInstallScope]);
+
+  useEffect(() => {
+    if (!sameStringArray(storedInstallTargets, installTargets)) {
+      setStoredInstallTargets(installTargets);
+    }
+  }, [installTargets, setStoredInstallTargets, storedInstallTargets]);
+
   function toggleInstallTarget(target: string) {
-    setInstallTargets((current) =>
-      current.includes(target)
-        ? current.filter((item) => item !== target)
-        : [...current, target],
-    );
+    const nextTargets = installTargets.includes(target)
+      ? installTargets.filter((item) => item !== target)
+      : [...installTargets, target];
+    setStoredInstallTargets(nextTargets);
     setCopyState('idle');
   }
 
@@ -165,7 +220,7 @@ export function SkillDetailPage({
                   className={installScope === 'global' ? 'active' : ''}
                   type="button"
                   onClick={() => {
-                    setInstallScope('global');
+                    setStoredInstallScope('global');
                     setCopyState('idle');
                   }}
                 >
@@ -175,7 +230,7 @@ export function SkillDetailPage({
                   className={installScope === 'local' ? 'active' : ''}
                   type="button"
                   onClick={() => {
-                    setInstallScope('local');
+                    setStoredInstallScope('local');
                     setCopyState('idle');
                   }}
                 >
@@ -221,15 +276,10 @@ export function SkillDetailPage({
                   <div className="rating-bar" key={rating}>
                     <span>{rating} 分</span>
                     <div><i style={{ width: `${percent}%` }} /></div>
-                    <strong>{reviews.length ? count : '-'}</strong>
+                    <strong>{count}</strong>
                   </div>
                 );
               })}
-            </div>
-            <div className="review-status-strip">
-              <span>新评价 {statusCounts.submitted}</span>
-              <span>处理中 {statusCounts.reviewing}</span>
-              <span>已采纳 {statusCounts.approved}</span>
             </div>
           </section>
           <ReviewForm skill={skill} onSubmitted={handleReviewSubmitted} />
@@ -246,13 +296,6 @@ export function SkillDetailPage({
                 <ReviewItem
                   key={review.id}
                   review={review}
-                  onStatusChange={(updatedReview) =>
-                    setReviews((current) =>
-                      current.map((item) =>
-                        item.id === updatedReview.id ? updatedReview : item,
-                      ),
-                    )
-                  }
                 />
               ))
             ) : (
@@ -506,11 +549,14 @@ function mergeReviews(reviews: FeedbackItem[]): FeedbackItem[] {
   });
 }
 
-function reviewStatusCounts(reviews: FeedbackItem[]) {
-  return reviews.reduce(
-    (result, review) => ({ ...result, [review.status]: result[review.status] + 1 }),
-    { submitted: 0, reviewing: 0, approved: 0, rejected: 0, archived: 0 },
-  );
+async function listAllSkillFeedback(skillId: string): Promise<FeedbackItem[]> {
+  const limit = 200;
+  const all: FeedbackItem[] = [];
+  for (let offset = 0; ; offset += limit) {
+    const page = await listFeedback({ skillId, status: 'all', limit, offset });
+    all.push(...page);
+    if (page.length < limit) return all;
+  }
 }
 
 const VIEW_MODE_STORAGE_KEY = 'skill-directory-view-mode';
@@ -570,6 +616,10 @@ export function SkillDirectoryPage({
       });
       setViewMode(next.selectedFile?.language === 'markdown' ? loadViewModePrefs() : 'source');
       setSaveState('idle');
+    } catch {
+      setFileTree(null);
+      setSelectedFile(null);
+      setDraft('');
     } finally {
       setFilesLoading(false);
     }
@@ -614,6 +664,9 @@ export function SkillDirectoryPage({
       });
       setViewMode(next.language === 'markdown' ? loadViewModePrefs() : 'source');
       setSaveState('idle');
+    } catch {
+      setSelectedFile(null);
+      setDraft('');
     } finally {
       setContentLoading(false);
     }

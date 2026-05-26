@@ -983,6 +983,11 @@ button:focus {
   align-items: start;
 }
 
+.source-tools {
+  display: grid;
+  gap: 14px;
+}
+
 .user-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(340px, 0.42fr);
@@ -1159,6 +1164,72 @@ button:focus {
   min-width: 220px;
   color: var(--muted);
   line-height: 1.5;
+}
+
+.source-replace-tool {
+  gap: 14px;
+}
+
+.source-replace-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+.source-replace-summary {
+  display: grid;
+  gap: 3px;
+  border: 1px solid rgba(63, 114, 168, 0.18);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: rgba(63, 114, 168, 0.07);
+}
+
+.source-replace-summary strong {
+  color: var(--blue);
+}
+
+.source-replace-summary span {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.source-replace-preview {
+  display: grid;
+  max-height: 240px;
+  overflow: auto;
+  gap: 8px;
+  padding-right: 2px;
+}
+
+.source-replace-preview > small {
+  color: var(--faint);
+  font-size: 12px;
+}
+
+.source-replace-item {
+  display: grid;
+  gap: 5px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 9px 10px;
+  background: var(--panel-soft);
+}
+
+.source-replace-item strong {
+  overflow-wrap: anywhere;
+}
+
+.source-replace-item code {
+  color: var(--muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.source-error-dialog .confirm-dialog-mark {
+  font-size: 24px;
 }
 
 .detail-main,
@@ -1586,15 +1657,13 @@ button:focus {
   line-height: 1;
 }
 
-.rating-summary,
-.review-status-strip {
+.rating-summary {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
 }
 
-.rating-summary span,
-.review-status-strip span {
+.rating-summary span {
   display: inline-flex;
   min-height: 28px;
   align-items: center;
@@ -2234,11 +2303,23 @@ button:focus {
   box-shadow: 0 8px 18px rgba(42, 64, 44, 0.08);
 }
 
+.file-picker.secondary {
+  border-color: var(--line);
+  background: rgba(255, 255, 255, 0.62);
+  color: var(--primary-dark);
+}
+
 [data-theme="dark"] .file-picker {
   border-color: var(--primary);
   background: var(--primary);
   color: #10200f;
   box-shadow: 0 10px 22px rgba(0, 0, 0, 0.24);
+}
+
+[data-theme="dark"] .file-picker.secondary {
+  border-color: #3a4639;
+  background: rgba(255, 255, 255, 0.045);
+  color: #cceac2;
 }
 
 .file-picker:disabled {

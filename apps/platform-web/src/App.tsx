@@ -27,7 +27,6 @@ import {
   readStoredRole,
   SourcesPage,
   skillFromApi,
-  skills,
   ThemeToggle,
   UserManagementPage,
   type Role,
@@ -75,7 +74,7 @@ function App() {
   const navigate = useNavigate();
   const location = useLocation();
   const { themeMode, setThemeMode } = useTheme();
-  const [marketSkills, setMarketSkills] = useState<Skill[]>(skills);
+  const [marketSkills, setMarketSkills] = useState<Skill[]>([]);
   const [sourceConfig, setSourceConfig] = useState<SourceItem[]>([]);
   const [role, setRole] = useState<Role | null>(() => readStoredRole());
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -132,8 +131,12 @@ function App() {
     setSyncingMarket(true);
     try {
       const [skillItems, sources] = await Promise.all([listSkills(), listSources()]);
-      if (skillItems.length) setMarketSkills(skillItems.map(skillFromApi));
+      setMarketSkills(skillItems.map(skillFromApi));
       setSourceConfig(sources.sources);
+    } catch (error) {
+      setMarketSkills([]);
+      setSourceConfig([]);
+      console.error(error);
     } finally {
       setSyncingMarket(false);
     }
@@ -174,6 +177,7 @@ function App() {
           skill={selectedSkill}
           onBack={() => requestNavigate(from === 'mine' ? '/mine' : '/market')}
           onOpenDirectory={() => requestNavigate(`/skills/${encodeURIComponent(selectedSkill.id)}/files`, { state: { from } })}
+          onReviewsChanged={refreshMarket}
         />
       </Suspense>
     );
@@ -292,7 +296,8 @@ function App() {
               <Suspense fallback={<div className="page"><section className="empty-state"><p>加载中...</p></section></div>}>
                 <UploadPage
                   sourceConfig={sourceConfig}
-                  canPublish={role === 'admin'}
+                  canPublish
+                  currentUser={user}
                   onUploaded={(skill) =>
                     setMarketSkills((current) => [
                       skill,
@@ -307,7 +312,7 @@ function App() {
           />
           <Route
             path="/mine"
-            element={<MySkillsPage fallbackSkills={marketSkills} role={role} onOpenSkill={(skillId) => openSkill(skillId, 'mine')} onPublished={refreshMarket} />}
+            element={<MySkillsPage canManageUploads onOpenSkill={(skillId) => openSkill(skillId, 'mine')} onPublished={refreshMarket} />}
           />
           <Route
             path="/notifications"

@@ -13,7 +13,6 @@ export {
   readStoredRole,
   ROLE_STORAGE_KEY,
   skillFromApi,
-  skills,
   type Role,
   type Skill,
   type View,

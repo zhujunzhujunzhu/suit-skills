@@ -13,6 +13,7 @@ const packageJson = JSON.parse(
 
 export default defineConfig({
   root: fileURLToPath(new URL('.', import.meta.url)),
+  base: process.env.SUIT_SKILLS_PLATFORM_BASE_PATH ?? '/skills-hub/',
   plugins: [react()],
   define: {
     __APP_VERSION__: JSON.stringify(packageJson.version ?? '0.0.0'),

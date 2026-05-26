@@ -1,5 +1,5 @@
-﻿import { type DragEvent, type FormEvent, useRef, useState } from 'react';
-import { parseSkillPackage, publishSkillPackage, updateSkillPackageMetadata, uploadSkill, type PackageUploadRecord, type SkillInput, type SkillItem, type SourceItem } from '../api/client';
+﻿import { type DragEvent, type FormEvent, useEffect, useRef, useState } from 'react';
+import { parseSkillPackage, publishSkillPackage, updateSkillPackageMetadata, uploadSkill, type AuthUser, type PackageUploadRecord, type SkillInput, type SkillItem, type SourceItem } from '../api/client';
 import type { UploadFileEntry } from '../uploadPackaging';
 import { Badge, PageHeader, skillFromApi, skillInputFromForm, type Skill } from './shared';
 import { EmptyState } from './EmptyState';
@@ -9,6 +9,20 @@ type FileSystemEntryLike = { name: string; isFile: boolean; isDirectory: boolean
 type FileSystemFileEntryLike = FileSystemEntryLike & { file: (success: (file: File) => void, error?: (error: DOMException) => void) => void };
 type FileSystemDirectoryEntryLike = FileSystemEntryLike & { createReader: () => { readEntries: (success: (entries: FileSystemEntryLike[]) => void, error?: (error: DOMException) => void) => void } };
 type DataTransferItemWithEntry = DataTransferItem & { webkitGetAsEntry?: () => FileSystemEntryLike | null };
+const placeholderAuthorLabels = new Set(['Current user', 'current-user']);
+
+function currentUserAuthor(currentUser: AuthUser | null): string {
+  return currentUser?.name?.trim() || currentUser?.email?.trim() || currentUser?.id?.trim() || 'Current user';
+}
+
+function shouldUseCurrentAuthor(author?: string): boolean {
+  const trimmed = author?.trim() ?? '';
+  return !trimmed || placeholderAuthorLabels.has(trimmed);
+}
+
+function withCurrentAuthor(form: SkillInput, author: string): SkillInput {
+  return shouldUseCurrentAuthor(form.author) ? { ...form, author } : form;
+}
 
 async function fileFromEntry(entry: FileSystemFileEntryLike): Promise<File> {
   return new Promise((resolve, reject) => entry.file(resolve, reject));
@@ -54,19 +68,22 @@ function uploadEntriesFromFileList(files: FileList | null): UploadFileEntry[] {
 export function UploadPage({
   sourceConfig,
   canPublish: canPublishDirectly,
+  currentUser,
   onOpenMine,
   onOpenSkill,
   onUploaded,
 }: {
   sourceConfig: SourceItem[];
   canPublish: boolean;
+  currentUser: AuthUser | null;
   onOpenMine: () => void;
   onOpenSkill: (skillId: string) => void;
   onUploaded: (skill: Skill) => void;
 }) {
+  const currentAuthor = currentUserAuthor(currentUser);
   const [upload, setUpload] = useState<PackageUploadRecord | null>(null);
   const [uploadedSkill, setUploadedSkill] = useState<Skill | null>(null);
-  const [form, setForm] = useState<SkillInput>({ name: '', description: '', author: '', source: 'default', category: '', version: '0.1.0', tags: [], gitUrl: '' });
+  const [form, setForm] = useState<SkillInput>({ name: '', description: '', author: currentAuthor, source: 'default', category: '', version: '0.1.0', tags: [], gitUrl: '' });
   const [status, setStatus] = useState<'idle' | 'parsing' | 'submitting' | 'success' | 'error'>('idle');
   const [message, setMessage] = useState('');
   const [intent, setIntent] = useState<'save' | 'publish'>('save');
@@ -79,6 +96,13 @@ export function UploadPage({
   const canSave = Boolean(form.name.trim() && form.description.trim()) && canEdit;
   const canPublish = canPublishDirectly && Boolean(upload && form.name.trim() && form.description.trim() && selectedSource) && canEdit;
 
+  useEffect(() => {
+    setForm((current) => {
+      if (!shouldUseCurrentAuthor(current.author) || current.author === currentAuthor) return current;
+      return { ...current, author: currentAuthor };
+    });
+  }, [currentAuthor]);
+
   async function parseEntries(entries: UploadFileEntry[]) {
     setStatus('parsing');
     setMessage('');
@@ -86,7 +110,7 @@ export function UploadPage({
       const { packageUploadEntries } = await import('../uploadPackaging');
       const file = await packageUploadEntries(entries);
       const parsed = await parseSkillPackage(file, 'current-user');
-      const parsedForm = skillInputFromItem(parsed.metadata);
+      const parsedForm = withCurrentAuthor(skillInputFromItem(parsed.metadata), currentAuthor);
       setUpload(parsed);
       setForm({
         ...parsedForm,
@@ -95,7 +119,7 @@ export function UploadPage({
           : publishableSources[0]?.name ?? '',
       });
       setStatus('idle');
-      setMessage(canPublishDirectly ? '技能包已解析，请确认或调整下方信息。可以直接保存，也可以立即发布到市场。' : '技能包已解析，请确认或调整下方信息。保存后由管理员发布到市场。');
+      setMessage(canPublishDirectly ? '技能包已解析，请确认或调整下方信息。可以直接保存，也可以立即发布到市场。' : '技能包已解析，请确认或调整下方信息。保存后可从我的技能包继续发布。');
     } catch (error) {
       setStatus('error');
       setMessage(error instanceof Error ? error.message : '技能包解析失败，请检查文件或文件夹格式。');
@@ -115,7 +139,7 @@ export function UploadPage({
     }
     setIntent(action);
     const source = shouldPublish ? selectedSource : selectedSource || form.source || 'default';
-    const submitForm = { ...form, source };
+    const submitForm = withCurrentAuthor({ ...form, source }, currentAuthor);
     setStatus('submitting');
     setMessage('');
     try {
@@ -195,10 +219,10 @@ export function UploadPage({
           <label><span>技能名称</span><input value={form.name} placeholder="frontend-design" onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} /></label>
           <label><span>技能描述</span><textarea value={form.description} placeholder="描述这个技能解决什么问题，适合什么场景。" onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} /></label>
           <div className="form-grid"><label><span>分类</span><input value={form.category} placeholder="frontend / backend / document" onChange={(event) => setForm((current) => ({ ...current, category: event.target.value }))} /></label><label><span>版本</span><input value={form.version} placeholder="1.0.0" onChange={(event) => setForm((current) => ({ ...current, version: event.target.value }))} /></label></div>
-          <div className="form-grid"><label><span>作者</span><input value={form.author ?? ''} placeholder="Current user" onChange={(event) => setForm((current) => ({ ...current, author: event.target.value }))} /></label><label><span>来源</span><select disabled={!publishableSources.length} value={selectedSource} onChange={(event) => setForm((current) => ({ ...current, source: event.target.value }))}>{publishableSources.length ? publishableSources.map((source) => <option key={source.name} value={source.name}>{source.label || source.name}</option>) : <option value="">暂无可发布源</option>}</select></label></div>
+          <div className="form-grid"><label><span>作者</span><input value={form.author ?? ''} placeholder={currentAuthor} onChange={(event) => setForm((current) => ({ ...current, author: event.target.value }))} /></label><label><span>来源</span><select disabled={!publishableSources.length} value={selectedSource} onChange={(event) => setForm((current) => ({ ...current, source: event.target.value }))}>{publishableSources.length ? publishableSources.map((source) => <option key={source.name} value={source.name}>{source.label || source.name}</option>) : <option value="">暂无可发布源</option>}</select></label></div>
           <label><span>标签</span><input value={form.tags?.join(', ') ?? ''} placeholder="React, UI, Dashboard" onChange={(event) => setForm((current) => ({ ...current, tags: event.target.value.split(',').map((tag) => tag.trim()).filter(Boolean) }))} /></label>
         </form>
-        <section className="check-card"><h2>上传校验</h2>{upload ? <><div className="check-row"><span>文件</span><strong>{upload.fileName}</strong></div><div className="check-row"><span>状态</span><Badge status={uploadStatusLabel(upload.status)} /></div>{upload.validation.map((item) => <div className="check-row" key={item.code}><span>{item.message}</span><Badge status={validationStatusLabel(item.severity)} /></div>)}</> : <EmptyState type="no-data" title="选择技能包" description="选择技能包后会显示 SKILL.md 解析结果、结构校验和提交状态。" ariaLabel="等待选择技能包" />}<div className="upload-note"><strong>发布流程</strong><p>{canPublishDirectly ? '保存会保留当前草稿；发布会直接同步到已配置的发布源并上架到市场。' : '保存会保留当前草稿；发布、删除和源管理由管理员处理。'}</p></div></section>
+        <section className="check-card"><h2>上传校验</h2>{upload ? <><div className="check-row"><span>文件</span><strong>{upload.fileName}</strong></div><div className="check-row"><span>状态</span><Badge status={uploadStatusLabel(upload.status)} /></div>{upload.validation.map((item) => <div className="check-row" key={item.code}><span>{item.message}</span><Badge status={validationStatusLabel(item.severity)} /></div>)}</> : <EmptyState type="no-data" title="选择技能包" description="选择技能包后会显示 SKILL.md 解析结果、结构校验和提交状态。" ariaLabel="等待选择技能包" />}<div className="upload-note"><strong>发布流程</strong><p>{canPublishDirectly ? '保存会保留当前草稿；发布会直接同步到已配置的发布源并上架到市场。' : '保存会保留当前草稿；发布会在配置好发布源后同步到市场。'}</p></div></section>
       </section>
     </div>
   );
@@ -215,6 +239,15 @@ function SkillPackagePicker({
 }) {
   const [dragActive, setDragActive] = useState(false);
   const zipInputRef = useRef<HTMLInputElement | null>(null);
+  const folderInputRef = useRef<HTMLInputElement | null>(null);
+
+  function setFolderInputRef(element: HTMLInputElement | null) {
+    folderInputRef.current = element;
+    if (element) {
+      element.setAttribute('webkitdirectory', '');
+      element.setAttribute('directory', '');
+    }
+  }
 
   function updateDragState(event: DragEvent<HTMLDivElement>, active: boolean) {
     event.preventDefault();
@@ -242,12 +275,13 @@ function SkillPackagePicker({
     >
       <div className="drop-zone-icon" aria-hidden="true">{parsing ? '...' : fileName ? 'OK' : '+'}</div>
       <strong>{parsing ? '正在解析技能包...' : fileName ?? '拖拽技能包到这里'}</strong>
-      <span>{fileName ? '已生成可编辑草稿，可重新选择 zip 或拖入新文件夹覆盖。' : '推荐拖拽包含 SKILL.md 的技能目录；也可以选择 .zip 包上传。'}</span>
+      <span>{fileName ? '已生成可编辑草稿，可重新选择 zip 或文件夹覆盖。' : '选择包含 SKILL.md 的技能文件夹或 .zip 包，也可以直接拖拽上传。'}</span>
       <div className="upload-pickers">
         <button className="file-picker" type="button" disabled={parsing} onClick={() => zipInputRef.current?.click()}>选择 zip</button>
-        <span className="drop-hint">文件夹请直接拖入此区域</span>
+        <button className="file-picker secondary" type="button" disabled={parsing} onClick={() => folderInputRef.current?.click()}>选择文件夹</button>
       </div>
       <input ref={zipInputRef} className="visually-hidden-file" type="file" accept=".zip" onChange={(event) => { handleZipSelection(event.target.files); event.currentTarget.value = ''; }} />
+      <input ref={setFolderInputRef} className="visually-hidden-file" type="file" multiple onChange={(event) => { handleZipSelection(event.target.files); event.currentTarget.value = ''; }} />
     </div>
   );
 }

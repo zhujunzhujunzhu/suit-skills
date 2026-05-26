@@ -1,6 +1,6 @@
 {
   "name": "suit-skills",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "type": "module",
   "description": "A CLI tool for skills management with Web console and Desktop app",
   "workspaces": [
@@ -93,6 +93,7 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.2",
     "esbuild": "^0.27.7",
+    "jsdom": "^29.1.1",
     "pkg": "^5.8.1",
     "sharp": "^0.34.5",
     "tsx": "^4.21.0",

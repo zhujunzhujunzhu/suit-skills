@@ -1,10 +1,8 @@
 ﻿import { useEffect, useState } from 'react';
 import {
   submitFeedback,
-  updateFeedbackStatus,
   type FeedbackInput,
   type FeedbackItem,
-  type FeedbackStatus,
   type SkillInput,
   type SkillItem,
   type SkillFileEntry,
@@ -35,76 +33,7 @@ export interface Skill {
 export const ROLE_STORAGE_KEY = 'suit-skills-platform-role';
 export const adminOnlyViews = new Set<View>(['sources', 'users']);
 
-export const skills: Skill[] = [
-  {
-    id: 'skill-frontend-design',
-    name: 'frontend-design',
-    description: '创建高质量 Web 页面、组件和控制台界面，适合 React/Vite 项目。',
-    author: 'Design Ops',
-    source: '官方源',
-    category: '前端',
-    version: '2.2.0',
-    installs: 12840,
-    rating: 4.9,
-    reviews: 186,
-    status: '已验证',
-    tags: ['React', 'UI', 'Dashboard'],
-    command: 'npx suit-skills@latest install frontend-design',
-    updatedAt: '今天 09:30',
-    updatedAtValue: new Date('2026-04-26T01:30:00.000Z').getTime(),
-  },
-  {
-    id: 'skill-java-bugfix',
-    name: 'java-bugfix-workflow',
-    description: '定位并修复 Java/Spring/MyBatis 服务启动、接口和 SQL 类问题。',
-    author: 'Backend Guild',
-    source: '后端私有源',
-    category: '后端',
-    version: '1.1.4',
-    installs: 7210,
-    rating: 4.7,
-    reviews: 94,
-    status: '已验证',
-    tags: ['Java', 'Spring', 'Bugfix'],
-    command: 'npx suit-skills@latest install java-bugfix-workflow',
-    updatedAt: '昨天 18:12',
-    updatedAtValue: new Date('2026-04-25T10:12:00.000Z').getTime(),
-  },
-  {
-    id: 'skill-docx',
-    name: 'docx',
-    description: '创建、编辑、格式化 Word 文档，支持报告、模板、批注和内容整理。',
-    author: 'Document Team',
-    source: '官方源',
-    category: '文档',
-    version: '0.8.9',
-    installs: 5140,
-    rating: 4.6,
-    reviews: 61,
-    status: '已验证',
-    tags: ['Word', 'Report', 'Office'],
-    command: 'npx suit-skills@latest install docx',
-    updatedAt: '04-24 16:40',
-    updatedAtValue: new Date('2026-04-24T08:40:00.000Z').getTime(),
-  },
-  {
-    id: 'skill-audit',
-    name: 'audit',
-    description: '检查可访问性、性能、响应式、主题一致性和前端质量风险。',
-    author: 'Quality Lab',
-    source: '质量源',
-    category: '质量',
-    version: '1.5.0',
-    installs: 8360,
-    rating: 4.8,
-    reviews: 112,
-    status: '已验证',
-    tags: ['Audit', 'A11y', 'Performance'],
-    command: 'npx suit-skills@latest install audit',
-    updatedAt: '04-20 13:05',
-    updatedAtValue: new Date('2026-04-20T05:05:00.000Z').getTime(),
-  },
-];
+export const skills: Skill[] = [];
 
 export const navItems: Array<{ view: Exclude<View, 'detail'>; label: string; desc: string }> = [
   { view: 'market', label: '技能市场', desc: '浏览全部技能' },
@@ -115,7 +44,7 @@ export const navItems: Array<{ view: Exclude<View, 'detail'>; label: string; des
   { view: 'users', label: '用户管理', desc: '账号与角色' },
 ];
 
-export const categories = ['全部', ...Array.from(new Set(skills.map((skill) => skill.category)))];
+export const categories = ['全部'];
 export const reviewTags = ['易用性', '安装体验', '文档清晰', '稳定性', '效果优秀', '需要改进'];
 export const emptyForm: FeedbackInput = { rating: 5, tags: [], anonymous: false, contact: '', message: '' };
 
@@ -395,66 +324,23 @@ export function ReviewForm({
 
 export function ReviewItem({
   review,
-  onStatusChange,
 }: {
   review: FeedbackItem;
-  onStatusChange?: (review: FeedbackItem) => void;
 }) {
-  const [status, setStatus] = useState<FeedbackStatus>(review.status);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
-  const [errorDetails, setErrorDetails] = useState('');
-
-  useEffect(() => {
-    setStatus(review.status);
-    setError('');
-    setErrorDetails('');
-  }, [review.id, review.status]);
-
-  async function changeStatus(nextStatus: FeedbackStatus) {
-    const previousStatus = status;
-    setStatus(nextStatus);
-    setSaving(true);
-    setError('');
-    setErrorDetails('');
-    try {
-      const updated = await updateFeedbackStatus(review.id, nextStatus);
-      setStatus(updated.status);
-      onStatusChange?.(updated);
-    } catch (err) {
-      setStatus(previousStatus);
-      setError('状态更新失败');
-      const errorMessage = err instanceof Error ? err.message : '未知错误';
-      setErrorDetails(errorMessage);
-    } finally {
-      setSaving(false);
-    }
-  }
-
   return (
-    <article className="review-item" style={{ opacity: saving ? 0.7 : 1, transition: 'opacity 0.2s' }}>
+    <article className="review-item">
       <div className="panel-head">
         <strong>{review.skillName || '未知技能'} / {review.rating} 分</strong>
-        <select
-          disabled={saving}
-          value={status}
-          onChange={(event) => { void changeStatus(event.target.value as FeedbackStatus); }}
-          style={{ cursor: saving ? 'not-allowed' : 'pointer' }}
-        >
-          <option value="submitted">新评价</option><option value="reviewing">处理中</option><option value="approved">已采纳</option><option value="rejected">不采纳</option><option value="archived">已归档</option>
-        </select>
       </div>
       <p>{review.message}</p>
       <div className="tag-row">{review.tags.map((tag) => <em key={tag}>{tag}</em>)}</div>
       <small>{review.anonymous ? '匿名用户' : review.contact || '未填写联系方式'}</small>
-      {saving ? <small style={{ display: 'block', marginTop: '8px', color: '#0066cc' }}>⟳ 状态保存中...</small> : null}
-      {error ? <div className="form-feedback warn">{error}{errorDetails ? `：${errorDetails}` : '，请稍后重试。'}</div> : null}
     </article>
   );
 }
 
 function badgeClass(status: string): string {
-  if (['已同步', '已解析', '已发布', '已验证', '通过', '启用', '默认源'].includes(status)) return 'ok';
+  if (['已同步', '已解析', '已发布', '已验证', '通过', '启用'].includes(status)) return 'ok';
   if (['未保存', '未发布', '待审核', '待确认', '发布中', '待校验', '新发布'].includes(status)) return 'warn';
   if (['保存失败', '需处理', '已驳回', '发布失败', '停用'].includes(status)) return 'danger';
   return 'neutral';
@@ -465,8 +351,10 @@ export function sum(values: number[]) {
 }
 
 export function averageRating(items: Skill[]) {
-  if (!items.length) return '0.0';
-  return (items.reduce((total, item) => total + item.rating, 0) / items.length).toFixed(1);
+  const reviewCount = sum(items.map((item) => item.reviews));
+  if (!reviewCount) return '0.0';
+  const ratingTotal = items.reduce((total, item) => total + item.rating * item.reviews, 0);
+  return (ratingTotal / reviewCount).toFixed(1);
 }
 
 export function formatCompact(value: number) {
@@ -488,7 +376,7 @@ function statusLabelFromApi(status: SkillItem['status']): SkillStatus {
 function sourceLabel(source: string): string {
   const legacyPlatformSources = new Set(['official', 'backend-private', 'delivery-private', 'quality', 'platform', 'uploaded']);
   const normalizedSource = legacyPlatformSources.has(source) ? 'default' : source;
-  const labels: Record<string, string> = { default: 'Suit Skills 默认源', 'anthropics-skills': 'Anthropic 官方技能库', superpowers: 'Superpowers 工程技能库', 'vercel-agent-skills': 'Vercel Agent 技能库', 'huggingface-skills': 'Hugging Face 技能库', 'antigravity-awesome-skills': 'Antigravity 技能合集', 'awesome-claude-skills': 'Claude 技能资源索引' };
+  const labels: Record<string, string> = { default: '平台技能库', 'anthropics-skills': 'Anthropic 官方技能库', superpowers: 'Superpowers 工程技能库', 'vercel-agent-skills': 'Vercel Agent 技能库', 'huggingface-skills': 'Hugging Face 技能库', 'antigravity-awesome-skills': 'Antigravity 技能合集', 'awesome-claude-skills': 'Claude 技能资源索引' };
   return labels[normalizedSource] ?? normalizedSource;
 }
 

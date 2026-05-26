@@ -9,10 +9,9 @@ import {
 } from '../api/client';
 import { Badge, ConfirmDialog, PageHeader, formatDateTime, skillFromApi, type Skill } from './shared';
 import { EmptyState } from './EmptyState';
-import type { Role } from './shared';
 
-export function MySkillsPage({ fallbackSkills, role, onOpenSkill, onPublished }: { fallbackSkills: Skill[]; role: Role | null; onOpenSkill: (skillId: string) => void; onPublished?: () => void | Promise<void> }) {
-  const [mine, setMine] = useState<Skill[]>(fallbackSkills.filter((skill) => skill.source === '用户上传'));
+export function MySkillsPage({ canManageUploads = true, onOpenSkill, onPublished }: { canManageUploads?: boolean; onOpenSkill: (skillId: string) => void; onPublished?: () => void | Promise<void> }) {
+  const [mine, setMine] = useState<Skill[]>([]);
   const [uploads, setUploads] = useState<PackageUploadRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyUploadId, setBusyUploadId] = useState<string | null>(null);
@@ -154,7 +153,7 @@ export function MySkillsPage({ fallbackSkills, role, onOpenSkill, onPublished }:
             key={upload.id}
             upload={upload}
             busy={busyUploadId === upload.id}
-            canAdminManage={role === 'admin'}
+            canManage={canManageUploads}
             onPublish={() => void publishUpload(upload)}
             onDelete={() => setDeleteTarget({ kind: 'upload', item: upload })}
           />
@@ -164,7 +163,7 @@ export function MySkillsPage({ fallbackSkills, role, onOpenSkill, onPublished }:
           <EmptyState
             type={loading ? 'loading' : 'no-data'}
             title={loading ? '正在读取我的技能包' : '还没有技能包记录'}
-            description={loading ? '同步上传、审核和发布状态中。' : '上传或创建技能包后，会在这里显示审核和发布进度。'}
+            description={loading ? '同步上传和发布状态中。' : '上传或创建技能包后，会在这里显示保存和发布进度。'}
             ariaLabel={loading ? '加载中' : '没有技能包'}
           />
         ) : null}
@@ -229,13 +228,13 @@ function PublishedSkillRow({
 function UploadRecordRow({
   upload,
   busy,
-  canAdminManage,
+  canManage,
   onPublish,
   onDelete,
 }: {
   upload: PackageUploadRecord;
   busy: boolean;
-  canAdminManage: boolean;
+  canManage: boolean;
   onPublish: () => void;
   onDelete: () => void;
 }) {
@@ -259,14 +258,14 @@ function UploadRecordRow({
       <span className="skill-meta"><small>文件</small><strong>{upload.fileName}</strong></span>
       <span className="skill-meta"><small>状态</small><strong>{uploadStatusLabel(upload.status)}</strong></span>
       <span className="skill-meta"><small>更新</small><strong>{formatDateTime(upload.updatedAt)}</strong></span>
-      {canAdminManage ? (
+      {canManage ? (
         <span className="upload-actions">
           <button className="primary compact" type="button" disabled={busy || !canPublish} onClick={onPublish}>
             {busy && canPublish ? '发布中...' : upload.status === 'publish_failed' ? '重新发布' : '发布'}
           </button>
           <button className="danger compact" type="button" disabled={busy} onClick={onDelete}>删除</button>
         </span>
-      ) : <span className="skill-meta"><small>发布</small><strong>等待管理员</strong></span>}
+      ) : <span className="skill-meta"><small>发布</small><strong>等待发布</strong></span>}
       {upload.publishError ? <span className="package-error">{upload.publishError}</span> : null}
     </article>
   );

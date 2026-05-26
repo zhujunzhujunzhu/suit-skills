@@ -1,6 +1,6 @@
 {
   "name": "@suit-skills/app-cli",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "type": "module",
   "private": true,
   "description": "Suit Skills CLI application entrypoint.",
@@ -12,7 +12,7 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
-    "@suit-skills/core": "1.0.3",
+    "@suit-skills/core": "1.0.4",
     "adm-zip": "^0.5.17"
   }
 }

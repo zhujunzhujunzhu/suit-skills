@@ -179,7 +179,7 @@ export interface PlatformApiConfig {
 
 export interface OAuthConfig {
   enabled: boolean;
-  mode: 'oauth' | 'local' | 'none';
+  mode: 'oauth' | 'local' | 'external-token' | 'none';
   clientId: string;
   clientSecret: string;
   authorizationUrl: string;
@@ -190,6 +190,11 @@ export interface OAuthConfig {
   sessionSecret: string;
   adminEmails: string[];
   adminDomains: string[];
+  adminMatchPaths: string[];
+  userInfoIdPaths: string[];
+  userInfoLoginPaths: string[];
+  userInfoNamePaths: string[];
+  userInfoAvatarPaths: string[];
   bootstrapPassword?: string;
 }
 
