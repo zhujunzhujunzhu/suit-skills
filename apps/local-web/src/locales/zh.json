@@ -207,13 +207,20 @@
     "statusDisabled": "已停用",
     "enable": "启用",
     "disable": "停用",
+    "edit": "编辑",
     "delete": "删除",
     "deleteTitleDefault": "默认源不可删除",
     "deleteTitleLast": "至少保留一个已启用的源",
     "toggleTitleLast": "至少保留一个已启用的源",
     "confirmDelete": "删除源「{{name}}」？不会移除已安装的技能。{{description}}",
     "syncingTitle": "正在刷新源缓存",
-    "syncingHint": "网络检查最长约 30 秒"
+    "syncingHint": "网络检查最长约 30 秒",
+    "conflictEyebrow": "源名称冲突",
+    "conflictTitle": "本地已存在同名源",
+    "conflictDescription": "「{{name}}」当前指向 {{currentUrl}}，新的地址是 {{nextUrl}}。请选择换个名称继续，或覆盖原有本地缓存后使用新地址。",
+    "conflictRename": "换个名称",
+    "conflictOverwrite": "覆盖原有",
+    "conflictCancel": "取消"
   },
   "agents": {
     "title": "AI Coding Agents",
@@ -267,6 +274,7 @@
     "linkedMulti": "已关联 {{count}} 个目标",
     "alreadyAvailable": "已在目标中可用",
     "sourceAdded": "已添加源",
+    "sourceUpdated": "已更新源",
     "addedBuiltin": "已添加 {{count}} 个内置源",
     "builtinPresent": "内置源已存在",
     "sourceDisabled": "已停用源",
@@ -294,10 +302,6 @@
     "npxPlaceholder": "npx suit-skills@latest install <skill>"
   },
   "builtinSources": {
-    "default": {
-      "label": "Suit Skills 默认源",
-      "description": "默认技能库，新安装默认启用。"
-    },
     "anthropics-skills": {
       "label": "Anthropic 官方技能库",
       "description": "Claude 官方技能合集，适合作为基础技能来源。"

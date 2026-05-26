@@ -26,16 +26,15 @@ describe('theme defaults', () => {
 });
 
 describe('getDefaultConfig', () => {
-  it('sources 首项 name 为 default', () => {
+  it('does not include a preconfigured default source', () => {
     const cfg = getDefaultConfig();
-    expect(cfg.sources[0]?.name).toBe('default');
+    expect(cfg.defaultSource).toBe('');
+    expect(cfg.sources.some((source) => source.name === 'default')).toBe(false);
   });
 
-  it('默认源 URL 与文档一致', () => {
+  it('does not include the private team source URL by default', () => {
     const cfg = getDefaultConfig();
-    expect(cfg.sources[0]?.url).toBe(
-      'https://gitee.com/digital-construction-center_1/suit-skills-lib.git',
-    );
+    expect(JSON.stringify(cfg.sources)).not.toContain('digital-construction-center');
   });
 
   it('agents 包含常见约定目录（claude / cursor / agents / copilot / codex / gemini / opencode / openclaw）', () => {
@@ -73,7 +72,7 @@ describe('getDefaultConfig', () => {
     );
     expect(
       cfg.sources.filter((source) => source.enabled).map((source) => source.name),
-    ).toEqual(['default']);
+    ).toEqual([]);
     for (const builtin of BUILTIN_SOURCE_CATALOG) {
       const source = cfg.sources.find((item) => item.name === builtin.name);
       expect(source).toMatchObject({
@@ -183,30 +182,25 @@ describe('loadConfig', () => {
     const minimal = {
       sources: [
         {
-          name: 'default',
-          url: 'https://gitee.com/digital-construction-center_1/suit-skills-lib.git',
+          name: 'custom',
+          url: 'https://example.com/custom.git',
           enabled: true,
         },
       ],
-      defaultSource: 'default',
+      defaultSource: 'custom',
       agents: getDefaultConfig().agents,
       installTargets: [],
     };
     writeFileSync(getConfigPath(), JSON.stringify(minimal), 'utf8');
     const cfg = loadConfig();
-    expect(cfg.sources.map((source) => source.name)).toEqual(['default']);
+    expect(cfg.sources.map((source) => source.name)).toEqual(['custom']);
     const disk = JSON.parse(readFileSync(getConfigPath(), 'utf8')) as Config;
-    expect(disk.sources.map((source) => source.name)).toEqual(['default']);
+    expect(disk.sources.map((source) => source.name)).toEqual(['custom']);
   });
 
   it('迁移旧的 cn 重复源为同一个内置源的国内镜像', () => {
     const onDisk = {
       sources: [
-        {
-          name: 'default',
-          url: 'https://gitee.com/digital-construction-center_1/suit-skills-lib.git',
-          enabled: true,
-        },
         {
           name: 'anthropics-skills',
           url: 'https://github.com/anthropics/skills.git',
@@ -218,7 +212,7 @@ describe('loadConfig', () => {
           enabled: true,
         },
       ],
-      defaultSource: 'default',
+      defaultSource: '',
       agents: getDefaultConfig().agents,
       installTargets: [],
     };
@@ -272,11 +266,6 @@ describe('restoreBuiltinSources', () => {
     )!;
     const cfg: Config = {
       sources: [
-        {
-          name: 'default',
-          url: 'https://gitee.com/digital-construction-center_1/suit-skills-lib.git',
-          enabled: true,
-        },
         {
           name: superpowers.name,
           url: 'https://example.com/not-superpowers.git',
@@ -359,16 +348,16 @@ describe('saveConfig', () => {
     const deepRoot = join(outer, 'nested', 'suit-skills');
     process.env.SUIT_SKILLS_HOME = deepRoot;
     saveConfig(getDefaultConfig());
-    expect(loadConfig().defaultSource).toBe('default');
+    expect(loadConfig().defaultSource).toBe('');
     rmSync(outer, { recursive: true, force: true });
     process.env.SUIT_SKILLS_HOME = tempRoot;
   });
 });
 
 describe('getConfigValue', () => {
-  it('defaultSource 为 default', () => {
+  it('defaultSource is empty until the user sets one', () => {
     const cfg = getDefaultConfig();
-    expect(getConfigValue(cfg, 'defaultSource')).toBe('default');
+    expect(getConfigValue(cfg, 'defaultSource')).toBe('');
   });
 
   it('agents.claude.globalDir 为 ~/.claude/skills', () => {

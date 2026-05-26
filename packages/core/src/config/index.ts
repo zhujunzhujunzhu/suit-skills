@@ -12,8 +12,6 @@ import type {
 import { ensureDir } from '../utils/path.js';
 import { warn } from '../utils/output.js';
 
-const DEFAULT_SOURCE_URL =
-  'https://gitee.com/digital-construction-center_1/suit-skills-lib.git';
 export const DEFAULT_SOURCE_REFRESH_INTERVAL_MINUTES = 5;
 export const DEFAULT_THEME_COLOR = '#b7e05a';
 
@@ -32,14 +30,6 @@ export interface BuiltinSourceInfo {
   description: string;
   domesticMirrorUrl?: string;
 }
-
-export const DEFAULT_SOURCE_INFO: BuiltinSourceInfo = {
-  name: 'default',
-  url: DEFAULT_SOURCE_URL,
-  label: 'Suit Skills 默认源',
-  category: 'cn',
-  description: '默认技能库，新安装默认启用。',
-};
 
 export const BUILTIN_SOURCE_CATALOG: BuiltinSourceInfo[] = [
   {
@@ -92,10 +82,7 @@ export const BUILTIN_SOURCE_CATALOG: BuiltinSourceInfo[] = [
   },
 ];
 
-const ALL_BUILTIN_SOURCE_INFOS = [
-  DEFAULT_SOURCE_INFO,
-  ...BUILTIN_SOURCE_CATALOG,
-];
+const ALL_BUILTIN_SOURCE_INFOS = [...BUILTIN_SOURCE_CATALOG];
 
 function toConfiguredSource(
   info: BuiltinSourceInfo,
@@ -136,11 +123,8 @@ export function getConfigPath(options?: ConfigLocationOptions): string {
 
 export function getDefaultConfig(): Config {
   return {
-    sources: [
-      toConfiguredSource(DEFAULT_SOURCE_INFO, true),
-      ...BUILTIN_SOURCE_CATALOG.map((info) => toConfiguredSource(info, false)),
-    ],
-    defaultSource: 'default',
+    sources: BUILTIN_SOURCE_CATALOG.map((info) => toConfiguredSource(info, false)),
+    defaultSource: '',
     agents: {
       /** 中央存储：全局安装的实际目录 */
       agents: {

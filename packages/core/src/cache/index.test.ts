@@ -60,9 +60,9 @@ describe('getSourceCacheDir', () => {
     }
   });
 
-  it('测试用例 1：默认源 URL → 含 gitee-com-digital-construction-center-1-suit-skills-lib', () => {
+  it('测试用例 1：首个推荐源 URL → 返回对应缓存目录', () => {
     const url = getDefaultConfig().sources[0]!.url;
-    const expectedDir = 'gitee-com-digital-construction-center-1-suit-skills-lib';
+    const expectedDir = 'github-com-anthropics-skills';
     expect(getSourceCacheDir(url)).toBe(join(tempRoot, 'cache', expectedDir));
   });
 

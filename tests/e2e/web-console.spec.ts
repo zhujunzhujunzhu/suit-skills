@@ -1,18 +1,17 @@
 import { expect, test, type Page } from '@playwright/test';
 
 const SOURCES_RESPONSE = {
-  defaultSource: 'default',
+  defaultSource: '',
   sources: [
     {
-      name: 'default',
-      url: 'https://gitee.com/digital-construction-center_1/suit-skills-lib.git',
+      name: 'team',
+      url: 'https://example.com/team-skills.git',
       enabled: true,
-      builtin: true,
-      label: 'Suit Skills default source',
-      category: 'cn',
-      description: 'Default skill source for tests.',
-      effectiveUrl:
-        'https://gitee.com/digital-construction-center_1/suit-skills-lib.git',
+      builtin: false,
+      label: 'Team source',
+      category: 'custom',
+      description: 'User-defined skill source for tests.',
+      effectiveUrl: 'https://example.com/team-skills.git',
     },
   ],
 };
@@ -26,7 +25,7 @@ function makeSkills(count: number) {
       description: `Test skill ${id}`,
       author: 'e2e',
       tags: index % 2 === 0 ? ['frontend', 'quality'] : ['backend'],
-      sourceName: 'default',
+      sourceName: 'team',
       installed: false,
       installedTargets: [],
       metadataSource: 'skill-md',

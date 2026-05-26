@@ -29,7 +29,7 @@ export function registerList(program: Command, ctx: CliContext): void {
     .option('--json', 'output as JSON')
     .action((opts: ListOptions) => {
       const config = ctx.loadConfig();
-      const sourceFilter = opts.source ?? config.defaultSource;
+      const sourceFilter = (opts.source ?? config.defaultSource) || 'all';
       let rows = collectMetasFromSources(ctx, config, sourceFilter, {
         forceRefresh: opts.refresh === true,
       });

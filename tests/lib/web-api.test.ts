@@ -34,6 +34,19 @@ import {
   updateWebSource,
 } from '../../apps/cli/src/lib/web/api.js';
 
+const TEST_SOURCE = {
+  name: 'team',
+  url: 'https://github.com/acme/team-skills.git',
+  enabled: true,
+};
+
+function getConfigWithUserSource() {
+  const config = getDefaultConfig();
+  config.sources = [{ ...TEST_SOURCE }, ...config.sources];
+  config.defaultSource = TEST_SOURCE.name;
+  return config;
+}
+
 function writeSkill(
   cacheRoot: string,
   name: string,
@@ -101,8 +114,8 @@ describe('web api', () => {
     mkdirSync(suitHome, { recursive: true });
     process.env.SUIT_SKILLS_HOME = suitHome;
 
-    const config = getDefaultConfig();
-    sourceUrl = config.sources[0]!.url;
+    const config = getConfigWithUserSource();
+    sourceUrl = TEST_SOURCE.url;
     writeFileSync(
       join(suitHome, 'config.json'),
       `${JSON.stringify(config, null, 2)}\n`,
@@ -140,14 +153,14 @@ describe('web api', () => {
 
   it('lists sources', () => {
     const result = listWebSources(ctx());
-    expect(result.defaultSource).toBe('default');
-    expect(result.sources[0]?.name).toBe('default');
+    expect(result.defaultSource).toBe('team');
+    expect(result.sources[0]?.name).toBe('team');
     expect(result.sources[0]).toMatchObject({
-      builtin: true,
-      category: 'cn',
-      label: 'Suit Skills 默认源',
-      description: '默认技能库，新安装默认启用。',
-      effectiveUrl: 'https://gitee.com/digital-construction-center_1/suit-skills-lib.git',
+      builtin: false,
+      category: 'custom',
+      label: 'team',
+      description: 'User-defined skill source.',
+      effectiveUrl: TEST_SOURCE.url,
     });
     const anthropics = result.sources.find(
       (source) => source.name === 'anthropics-skills',
@@ -175,11 +188,6 @@ describe('web api', () => {
           description: source.description,
         })),
     ).toEqual([
-      {
-        name: 'default',
-        label: 'Suit Skills 默认源',
-        description: '默认技能库，新安装默认启用。',
-      },
       {
         name: 'anthropics-skills',
         label: 'Anthropic 官方技能库',
@@ -214,16 +222,8 @@ describe('web api', () => {
   });
 
   it('restores missing built-in sources without touching custom sources', () => {
-    const config = getDefaultConfig();
-    config.sources = [
-      config.sources[0]!,
-      {
-        name: 'team',
-        url: 'https://github.com/acme/team-skills.git',
-        enabled: true,
-      },
-    ];
-    config.defaultSource = 'team';
+    const config = getConfigWithUserSource();
+    config.sources = [{ ...TEST_SOURCE }];
     writeFileSync(
       join(suitHome, 'config.json'),
       `${JSON.stringify(config, null, 2)}\n`,
@@ -258,19 +258,33 @@ describe('web api', () => {
 
   it('adds, disables, enables, and removes custom sources', () => {
     const added = addWebSource(ctx(), {
-      name: 'team',
-      url: 'https://github.com/acme/team-skills.git',
+      name: 'extra',
+      url: 'https://github.com/acme/extra-skills.git',
     });
-    expect(added.source).toMatchObject({ name: 'team', enabled: true });
+    expect(added.source).toMatchObject({ name: 'extra', enabled: true });
 
+    const disabled = updateWebSource(ctx(), 'extra', { enabled: false });
+    expect(disabled.source.enabled).toBe(false);
+
+    const enabled = updateWebSource(ctx(), 'extra', { enabled: true });
+    expect(enabled.source.enabled).toBe(true);
+
+    const removed = removeWebSource(ctx(), 'extra');
+    expect(removed.sources.some((source) => source.name === 'extra')).toBe(false);
+  });
+
+  it('updates a source url without forcing enabled state changes', () => {
+    updateWebSource(ctx(), 'anthropics-skills', { enabled: true });
     const disabled = updateWebSource(ctx(), 'team', { enabled: false });
     expect(disabled.source.enabled).toBe(false);
 
-    const enabled = updateWebSource(ctx(), 'team', { enabled: true });
-    expect(enabled.source.enabled).toBe(true);
-
-    const removed = removeWebSource(ctx(), 'team');
-    expect(removed.sources.some((source) => source.name === 'team')).toBe(false);
+    const updated = updateWebSource(ctx(), 'team', {
+      url: 'https://github.com/acme/team-v2.git',
+    });
+    expect(updated.source).toMatchObject({
+      url: 'https://github.com/acme/team-v2.git',
+      enabled: false,
+    });
   });
 
   it('toggles a built-in domestic mirror without changing the source name', () => {
@@ -294,14 +308,13 @@ describe('web api', () => {
   });
 
   it('does not disable the last enabled source', () => {
-    expect(() => updateWebSource(ctx(), 'default', { enabled: false })).toThrow(
+    expect(() => updateWebSource(ctx(), 'team', { enabled: false })).toThrow(
       'Cannot disable the last enabled source',
     );
   });
 
   it('does not remove the last enabled source', () => {
     const config = getDefaultConfig();
-    config.sources[0] = { ...config.sources[0]!, enabled: false };
     config.sources.push({
       name: 'team',
       url: 'https://github.com/acme/team-skills.git',
@@ -317,10 +330,11 @@ describe('web api', () => {
     );
   });
 
-  it('does not remove the default source', () => {
-    expect(() => removeWebSource(ctx(), 'default')).toThrow(
-      'Cannot remove default source',
-    );
+  it('removes the configured default source and clears defaultSource', () => {
+    updateWebSource(ctx(), 'anthropics-skills', { enabled: true });
+    const result = removeWebSource(ctx(), 'team');
+    expect(result.defaultSource).toBe('');
+    expect(result.sources.some((source) => source.name === 'team')).toBe(false);
   });
 
   it('lists and filters skills', () => {
@@ -374,7 +388,7 @@ describe('web api', () => {
   });
 
   it('keeps all enabled skills usable when one source cannot refresh', () => {
-    const config = getDefaultConfig();
+    const config = getConfigWithUserSource();
     config.sources.push({
       name: 'github-only',
       url: 'https://github.com/acme/skills.git',
@@ -400,14 +414,16 @@ describe('web api', () => {
 
     const result = listWebSkills(partialCtx, { source: 'all' });
     expect(result.items.map((item) => item.name)).toContain('code-review');
-    expect(result.warnings).toEqual([
+    expect(result.warnings).toEqual(expect.arrayContaining([
       expect.objectContaining({
         sourceName: 'github-only',
         url: 'https://github.com/acme/skills.git',
         usingCache: false,
       }),
-    ]);
-    expect(result.warnings[0]?.message).toContain('timed out after 30s');
+    ]));
+    expect(
+      result.warnings.find((warning) => warning.sourceName === 'github-only')?.message,
+    ).toContain('timed out after 30s');
   });
 
   it('reports local cache warnings without hiding cached skills', () => {
@@ -423,11 +439,11 @@ describe('web api', () => {
       },
     });
 
-    const result = listWebSkills(cachedCtx, { source: 'default' });
+    const result = listWebSkills(cachedCtx, { source: 'team' });
     expect(result.items.map((item) => item.name)).toContain('code-review');
     expect(result.warnings).toEqual([
       expect.objectContaining({
-        sourceName: 'default',
+        sourceName: 'team',
         usingCache: true,
       }),
     ]);
@@ -813,7 +829,7 @@ describe('web api', () => {
         name: 'code-review',
         target: 'claude',
         scope: 'project',
-        sourceName: 'default',
+        sourceName: 'team',
       }),
     ]);
   });
@@ -858,7 +874,7 @@ describe('web api', () => {
   it('installs and removes a skill through web api helpers', () => {
     const result = installWebSkill(ctx(), {
       identifier: 'react-helper',
-      source: 'default',
+      source: 'team',
       targets: ['skills'],
       strategy: 'overwrite',
     });

@@ -206,13 +206,20 @@
     "statusDisabled": "disabled",
     "enable": "Enable",
     "disable": "Disable",
+    "edit": "Edit",
     "delete": "Delete",
     "deleteTitleDefault": "Default source cannot be removed",
     "deleteTitleLast": "At least one source must stay enabled",
     "toggleTitleLast": "At least one source must stay enabled",
     "confirmDelete": "Delete source \"{{name}}\"? Installed skills are not removed. {{description}}",
     "syncingTitle": "Refreshing source cache",
-    "syncingHint": "Network checks time out after 30s"
+    "syncingHint": "Network checks time out after 30s",
+    "conflictEyebrow": "Source name conflict",
+    "conflictTitle": "A local source already uses this name",
+    "conflictDescription": "\"{{name}}\" currently points to {{currentUrl}}. The new URL is {{nextUrl}}. Choose a new name, or overwrite the existing local cache and use the new URL.",
+    "conflictRename": "Use another name",
+    "conflictOverwrite": "Overwrite existing",
+    "conflictCancel": "Cancel"
   },
   "agents": {
     "title": "AI Coding Agents",
@@ -266,6 +273,7 @@
     "linkedMulti": "Linked to {{count}} targets",
     "alreadyAvailable": "Already available",
     "sourceAdded": "Source added",
+    "sourceUpdated": "Source updated",
     "addedBuiltin": "Added {{count}} built-in sources",
     "builtinPresent": "Built-in sources already present",
     "sourceDisabled": "Source disabled",
@@ -294,10 +302,6 @@
     "npxPlaceholder": "npx suit-skills@latest install <skill>"
   },
   "builtinSources": {
-    "default": {
-      "label": "Suit Skills default catalog",
-      "description": "Default skill library maintained for Suit Skills, enabled by default on new installs."
-    },
     "anthropics-skills": {
       "label": "Anthropic official skills",
       "description": "Official Claude skills collection—solid foundation for your skill sources."

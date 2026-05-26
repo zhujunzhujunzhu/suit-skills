@@ -634,10 +634,25 @@ export async function addSource(requestBody: {
 
 export async function updateSource(
   name: string,
-  requestBody: { enabled?: boolean; domesticMirror?: { enabled?: boolean } },
+  requestBody: {
+    enabled?: boolean;
+    url?: string;
+    domesticMirror?: { enabled?: boolean };
+    clearCache?: boolean;
+  },
 ): Promise<SourcesResponse & { source: Source }> {
   const tauri = await getTauriApi();
   if (tauri) {
+    if (requestBody.url !== undefined) {
+      await tauri.tauriRunCommand([
+        'source',
+        'update',
+        name,
+        '--url',
+        requestBody.url,
+        '--clear-cache',
+      ]);
+    }
     if (requestBody.enabled !== undefined) {
       await tauri.tauriUpdateSource(name, requestBody.enabled);
     }

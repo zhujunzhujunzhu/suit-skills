@@ -217,10 +217,12 @@ export interface WebAddSourceRequest {
 }
 
 export interface WebUpdateSourceRequest {
+  url?: string;
   enabled?: boolean;
   domesticMirror?: {
     enabled?: boolean;
   };
+  clearCache?: boolean;
 }
 
 export interface WebSource extends Source {
@@ -1178,13 +1180,6 @@ export function removeWebSource(
 ): WebSourcesResponse & { removed: string } {
   const config = ctx.loadConfig();
   const sourceName = normalizeSourceName(name);
-  if (sourceName === 'default' || config.defaultSource === sourceName) {
-    throw new WebApiError(
-      'CANNOT_REMOVE_DEFAULT_SOURCE',
-      'Cannot remove default source',
-      400,
-    );
-  }
   const index = config.sources.findIndex((source) => source.name === sourceName);
   if (index === -1) {
     throw new WebApiError('SOURCE_NOT_FOUND', 'Source not found', 404);
@@ -1199,6 +1194,9 @@ export function removeWebSource(
     );
   }
   config.sources.splice(index, 1);
+  if (config.defaultSource === sourceName) {
+    config.defaultSource = '';
+  }
   ctx.saveConfig(config);
   getRowsCacheForContext(ctx).clear();
   return { ...sourcesResponse(config), removed: sourceName };
@@ -1225,6 +1223,26 @@ export function updateWebSource(
       );
     }
     source.enabled = request.enabled;
+  }
+  if (typeof request.url === 'string') {
+    const url = normalizeSourceUrl(request.url);
+    if (
+      config.sources.some(
+        (item) =>
+          item.name !== sourceName &&
+          (item.url.trim() === url || item.domesticMirror?.url.trim() === url),
+      )
+    ) {
+      throw new WebApiError('SOURCE_ALREADY_EXISTS', 'Source already exists', 409);
+    }
+    const previousUrl = getEffectiveSourceUrl(source);
+    source.url = url;
+    if (request.clearCache === true && previousUrl !== getEffectiveSourceUrl(source)) {
+      rmSync(getSourceCacheDir(previousUrl, ctx.configOptions), {
+        recursive: true,
+        force: true,
+      });
+    }
   }
   if (
     source.domesticMirror &&

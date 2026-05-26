@@ -162,8 +162,26 @@ async function startWindowDrag(event: MouseEvent<HTMLElement>): Promise<void> {
   }
 }
 
-function ErrorState({ message }: { message: string }) {
-  return <div className="state error">{message}</div>;
+function ErrorState({
+  message,
+  onDismiss,
+}: {
+  message: string;
+  onDismiss: () => void;
+}) {
+  return (
+    <div className="state error">
+      <span>{message}</span>
+      <button
+        aria-label="关闭错误提示"
+        className="state-error-close"
+        type="button"
+        onClick={onDismiss}
+      >
+        ×
+      </button>
+    </div>
+  );
 }
 
 function installedSkillMatches(item: InstalledSkill, query: string): boolean {
@@ -239,7 +257,7 @@ export default function App() {
   const [view, setView] = useState<View>(viewFromHash);
   const [sources, setSources] = useState<Source[]>([]);
   const [source, setSource] = useState('all');
-  const [defaultSource, setDefaultSource] = useState('default');
+  const [defaultSource, setDefaultSource] = useState('');
   const [query, setQuery] = useState('');
   const [tag, setTag] = useState('');
   const [skills, setSkills] = useState<SkillSummary[]>([]);
@@ -266,6 +284,11 @@ export default function App() {
   const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
   const [sourceName, setSourceName] = useState('');
   const [sourceUrl, setSourceUrl] = useState('');
+  const [sourceConflict, setSourceConflict] = useState<{
+    name: string;
+    url: string;
+    existing: Source;
+  } | null>(null);
   const [updateAvailable, setUpdateAvailable] = useState<DesktopRelease | null>(null);
   const [updateDismissed, setUpdateDismissed] = useState(false);
   const [currentAppVersion, setCurrentAppVersion] = useState<string | null>(null);
@@ -947,6 +970,15 @@ export default function App() {
       setError('Source URL is required');
       return;
     }
+    const existing = sources.find((item) => item.name === name);
+    if (existing) {
+      if (existing.url === url || existing.effectiveUrl === url) {
+        setError('Source already exists');
+        return;
+      }
+      setSourceConflict({ name, url, existing });
+      return;
+    }
     try {
       setError('');
       const result = await addSource({ name, url });
@@ -956,6 +988,53 @@ export default function App() {
       setSourceName('');
       setSourceUrl('');
       notify(t('toast.sourceAdded'));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  function editSourceFromRow(item: Source) {
+    setSourceName(item.name);
+    setSourceUrl(item.url);
+    setError('');
+    setSourceConflict(null);
+  }
+
+  function suggestSourceName(baseName: string): string {
+    const used = new Set(sources.map((item) => item.name));
+    for (let index = 2; index < 1000; index += 1) {
+      const candidate = `${baseName}-${index}`;
+      if (!used.has(candidate)) {
+        return candidate;
+      }
+    }
+    return `${baseName}-${Date.now()}`;
+  }
+
+  function renameConflictingSource() {
+    if (!sourceConflict) return;
+    setSourceName(suggestSourceName(sourceConflict.name));
+    setSourceConflict(null);
+  }
+
+  async function overwriteConflictingSource() {
+    if (!sourceConflict) return;
+    try {
+      setError('');
+      const result = await updateSource(sourceConflict.name, {
+        url: sourceConflict.url,
+        clearCache: true,
+        enabled: sourceConflict.existing.enabled,
+      });
+      const nextSource = nextSelectableSource(result.sources, source);
+      setSources(result.sources);
+      setDefaultSource(result.defaultSource);
+      setSource(nextSource);
+      setSourceName('');
+      setSourceUrl('');
+      setSourceConflict(null);
+      notify(t('toast.sourceUpdated'));
+      await loadSkills(nextSource);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -1209,7 +1288,12 @@ export default function App() {
             }}
           />
         ) : null}
-        {error ? <ErrorState message={translateApiError(t, error)} /> : null}
+        {error ? (
+          <ErrorState
+            message={translateApiError(t, error)}
+            onDismiss={() => setError('')}
+          />
+        ) : null}
         {view === 'library' ? (
           <Suspense fallback={<div className="state">加载技能库中…</div>}>
             <LazyLibraryView
@@ -1296,6 +1380,7 @@ export default function App() {
               name={sourceName}
               onAdd={addSourceFromForm}
               onDelete={deleteSource}
+              onEdit={editSourceFromRow}
               onNameChange={setSourceName}
               onRestore={restoreBuiltinsFromCatalog}
               onToggleAllMirrors={toggleAllSourceMirrors}
@@ -1344,6 +1429,47 @@ export default function App() {
       </main>
 
       {toast ? <div className="toast">{toast}</div> : null}
+      {sourceConflict ? (
+        <div className="confirm-dialog-layer" role="presentation">
+          <button
+            aria-label={t('sources.conflictCancel')}
+            className="confirm-dialog-scrim"
+            type="button"
+            onClick={() => setSourceConflict(null)}
+          />
+          <section
+            className="confirm-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="source-conflict-title"
+            aria-describedby="source-conflict-description"
+          >
+            <div className="confirm-dialog-mark" aria-hidden="true">i</div>
+            <div className="confirm-dialog-copy">
+              <p className="eyebrow">{t('sources.conflictEyebrow')}</p>
+              <h2 id="source-conflict-title">{t('sources.conflictTitle')}</h2>
+              <p id="source-conflict-description">
+                {t('sources.conflictDescription', {
+                  name: sourceConflict.name,
+                  currentUrl: sourceConflict.existing.url,
+                  nextUrl: sourceConflict.url,
+                })}
+              </p>
+            </div>
+            <div className="confirm-dialog-actions">
+              <button type="button" onClick={() => setSourceConflict(null)}>
+                {t('sources.conflictCancel')}
+              </button>
+              <button type="button" onClick={renameConflictingSource}>
+                {t('sources.conflictRename')}
+              </button>
+              <button className="danger solid" type="button" onClick={() => { void overwriteConflictingSource(); }}>
+                {t('sources.conflictOverwrite')}
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -25,12 +25,12 @@ describe('urlToCacheDirName', () => {
     ).toBe('github-com-org-repo');
   });
 
-  it('将路径中的下划线替换为短横线（默认 Gitee 源 URL）', () => {
+  it('将路径中的下划线替换为短横线', () => {
     expect(
       urlToCacheDirName(
-        'https://gitee.com/digital-construction-center_1/suit-skills-lib.git',
+        'https://gitee.com/example_org/suit-skills-lib.git',
       ),
-    ).toBe('gitee-com-digital-construction-center-1-suit-skills-lib');
+    ).toBe('gitee-com-example-org-suit-skills-lib');
   });
 });
 

@@ -1546,6 +1546,9 @@ button {
 }
 
 .state.error {
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
   min-height: auto;
   width: min(1480px, calc(100% - 56px));
   margin: 18px auto 0;
@@ -1554,6 +1557,29 @@ button {
   border: 1px solid color-mix(in srgb, var(--error) 38%, transparent);
   background: color-mix(in srgb, var(--error) 8%, var(--surface-low));
   color: var(--error);
+}
+
+.state.error > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.state-error-close {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid color-mix(in srgb, var(--error) 40%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface-lowest) 68%, transparent);
+  color: var(--error);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.state-error-close:hover {
+  background: color-mix(in srgb, var(--error) 14%, var(--surface-lowest));
 }
 
 .source-warnings {
@@ -2102,6 +2128,84 @@ button {
 
 .source-confirm-strip {
   margin-top: 2px;
+}
+
+.confirm-dialog-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+}
+
+.confirm-dialog-scrim {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: rgba(5, 8, 5, 0.62);
+  backdrop-filter: blur(8px);
+}
+
+.confirm-dialog {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 14px;
+  width: min(560px, 100%);
+  padding: 18px;
+  border: 1px solid color-mix(in srgb, var(--primary) 34%, var(--outline));
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--surface-high) 94%, var(--primary));
+  box-shadow: var(--shadow-strong);
+}
+
+.confirm-dialog-mark {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  background: var(--primary);
+  color: var(--primary-ink);
+  font-family: var(--display);
+  font-weight: 800;
+}
+
+.confirm-dialog-copy {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.confirm-dialog-copy .eyebrow {
+  margin: 0;
+  color: var(--primary);
+  font-family: var(--mono);
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.confirm-dialog-copy h2 {
+  margin: 0;
+  font-family: var(--display);
+  font-size: 22px;
+}
+
+.confirm-dialog-copy p:last-child {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.confirm-dialog-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
 }
 
 .toast {

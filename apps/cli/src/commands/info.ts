@@ -51,7 +51,7 @@ export function registerInfo(program: Command, ctx: CliContext): void {
     .option('--json', 'output as JSON')
     .action((nameArg: string, opts: InfoOptions) => {
       const config = ctx.loadConfig();
-      const sourceFilter = opts.source ?? config.defaultSource;
+      const sourceFilter = (opts.source ?? config.defaultSource) || 'all';
       const hit = findSkillAcrossSources(
         ctx,
         config,

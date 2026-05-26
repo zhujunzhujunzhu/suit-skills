@@ -8,6 +8,7 @@ export default function SourcesView({
   name,
   onAdd,
   onDelete,
+  onEdit,
   onNameChange,
   onRestore,
   onToggle,
@@ -22,6 +23,7 @@ export default function SourcesView({
   name: string;
   onAdd: () => void;
   onDelete: (name: string) => Promise<void> | void;
+  onEdit: (source: Source) => void;
   onNameChange: (value: string) => void;
   onRestore: () => void;
   onToggle: (source: Source) => void;
@@ -100,14 +102,9 @@ export default function SourcesView({
       <div className="source-list" aria-busy={refreshing}>
         {sources.map((source) => {
           const isLastEnabledSource = source.enabled && enabledCount <= 1;
-          const cannotDelete =
-            source.name === defaultSource ||
-            source.name === 'default' ||
-            isLastEnabledSource;
+          const cannotDelete = isLastEnabledSource;
           const deleteTitle =
-            source.name === defaultSource || source.name === 'default'
-              ? t('sources.deleteTitleDefault')
-              : isLastEnabledSource
+            isLastEnabledSource
                 ? t('sources.deleteTitleLast')
                 : undefined;
           const confirming = confirmDeleteSource === source.name;
@@ -176,6 +173,14 @@ export default function SourcesView({
                       : t('sources.mirrorToggleOff')}
                   </button>
                 ) : null}
+                <button
+                  type="button"
+                  className="button"
+                  disabled={refreshing}
+                  onClick={() => onEdit(source)}
+                >
+                  {t('sources.edit')}
+                </button>
                 <button
                   type="button"
                   className="button danger"

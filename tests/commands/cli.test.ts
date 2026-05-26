@@ -10,7 +10,7 @@ import {
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { getDefaultConfig } from '@suit-skills/core';
-import { getSourceCacheDir } from '@suit-skills/core';
+import { getEffectiveSourceUrl, getSourceCacheDir } from '@suit-skills/core';
 import { createCliContext } from '../../apps/cli/src/cli/context.js';
 import {
   createProgramForTest,
@@ -52,10 +52,12 @@ describe('阶段 9 CLI', () => {
     process.env.SUIT_SKILLS_HOME = suitHome;
 
     const base = getDefaultConfig();
-    defaultUrl = base.sources[0]!.url;
     extraUrl = 'https://github.com/extra/skills-repo.git';
 
     const cfg = structuredClone(base);
+    cfg.sources[0]!.enabled = true;
+    cfg.defaultSource = cfg.sources[0]!.name;
+    defaultUrl = getEffectiveSourceUrl(cfg.sources[0]!);
     cfg.sources.push({
       name: 'my-source',
       url: extraUrl,
@@ -757,11 +759,14 @@ describe('阶段 9 CLI', () => {
       ).rejects.toThrow('Source already exists');
     });
 
-    it('不能删除 default', async () => {
+    it('删除当前配置的 defaultSource 后会清空默认指向', async () => {
       const prog = createProgramForTest(ctx());
-      await expect(
-        runCliUserArgs(prog, ['source', 'remove', 'default']),
-      ).rejects.toThrow('Cannot remove default source');
+      await runCliUserArgs(prog, ['source', 'remove', 'anthropics-skills']);
+      const cfg = JSON.parse(
+        readFileSync(join(suitHome, 'config.json'), 'utf8'),
+      ) as { defaultSource: string; sources: { name: string }[] };
+      expect(cfg.defaultSource).toBe('');
+      expect(cfg.sources.some((s) => s.name === 'anthropics-skills')).toBe(false);
     });
 
     it('list含 enabled/disabled', async () => {
@@ -860,7 +865,7 @@ describe('阶段 9 CLI', () => {
       });
       const prog = createProgramForTest(ctx());
       await runCliUserArgs(prog, ['config', 'get', 'defaultSource']);
-      expect(lines.some((l) => l.includes('default'))).toBe(true);
+      expect(lines.some((l) => l.includes('anthropics-skills'))).toBe(true);
     });
 
     it('config set 后可读回', async () => {
@@ -905,7 +910,7 @@ describe('阶段 9 CLI', () => {
         aiEditConfig: { provider: string };
       };
 
-      expect(payload.sources.defaultSource).toBe('default');
+      expect(payload.sources.defaultSource).toBe('anthropics-skills');
       expect(payload.sources.sources.length).toBeGreaterThan(0);
       expect(payload.settings.themeMode).toBe('default');
       expect(payload.installTargets.targets.some((target) => target.id === 'agents')).toBe(true);

@@ -1,10 +1,12 @@
 import type { Command } from 'commander';
+import { rmSync } from 'node:fs';
 import type { Source } from '../types/index.js';
 import type { CliContext } from '../cli/context.js';
 import { findSourceByName } from '../cli/helpers.js';
 import {
   getBuiltinSourceInfo,
   getEffectiveSourceUrl,
+  getSourceCacheDir,
   restoreBuiltinSources,
   type BuiltinSourceCategory,
 } from '@suit-skills/core';
@@ -141,16 +143,47 @@ export function registerSource(program: Command, ctx: CliContext): void {
     .argument('<name>', 'source name')
     .action((name: string) => {
       const cfg = ctx.loadConfig();
-      if (name === 'default') {
-        throw new Error('Cannot remove default source');
-      }
       const idx = cfg.sources.findIndex((s) => s.name === name);
       if (idx === -1) {
         throw new Error('Source not found');
       }
       cfg.sources.splice(idx, 1);
+      if (cfg.defaultSource === name) {
+        cfg.defaultSource = '';
+      }
       ctx.saveConfig(cfg);
       success(`Removed source ${name}`);
+    });
+
+  src
+    .command('update')
+    .description('Update a source URL')
+    .argument('<name>', 'source name')
+    .option('--url <url>', 'git repository URL')
+    .option('--clear-cache', 'remove the old local cache when URL changes')
+    .action((name: string, opts: { url?: string; clearCache?: boolean }) => {
+      const cfg = ctx.loadConfig();
+      const s = findSourceByName(cfg, name);
+      if (!s) {
+        throw new Error('Source not found');
+      }
+      const nextUrl = opts.url?.trim();
+      if (!nextUrl) {
+        throw new Error('Source URL is required');
+      }
+      if (urlExists({ sources: cfg.sources.filter((source) => source.name !== name) }, nextUrl)) {
+        throw new Error('Source already exists');
+      }
+      const previousUrl = getEffectiveSourceUrl(s);
+      s.url = nextUrl;
+      if (opts.clearCache && previousUrl && previousUrl !== getEffectiveSourceUrl(s)) {
+        rmSync(getSourceCacheDir(previousUrl, ctx.configOptions), {
+          recursive: true,
+          force: true,
+        });
+      }
+      ctx.saveConfig(cfg);
+      success(`Updated source ${name}`);
     });
 
   src

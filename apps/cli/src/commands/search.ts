@@ -26,7 +26,7 @@ export function registerSearch(program: Command, ctx: CliContext): void {
         throw new Error('Search keyword is required');
       }
       const config = ctx.loadConfig();
-      const sourceFilter = opts.source ?? config.defaultSource;
+      const sourceFilter = (opts.source ?? config.defaultSource) || 'all';
       const rows = collectMetasFromSources(ctx, config, sourceFilter, {
         forceRefresh: opts.refresh === true,
       });

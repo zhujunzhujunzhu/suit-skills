@@ -25,8 +25,8 @@ describe('类型定义', () => {
 
   it('能够构造合法的 Source', () => {
     const source: Source = {
-      name: 'default',
-      url: 'https://gitee.com/digital-construction-center_1/suit-skills-lib.git',
+      name: 'team',
+      url: 'https://example.com/team-skills.git',
       enabled: true,
     };
     expect(source.enabled).toBe(true);
@@ -42,13 +42,13 @@ describe('类型定义', () => {
 
   it('能够构造合法的 Config', () => {
     const config: Config = {
-      sources: [{ name: 'default', url: 'https://example.com', enabled: true }],
-      defaultSource: 'default',
+      sources: [{ name: 'team', url: 'https://example.com', enabled: true }],
+      defaultSource: 'team',
       agents: {
         claude: { globalDir: '~/.claude/skills', projectDir: './.claude/skills' },
       },
     };
-    expect(config.defaultSource).toBe('default');
+    expect(config.defaultSource).toBe('team');
     expect(config.agents.claude.globalDir).toBeTruthy();
   });
 
