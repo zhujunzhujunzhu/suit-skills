@@ -40,9 +40,15 @@ Docker 部署需要：
 | `PLATFORM_WEB_APP_URL` | `https://skills.example.com` | 前端访问地址，用于登录后跳转 |
 | `PLATFORM_API_PUBLIC_URL` | `https://skills.example.com` | API 对外地址；同源反代时填前端域名 |
 | `PLATFORM_API_CORS_ORIGIN` | `https://skills.example.com` | 允许跨域来源；同源反代也建议显式配置 |
-| `PLATFORM_AUTH_MODE` | `local` | 本地数据库账号模式；接入 OAuth 时改为 `oauth` |
+| `PLATFORM_AUTH_MODE` | `local` | 本地数据库账号模式；接入 OAuth 时改为 `oauth`，外部 token 登录时改为 `external-token` |
 | `PLATFORM_AUTH_SESSION_SECRET` | 随机长字符串 | Cookie 会话签名密钥，生产环境必须修改 |
+| `PLATFORM_AUTH_USERINFO_URL` | `https://auth.example.com/api/getUserInfo` | 外部 token 登录或 OAuth 登录时调用的用户信息接口 |
+| `PLATFORM_AUTH_USER_LOGIN_PATHS` | `user.userName,user.email,email` | 从用户信息响应中提取登录标识的字段路径，按顺序取第一个有值字段 |
+| `PLATFORM_AUTH_USER_ID_PATHS` | `user.userId,user.id,user.userName` | 从用户信息响应中提取本地用户 ID 的字段路径 |
+| `PLATFORM_AUTH_USER_NAME_PATHS` | `user.nickName,user.name,user.userName` | 从用户信息响应中提取展示名称的字段路径 |
+| `PLATFORM_AUTH_ADMIN_MATCH_PATHS` | `user.userName,user.email,email` | 从用户信息响应中提取用于匹配管理员名单的字段路径 |
 | `PLATFORM_ADMIN_EMAILS` | `admin@example.com,ops@example.com` | 管理员邮箱列表 |
+| `PLATFORM_ADMIN_USERS` | `zhujun,ops` | 管理员外部用户名/登录名列表，可选 |
 | `PLATFORM_ADMIN_DOMAINS` | `example.com` | 管理员邮箱域名列表，可选 |
 | `PLATFORM_AUTH_BOOTSTRAP_PASSWORD` | 初始密码 | 首次启动时为未设置密码的管理员账号写入哈希 |
 
@@ -99,6 +105,19 @@ PLATFORM_AUTH_MODE=local
 PLATFORM_AUTH_SESSION_SECRET=replace-with-a-long-random-secret
 PLATFORM_ADMIN_EMAILS=admin@example.com
 PLATFORM_AUTH_BOOTSTRAP_PASSWORD=replace-with-a-strong-initial-password
+```
+
+外部平台统一登录时可以改成：
+
+```bash
+PLATFORM_AUTH_MODE=external-token
+PLATFORM_AUTH_SESSION_SECRET=replace-with-a-long-random-secret
+PLATFORM_AUTH_USERINFO_URL=https://auth.example.com/api/getUserInfo
+PLATFORM_AUTH_USER_LOGIN_PATHS=user.userName
+PLATFORM_AUTH_USER_ID_PATHS=user.userId,user.userName
+PLATFORM_AUTH_USER_NAME_PATHS=user.nickName,user.userName
+PLATFORM_AUTH_ADMIN_MATCH_PATHS=user.userName
+PLATFORM_ADMIN_USERS=zhujun
 ```
 
 如果需要持久化上传包目录，可额外指定：
@@ -360,7 +379,14 @@ services:
       PLATFORM_API_CORS_ORIGIN: ${PLATFORM_API_CORS_ORIGIN:-http://localhost:8080}
       PLATFORM_AUTH_MODE: ${PLATFORM_AUTH_MODE:-local}
       PLATFORM_AUTH_SESSION_SECRET: ${PLATFORM_AUTH_SESSION_SECRET:-change-this-session-secret}
+      PLATFORM_AUTH_USERINFO_URL: ${PLATFORM_AUTH_USERINFO_URL:-}
+      PLATFORM_AUTH_USER_LOGIN_PATHS: ${PLATFORM_AUTH_USER_LOGIN_PATHS:-}
+      PLATFORM_AUTH_USER_ID_PATHS: ${PLATFORM_AUTH_USER_ID_PATHS:-}
+      PLATFORM_AUTH_USER_NAME_PATHS: ${PLATFORM_AUTH_USER_NAME_PATHS:-}
+      PLATFORM_AUTH_USER_AVATAR_PATHS: ${PLATFORM_AUTH_USER_AVATAR_PATHS:-}
+      PLATFORM_AUTH_ADMIN_MATCH_PATHS: ${PLATFORM_AUTH_ADMIN_MATCH_PATHS:-}
       PLATFORM_ADMIN_EMAILS: ${PLATFORM_ADMIN_EMAILS:-admin@local.dev}
+      PLATFORM_ADMIN_USERS: ${PLATFORM_ADMIN_USERS:-}
     volumes:
       - platform_uploads:/app/packages/server/data/uploads
     ports:
@@ -388,6 +414,7 @@ volumes:
 - 将 `PLATFORM_AUTH_SESSION_SECRET`、数据库密码放入服务器密钥管理或 CI/CD Secret，不要提交到 Git。
 - 公网部署必须启用 HTTPS，并将 `PLATFORM_WEB_APP_URL`、`PLATFORM_API_PUBLIC_URL` 改为 HTTPS 域名。
 - 如果使用 OAuth，补充配置 `OAUTH_CLIENT_ID`、`OAUTH_CLIENT_SECRET`、`OAUTH_AUTHORIZATION_URL`、`OAUTH_TOKEN_URL`、`OAUTH_USERINFO_URL`，并将 `PLATFORM_AUTH_MODE=oauth`。
+- 如果使用外部平台 token 登录，将 `PLATFORM_AUTH_MODE=external-token`，并配置 `PLATFORM_AUTH_USERINFO_URL`；外部平台跳转链接需携带 `?token=...`。
 - 定期备份 MySQL 数据卷或数据库实例。
 - 如果平台需要发布技能到私有 Git 仓库，API 容器或服务器需要配置对应 SSH key 或 token。
 

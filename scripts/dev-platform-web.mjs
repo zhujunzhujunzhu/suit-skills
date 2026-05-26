@@ -83,6 +83,11 @@ async function main() {
     console.log(`[dev-platform-web] Port ${DEFAULT_API_PORT} is busy; using ${port}`);
   }
 
+  const databaseUrl = process.env.PLATFORM_DATABASE_URL ?? process.env.DATABASE_URL;
+  if (!databaseUrl) {
+    throw new Error('PLATFORM_DATABASE_URL or DATABASE_URL is required');
+  }
+
   const apiChild = run(
     'platform-api',
     [tsxBin, 'packages/server/src/index.ts'],
@@ -90,13 +95,24 @@ async function main() {
       PLATFORM_API_HOST: '127.0.0.1',
       PLATFORM_API_PORT: String(port),
       PLATFORM_AUTH_MODE: process.env.PLATFORM_AUTH_MODE ?? 'local',
+      PLATFORM_AUTH_USERINFO_URL:
+        process.env.PLATFORM_AUTH_USERINFO_URL ?? '',
+      PLATFORM_AUTH_USER_LOGIN_PATHS:
+        process.env.PLATFORM_AUTH_USER_LOGIN_PATHS ?? '',
+      PLATFORM_AUTH_USER_ID_PATHS:
+        process.env.PLATFORM_AUTH_USER_ID_PATHS ?? '',
+      PLATFORM_AUTH_USER_NAME_PATHS:
+        process.env.PLATFORM_AUTH_USER_NAME_PATHS ?? '',
+      PLATFORM_AUTH_USER_AVATAR_PATHS:
+        process.env.PLATFORM_AUTH_USER_AVATAR_PATHS ?? '',
+      PLATFORM_AUTH_ADMIN_MATCH_PATHS:
+        process.env.PLATFORM_AUTH_ADMIN_MATCH_PATHS ?? '',
       PLATFORM_ADMIN_EMAILS: process.env.PLATFORM_ADMIN_EMAILS ?? 'admin@local.dev',
+      PLATFORM_ADMIN_USERS: process.env.PLATFORM_ADMIN_USERS ?? '',
       PLATFORM_AUTH_BOOTSTRAP_PASSWORD:
         process.env.PLATFORM_AUTH_BOOTSTRAP_PASSWORD ?? 'dev-local-admin-password',
       PLATFORM_WEB_APP_URL: process.env.PLATFORM_WEB_APP_URL ?? 'http://localhost:1430',
-      PLATFORM_DATABASE_URL:
-        process.env.PLATFORM_DATABASE_URL ??
-        'sqlite://memory',
+      PLATFORM_DATABASE_URL: databaseUrl,
     },
   );
 

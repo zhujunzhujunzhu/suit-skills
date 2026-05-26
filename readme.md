@@ -199,6 +199,30 @@ Web 控制台主要页面：
 - **Settings**：管理刷新间隔、主题、翻译和 AI 修改配置。
 - **Download**：查看桌面端版本和下载入口。
 
+## Platform Web Hub 鉴权接入
+
+如果要接入外部平台统一登录，可以切到 `external-token` 模式，并让外部系统在跳转链接里带上 `token`。
+
+示例配置：
+
+```bash
+PLATFORM_AUTH_MODE=external-token
+PLATFORM_AUTH_USERINFO_URL=http://117.72.173.21/prod-api/getInfo
+PLATFORM_AUTH_USER_LOGIN_PATHS=user.userName
+PLATFORM_AUTH_USER_ID_PATHS=user.userId,user.userName
+PLATFORM_AUTH_USER_NAME_PATHS=user.nickName,user.userName
+PLATFORM_AUTH_ADMIN_MATCH_PATHS=user.userName
+PLATFORM_ADMIN_USERS=zhujun
+```
+
+规则说明：
+
+- 外部平台跳转到本系统时携带 `?token=...`。
+- 平台会用该 token 请求 `PLATFORM_AUTH_USERINFO_URL`。
+- 响应里的字段路径可通过上述 env 配置。
+- 首次登录的用户会自动创建到本地用户表。
+- 管理员身份按 `PLATFORM_ADMIN_USERS`、`PLATFORM_ADMIN_EMAILS`、`PLATFORM_ADMIN_DOMAINS` 以及 `PLATFORM_AUTH_ADMIN_MATCH_PATHS` 判定。
+
 ### 界面预览
 
 #### 技能库

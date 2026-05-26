@@ -13,6 +13,7 @@ apps/desktop/binaries/
 apps/desktop/gen/
 packages/server/data/
 serverInfo.md
+private-notes/
 .agents/
 .codex/
 .claude/
