@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 use std::process::Command as StdCommand;
 use tauri::{command, AppHandle};
 use tauri_plugin_shell::ShellExt;
@@ -32,10 +33,24 @@ pub struct SkillResult {
 
 /// 执行 suit-skills 命令
 async fn run_cli_command(app: &AppHandle, args: Vec<String>) -> SkillResult {
+    run_cli_command_in_dir(app, args, None).await
+}
+
+async fn run_cli_command_in_dir(
+    app: &AppHandle,
+    args: Vec<String>,
+    cwd: Option<PathBuf>,
+) -> SkillResult {
     let output = app
         .shell()
         .sidecar(SIDECAR_NAME)
-        .map(|command| command.args(&args))
+        .map(|command| {
+            let command = command.args(&args);
+            match cwd.as_ref() {
+                Some(dir) => command.current_dir(dir),
+                None => command,
+            }
+        })
         .map_err(|error| error.to_string());
 
     match output {
@@ -62,16 +77,25 @@ async fn run_cli_command(app: &AppHandle, args: Vec<String>) -> SkillResult {
                     }
                 }
             }
-            Err(error) => run_cli_command_fallback(&args, Some(error.to_string())),
+            Err(error) => run_cli_command_fallback(&args, Some(error.to_string()), cwd.as_ref()),
         },
-        Err(error) => run_cli_command_fallback(&args, Some(error)),
+        Err(error) => run_cli_command_fallback(&args, Some(error), cwd.as_ref()),
     }
 }
 
-fn run_cli_command_fallback(args: &[String], sidecar_error: Option<String>) -> SkillResult {
+fn run_cli_command_fallback(
+    args: &[String],
+    sidecar_error: Option<String>,
+    cwd: Option<&PathBuf>,
+) -> SkillResult {
     let args_str: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
 
-    let output = StdCommand::new("suit-skills").args(&args_str).output();
+    let mut command = StdCommand::new("suit-skills");
+    command.args(&args_str);
+    if let Some(dir) = cwd {
+        command.current_dir(dir);
+    }
+    let output = command.output();
 
     match output {
         Ok(result) => {
@@ -99,10 +123,12 @@ fn run_cli_command_fallback(args: &[String], sidecar_error: Option<String>) -> S
         }
         Err(e) => {
             // sidecar 失败时尝试使用 node 直接运行
-            let node_output = StdCommand::new("node")
-                .arg("apps/cli/dist/index.js")
-                .args(&args_str)
-                .output();
+            let mut node_command = StdCommand::new("node");
+            node_command.arg("apps/cli/dist/index.js").args(&args_str);
+            if let Some(dir) = cwd {
+                node_command.current_dir(dir);
+            }
+            let node_output = node_command.output();
 
             match node_output {
                 Ok(result) => {
@@ -263,6 +289,7 @@ pub async fn install_skill(
     source: Option<String>,
     targets: Option<Vec<String>>,
     global: bool,
+    project_dir: Option<String>,
 ) -> SkillResult {
     let mut args: Vec<String> = vec!["install".to_string(), identifier];
 
@@ -281,7 +308,17 @@ pub async fn install_skill(
         args.push("--local".to_string());
     }
 
-    run_cli_command(&app, args).await
+    let cwd = if !global {
+        project_dir
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(PathBuf::from)
+    } else {
+        None
+    };
+
+    run_cli_command_in_dir(&app, args, cwd).await
 }
 
 /// 移除技能

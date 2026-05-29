@@ -290,6 +290,7 @@ function Info({ label, value }: { label: string; value?: string }) {
 
 export default function LibraryView(props: {
   detail: SkillDetail | null;
+  installProjectDir: string;
   installScope: LocationScope;
   installStrategy: InstallStrategy;
   installTargets: string[];
@@ -297,6 +298,7 @@ export default function LibraryView(props: {
   loading: boolean;
   onCopyCommand: () => void;
   onInstall: () => void;
+  onInstallProjectDirChange: (value: string) => void;
   onInstallScopeChange: (value: LocationScope) => void;
   onInstallStrategyChange: (value: InstallStrategy) => void;
   onInstallTargetsChange: (value: string[]) => void;
@@ -306,6 +308,7 @@ export default function LibraryView(props: {
   onSelect: (value: string) => void;
   onShare: () => void;
   onSourceChange: (value: string) => void;
+  onSelectProjectDir: () => void;
   onTagChange: (value: string) => void;
   query: string;
   selected: string;
@@ -538,6 +541,29 @@ export default function LibraryView(props: {
                 <option value="rename">{t('library.strategyRename')}</option>
               </select>
             </div>
+            {props.installScope === 'project' ? (
+              <div className="project-dir-field">
+                <label>
+                  <span>{t('library.projectDirLabel')}</span>
+                  <input
+                    value={props.installProjectDir}
+                    onChange={(event) =>
+                      props.onInstallProjectDirChange(event.target.value)
+                    }
+                    placeholder={t('library.projectDirPlaceholder')}
+                  />
+                </label>
+                <button
+                  type="button"
+                  className="button"
+                  onClick={props.onSelectProjectDir}
+                >
+                  <Icon name="folder" />
+                  {t('library.projectDirChoose')}
+                </button>
+                <p>{t('library.projectDirHint')}</p>
+              </div>
+            ) : null}
           </div>
           <div className="meta-table">
             <Info label={t('library.metaVersion')} value={activeSkill?.version} />

@@ -38,6 +38,7 @@ import {
   restoreWebBuiltinSources,
   toApiErrorPayload,
   translateWebText,
+  translateWebTextBatch,
   updateWebSettings,
   updateWebAiEditConfig,
   updateWebInstallTarget,
@@ -357,6 +358,15 @@ async function handleApi(
         res,
         200,
         await translateWebText(ctx, (await readJsonBody(req, TRANSLATE_JSON_BODY_MAX_BYTES)) as never),
+      );
+      return;
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/translate-batch') {
+      sendJson(
+        res,
+        200,
+        await translateWebTextBatch(ctx, (await readJsonBody(req, TRANSLATE_JSON_BODY_MAX_BYTES)) as never),
       );
       return;
     }

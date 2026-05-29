@@ -118,6 +118,35 @@ describe('web api client performance guards', () => {
     ).rejects.toMatchObject({ name: 'AbortError' });
   });
 
+  it('sends multiple translation fragments in one batch request', async () => {
+    setWindow(false);
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      text: () => Promise.resolve(JSON.stringify({
+        items: [
+          { translated: '你好', provider: 'cli' },
+          { translated: '世界', provider: 'cli' },
+        ],
+      })),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const { translateTexts } = await import('../../apps/local-web/src/api/client.ts');
+
+    const result = await translateTexts([
+      { text: 'Hello' },
+      { text: 'World' },
+    ]);
+
+    expect(result.items.map((item) => item.translated)).toEqual(['你好', '世界']);
+    expect(fetchMock).toHaveBeenCalledWith('/api/translate-batch', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({
+        items: [{ text: 'Hello' }, { text: 'World' }],
+        targetLang: '简体中文',
+      }),
+    }));
+  });
+
   it('hydrates desktop bootstrap data in one Tauri request', async () => {
     setWindow(true);
     const { fetchDesktopBootstrap } = await import('../../apps/local-web/src/api/client.ts');

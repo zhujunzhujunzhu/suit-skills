@@ -134,6 +134,10 @@
     "share": "分享",
     "scopeGlobal": "全局",
     "scopeProject": "项目",
+    "projectDirLabel": "项目目录",
+    "projectDirPlaceholder": "选择或输入项目根目录",
+    "projectDirChoose": "选择",
+    "projectDirHint": "项目级安装会以此目录作为当前项目，写入该项目下的 .agents / .cursor / .codex 等目录。",
     "strategySkip": "跳过",
     "strategyOverwrite": "覆盖",
     "strategyRename": "重命名",
@@ -289,7 +293,9 @@
     "agentUpdated": "已更新 Agent",
     "agentRemoved": "已移除 Agent",
     "translationSaved": "翻译配置已保存",
-    "aiEditSaved": "AI 修改配置已保存"
+    "aiEditSaved": "AI 修改配置已保存",
+    "projectDirSelected": "项目目录已选择",
+    "projectDirManual": "当前浏览器不支持目录选择，请手动输入项目目录"
   },
   "share": {
     "skill": "技能",
@@ -299,7 +305,9 @@
     "install": "安装"
   },
   "install": {
-    "npxPlaceholder": "npx suit-skills@latest install <skill>"
+    "npxPlaceholder": "npx suit-skills@latest install <skill>",
+    "projectDirRequired": "项目级安装需要先选择或填写项目目录",
+    "projectDirPrompt": "请输入项目根目录路径"
   },
   "builtinSources": {
     "anthropics-skills": {

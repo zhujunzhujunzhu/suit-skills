@@ -16,6 +16,7 @@ import {
   fetchSkillBrowserBundle,
   fetchSkillFileContent,
   translateText,
+  translateTexts,
   type SkillFileContent,
   type SkillFileNode,
   type TranslationConfig,
@@ -41,6 +42,7 @@ const TRANSLATE_CACHE_PREFIX = 'suit-skills-translate:';
 const TRANSLATE_CACHE_VERSION = 'v2';
 const TRANSLATE_TARGET_LANG = '简体中文';
 const TRANSLATE_CONCURRENCY = 4;
+const TRANSLATE_BATCH_SIZE = 10;
 const MIME_MAP: Record<string, string> = {
   '.png': 'image/png',
   '.jpg': 'image/jpeg',
@@ -593,6 +595,61 @@ async function resolveBlockTranslation(
   return request;
 }
 
+async function resolveBlockTranslationsBatch(
+  texts: string[],
+  targetLang: string,
+): Promise<CachedTranslationEntry[]> {
+  const uniqueTexts = Array.from(new Set(texts));
+  const pendingTexts: string[] = [];
+  const cachedByText = new Map<string, CachedTranslationEntry>();
+
+  uniqueTexts.forEach((text) => {
+    const cached = readBlockTranslationCache(text, targetLang);
+    if (cached) {
+      cachedByText.set(text, cached);
+    } else {
+      pendingTexts.push(text);
+    }
+  });
+
+  if (pendingTexts.length > 0) {
+    try {
+      const result = await translateTexts(
+        pendingTexts.map((text) => ({ text })),
+        targetLang,
+      );
+      if (result.items.length !== pendingTexts.length) {
+        throw new Error('翻译返回数量不匹配');
+      }
+      result.items.forEach((item, index) => {
+        const source = pendingTexts[index];
+        const entry = writeBlockTranslationCache(
+          source,
+          targetLang,
+          item.translated,
+          item.provider,
+        );
+        cachedByText.set(source, entry);
+      });
+    } catch {
+      const fallbackResults = await Promise.all(
+        pendingTexts.map((text) => resolveBlockTranslation(text, targetLang)),
+      );
+      fallbackResults.forEach((entry) => {
+        cachedByText.set(entry.source, entry);
+      });
+    }
+  }
+
+  return texts.map((text) => {
+    const entry = cachedByText.get(text);
+    if (!entry) {
+      throw new Error('翻译结果缺失');
+    }
+    return entry;
+  });
+}
+
 function isProbablyEnglishText(text: string): boolean {
   const normalized = text
     .replace(/`[^`]*`/g, ' ')
@@ -747,10 +804,19 @@ export function TranslateMarkdownView({
       });
     }
 
-    const queue = Array.from(groupedTasks.entries()).map(([text, relatedTasks]) => ({
-      text,
-      relatedTasks,
-    }));
+    const queue = Array.from(groupedTasks.entries())
+      .reduce<Array<Array<{ text: string; relatedTasks: ParsedTranslateTask[] }>>>(
+        (batches, [text, relatedTasks]) => {
+          let batch = batches.at(-1);
+          if (!batch || batch.length >= TRANSLATE_BATCH_SIZE) {
+            batch = [];
+            batches.push(batch);
+          }
+          batch.push({ text, relatedTasks });
+          return batches;
+        },
+        [],
+      );
 
     if (queue.length === 0) {
       if (runIdRef.current === runId) setIsLoading(false);
@@ -764,21 +830,28 @@ export function TranslateMarkdownView({
       while (cursor < queue.length) {
         const currentIndex = cursor;
         cursor += 1;
-        const current = queue[currentIndex];
+        const currentBatch = queue[currentIndex];
         try {
-          const result = await resolveBlockTranslation(current.text, TRANSLATE_TARGET_LANG);
+          const results = await resolveBlockTranslationsBatch(
+            currentBatch.map((item) => item.text),
+            TRANSLATE_TARGET_LANG,
+          );
           if (runIdRef.current !== runId) return;
           setTranslatedByKey((prev) => {
             const next = { ...prev };
-            current.relatedTasks.forEach((task) => {
-              next[task.key] = result.translated;
+            currentBatch.forEach((item, index) => {
+              item.relatedTasks.forEach((task) => {
+                next[task.key] = results[index].translated;
+              });
             });
             return next;
           });
           setFailedByKey((prev) => {
             const next = { ...prev };
-            current.relatedTasks.forEach((task) => {
-              delete next[task.key];
+            currentBatch.forEach((item) => {
+              item.relatedTasks.forEach((task) => {
+                delete next[task.key];
+              });
             });
             return next;
           });
@@ -788,8 +861,10 @@ export function TranslateMarkdownView({
           const message = err instanceof Error ? err.message : '翻译失败';
           setFailedByKey((prev) => {
             const next = { ...prev };
-            current.relatedTasks.forEach((task) => {
-              next[task.key] = message;
+            currentBatch.forEach((item) => {
+              item.relatedTasks.forEach((task) => {
+                next[task.key] = message;
+              });
             });
             return next;
           });

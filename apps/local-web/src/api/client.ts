@@ -746,7 +746,12 @@ export async function fetchSkills(params: {
         installed: installedMap.has(skill.name),
         installedTargets: installedMap.get(skill.name) ?? [],
       })),
-      warnings: [],
+      warnings: (result.warnings ?? []).map((warning) => ({
+        sourceName: textField(warning.sourceName) ?? '',
+        url: textField(warning.url) ?? '',
+        message: textField(warning.message) ?? '',
+        usingCache: warning.usingCache === true,
+      })),
     };
   }
   const result = await request<{ items: SkillSummary[]; warnings: SourceWarning[] }>(
@@ -832,6 +837,7 @@ export async function installSkill(requestBody: {
   source?: string;
   targets: string[];
   global?: boolean;
+  projectDir?: string;
   strategy?: 'overwrite' | 'skip' | 'rename';
 }): Promise<{ results: InstallResult[] }> {
   const tauri = await getTauriApi();
@@ -841,6 +847,7 @@ export async function installSkill(requestBody: {
       source: requestBody.source,
       targets: requestBody.targets,
       global: requestBody.global ?? true,
+      projectDir: requestBody.projectDir,
     });
     invalidateTauriInstalledCache();
     // 返回模拟结果
@@ -856,6 +863,20 @@ export async function installSkill(requestBody: {
     method: 'POST',
     body: JSON.stringify(requestBody),
   });
+}
+
+export async function selectProjectDirectory(): Promise<string | null> {
+  const tauri = await getTauriApi();
+  if (!tauri) {
+    return null;
+  }
+  const { open } = await import('@tauri-apps/plugin-dialog');
+  const selected = await open({
+    directory: true,
+    multiple: false,
+    title: 'Select project directory',
+  });
+  return typeof selected === 'string' ? selected : null;
 }
 
 export async function removeInstalledSkill(
@@ -1449,6 +1470,14 @@ export interface TranslateResult {
   provider: string;
 }
 
+export interface TranslateBatchItem {
+  text: string;
+}
+
+export interface TranslateBatchResult {
+  items: TranslateResult[];
+}
+
 export async function fetchTranslationConfig(): Promise<TranslationConfig> {
   const tauri = await getTauriApi();
   if (tauri) {
@@ -1512,5 +1541,15 @@ export async function translateText(
   return request('/api/translate', {
     method: 'POST',
     body: JSON.stringify({ text, targetLang }),
+  });
+}
+
+export async function translateTexts(
+  items: TranslateBatchItem[],
+  targetLang = '简体中文',
+): Promise<TranslateBatchResult> {
+  return request('/api/translate-batch', {
+    method: 'POST',
+    body: JSON.stringify({ items, targetLang }),
   });
 }

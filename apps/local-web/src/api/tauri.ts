@@ -163,6 +163,11 @@ export async function tauriGetSkillsList(options?: {
   author?: string;
   tags?: string[];
   sourceName: string;
+}>; warnings?: Array<{
+  sourceName: string;
+  url: string;
+  message: string;
+  usingCache: boolean;
 }> }> {
   return runCommand('get_skills_list', options ?? {});
 }
@@ -204,8 +209,15 @@ export async function tauriInstallSkill(options: {
   source?: string;
   targets?: string[];
   global?: boolean;
+  projectDir?: string;
 }): Promise<void> {
-  await runCommand('install_skill', options);
+  await runCommand('install_skill', {
+    identifier: options.identifier,
+    source: options.source,
+    targets: options.targets,
+    global: options.global,
+    project_dir: options.projectDir,
+  });
 }
 
 export async function tauriGetInstallTargets(): Promise<{

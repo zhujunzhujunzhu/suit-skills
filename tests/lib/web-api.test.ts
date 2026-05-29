@@ -32,6 +32,7 @@ import {
   restoreWebBuiltinSources,
   saveWebInstalledSkillFile,
   updateWebSource,
+  translateWebTextBatch,
 } from '../../apps/cli/src/lib/web/api.js';
 
 const TEST_SOURCE = {
@@ -345,6 +346,39 @@ describe('web api', () => {
     expect(filtered.items.map((item) => item.name)).toEqual(['react-helper']);
   });
 
+  it('uses local source cache by default without refreshing git', () => {
+    const cloneOrPullRepo = vi.fn((_url: string, path: string) => ({
+      path,
+      freshlyCloned: false,
+    }));
+    const cachedCtx = createCliContext({
+      cwd: projectDir,
+      userHome,
+      refreshExtra: { cloneOrPullRepo },
+    });
+
+    const result = listWebSkills(cachedCtx, {});
+
+    expect(result.items.map((item) => item.name)).toContain('code-review');
+    expect(cloneOrPullRepo).not.toHaveBeenCalled();
+  });
+
+  it('refreshes git when explicitly requested', () => {
+    const cloneOrPullRepo = vi.fn((_url: string, path: string) => ({
+      path,
+      freshlyCloned: false,
+    }));
+    const cachedCtx = createCliContext({
+      cwd: projectDir,
+      userHome,
+      refreshExtra: { cloneOrPullRepo },
+    });
+
+    listWebSkills(cachedCtx, { refresh: true });
+
+    expect(cloneOrPullRepo).toHaveBeenCalled();
+  });
+
   it('filters skills with non-string metadata without leaking unsafe values', () => {
     const cacheRoot = getSourceCacheDir(sourceUrl);
     writeSkill(cacheRoot, 'dirty-meta', {
@@ -387,6 +421,53 @@ describe('web api', () => {
     );
   });
 
+  it('translates multiple markdown fragments with one configured CLI call', async () => {
+    const config = getConfigWithUserSource();
+    config.translation = {
+      provider: 'cli',
+      cliCommand: process.execPath,
+      cliArgs: [
+        '-e',
+        'process.stdin.resume(); process.stdin.on("data", () => {}); process.stdin.on("end", () => console.log(JSON.stringify({ items: [{ translated: "你好" }, { translated: "世界" }] })));',
+      ],
+    };
+    writeFileSync(
+      join(suitHome, 'config.json'),
+      `${JSON.stringify(config, null, 2)}\n`,
+    );
+
+    const result = await translateWebTextBatch(ctx(), {
+      items: [{ text: 'Hello' }, { text: 'World' }],
+    });
+
+    expect(result.items).toEqual([
+      { translated: '你好', provider: 'cli' },
+      { translated: '世界', provider: 'cli' },
+    ]);
+  });
+
+  it('rejects batch translation results with mismatched item counts', async () => {
+    const config = getConfigWithUserSource();
+    config.translation = {
+      provider: 'cli',
+      cliCommand: process.execPath,
+      cliArgs: [
+        '-e',
+        'process.stdin.resume(); process.stdin.on("data", () => {}); process.stdin.on("end", () => console.log(JSON.stringify({ items: [{ translated: "你好" }] })));',
+      ],
+    };
+    writeFileSync(
+      join(suitHome, 'config.json'),
+      `${JSON.stringify(config, null, 2)}\n`,
+    );
+
+    await expect(
+      translateWebTextBatch(ctx(), {
+        items: [{ text: 'Hello' }, { text: 'World' }],
+      }),
+    ).rejects.toThrow('translations for 2 inputs');
+  });
+
   it('keeps all enabled skills usable when one source cannot refresh', () => {
     const config = getConfigWithUserSource();
     config.sources.push({
@@ -412,7 +493,7 @@ describe('web api', () => {
       },
     });
 
-    const result = listWebSkills(partialCtx, { source: 'all' });
+    const result = listWebSkills(partialCtx, { source: 'all', refresh: true });
     expect(result.items.map((item) => item.name)).toContain('code-review');
     expect(result.warnings).toEqual(expect.arrayContaining([
       expect.objectContaining({
@@ -439,7 +520,7 @@ describe('web api', () => {
       },
     });
 
-    const result = listWebSkills(cachedCtx, { source: 'team' });
+    const result = listWebSkills(cachedCtx, { source: 'team', refresh: true });
     expect(result.items.map((item) => item.name)).toContain('code-review');
     expect(result.warnings).toEqual([
       expect.objectContaining({
@@ -483,6 +564,7 @@ describe('web api', () => {
 
     const result = listWebSkills(upstreamFailingCtx, {
       source: 'anthropics-skills',
+      refresh: true,
     });
     expect(result.items.map((item) => item.name)).toContain(
       'mirror-cached-skill',

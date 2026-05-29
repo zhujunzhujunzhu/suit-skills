@@ -98,6 +98,7 @@ export interface WebInstallRequest {
   source?: string;
   targets?: string[];
   global?: boolean;
+  projectDir?: string;
   strategy?: ConflictResolution;
 }
 
@@ -285,6 +286,26 @@ function toSourceWarning(
     url: getEffectiveSourceUrl(source),
     message,
     usingCache,
+  };
+}
+
+function createScopedWebInstallContext(
+  ctx: CliContext,
+  projectDir: string,
+): CliContext {
+  const cwd = isAbsolute(projectDir)
+    ? resolve(projectDir)
+    : resolve(ctx.cwd, projectDir);
+  if (!existsSync(cwd) || !statSync(cwd).isDirectory()) {
+    throw new WebApiError(
+      'INVALID_PROJECT_DIR',
+      `Project directory does not exist: ${cwd}`,
+      400,
+    );
+  }
+  return {
+    ...ctx,
+    cwd,
   };
 }
 
@@ -643,12 +664,23 @@ function rowsForSingleSource(
   source: Source,
   forceRefresh = false,
   maxAgeMs = 0,
+  preferCache = false,
 ): { rows: SkillSourceRow[]; warnings: WebSourceWarning[] } {
   const cache = getRowsCacheForContext(ctx);
   const cacheKey = `${source.name}\0${getEffectiveSourceUrl(source)}`;
   const cached = cache.get(cacheKey);
   if (cached && !forceRefresh && cached.expiresAt > Date.now()) {
     return { rows: cached.rows, warnings: [] };
+  }
+  if (!forceRefresh && preferCache) {
+    const fallback = findCachedRowsForSource(ctx, source);
+    if (fallback) {
+      cache.set(cacheKey, {
+        expiresAt: Date.now() + maxAgeMs,
+        rows: fallback.rows,
+      });
+      return { rows: fallback.rows, warnings: [] };
+    }
   }
   let refresh: ReturnType<CliContext['refreshForSource']>;
   try {
@@ -701,6 +733,7 @@ function rowsForSource(
   config: Config,
   sourceFilter: string,
   forceRefresh = false,
+  preferCache = false,
 ): { rows: SkillSourceRow[]; warnings: WebSourceWarning[] } {
   try {
     const sources = sourcesForFilter(config, sourceFilter);
@@ -710,7 +743,7 @@ function rowsForSource(
     const maxAgeMs = getSourceRefreshMaxAgeMs(config);
     for (const source of sources) {
       try {
-        const result = rowsForSingleSource(ctx, source, forceRefresh, maxAgeMs);
+        const result = rowsForSingleSource(ctx, source, forceRefresh, maxAgeMs, preferCache);
         warnings.push(...result.warnings);
         for (const row of result.rows) {
           if (seenNames.has(row.meta.name)) {
@@ -861,6 +894,7 @@ export function listWebSkills(
     config,
     sourceFilter,
     options.refresh === true,
+    options.refresh !== true,
   );
   let rows = result.rows;
 
@@ -1282,7 +1316,13 @@ export function installWebSkill(
   ctx: CliContext,
   request: WebInstallRequest,
 ): { results: WebInstallResult[] } {
-  const config = ctx.loadConfig();
+  const projectDir =
+    typeof request.projectDir === 'string' ? request.projectDir.trim() : '';
+  const installCtx =
+    request.global === true || !projectDir
+      ? ctx
+      : createScopedWebInstallContext(ctx, projectDir);
+  const config = installCtx.loadConfig();
   const identifier = request.identifier?.trim();
   if (!identifier) {
     throw new WebApiError('INVALID_SKILL_NAME', 'Skill name is required', 400);
@@ -1315,13 +1355,13 @@ export function installWebSkill(
     );
   }
 
-  const refresh = refreshSourceForWeb(ctx, source);
+  const refresh = refreshSourceForWeb(installCtx, source);
   const isGlobal = request.global === true;
   const scope = isGlobal ? 'global' : 'project';
   const results: WebInstallResult[] = [];
 
   // 全局 ~/.agents/skills 与项目 ./.agents/skills：先安装到中央存储，再为其它目标创建软链接
-  const centralRoot = getTargetRoot(ctx, config, 'agents', isGlobal);
+  const centralRoot = getTargetRoot(installCtx, config, 'agents', isGlobal);
   let centralResult: { path?: string; skipped?: boolean; message?: string };
   try {
     centralResult = installSkillWithConflict(
@@ -1376,7 +1416,7 @@ export function installWebSkill(
     if (target === 'agents') {
       continue;
     }
-    const targetRoot = getTargetRoot(ctx, config, target, isGlobal);
+    const targetRoot = getTargetRoot(installCtx, config, target, isGlobal);
     const linkPath = join(targetRoot, skillName);
     if (resolve(centralSkillPath) === resolve(linkPath)) {
       continue;
@@ -2313,6 +2353,15 @@ export interface WebTranslateResult {
   provider: string;
 }
 
+export interface WebTranslateBatchRequest {
+  items: Array<{ text: string }>;
+  targetLang?: string;
+}
+
+export interface WebTranslateBatchResult {
+  items: WebTranslateResult[];
+}
+
 function findJsonEnd(text: string, start: number): number | undefined {
   const first = text[start];
   const expectedClose = first === '{' ? '}' : first === '[' ? ']' : '';
@@ -2383,6 +2432,59 @@ function extractJsonText(output?: string): string | undefined {
   }
 
   return undefined;
+}
+
+function normalizeTranslatedOutput(output: string): string {
+  return output
+    .trim()
+    .replace(/^```(?:\w+)?\s*/i, '')
+    .replace(/\s*```$/i, '')
+    .trim();
+}
+
+function parseBatchTranslations(output: string, expectedCount: number): string[] {
+  const jsonText = extractJsonText(output);
+  if (!jsonText) {
+    throw new WebApiError('AI_INVALID_RESPONSE', 'AI API did not return JSON', 502);
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(jsonText) as unknown;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new WebApiError('AI_INVALID_RESPONSE', `AI API returned invalid JSON: ${message}`, 502);
+  }
+
+  const rawItems = Array.isArray(parsed)
+    ? parsed
+    : parsed && typeof parsed === 'object' && Array.isArray((parsed as { items?: unknown }).items)
+      ? (parsed as { items: unknown[] }).items
+      : null;
+
+  if (!rawItems || rawItems.length !== expectedCount) {
+    throw new WebApiError(
+      'AI_INVALID_RESPONSE',
+      `AI API returned ${rawItems?.length ?? 0} translations for ${expectedCount} inputs`,
+      502,
+    );
+  }
+
+  return rawItems.map((item, index) => {
+    if (typeof item === 'string') return normalizeTranslatedOutput(item);
+    if (item && typeof item === 'object') {
+      const translated = (item as { translated?: unknown; text?: unknown }).translated
+        ?? (item as { translated?: unknown; text?: unknown }).text;
+      if (typeof translated === 'string') {
+        return normalizeTranslatedOutput(translated);
+      }
+    }
+    throw new WebApiError(
+      'AI_INVALID_RESPONSE',
+      `AI API returned invalid translation at index ${index}`,
+      502,
+    );
+  });
 }
 
 async function completeViaHttpApi(
@@ -2503,7 +2605,58 @@ export async function translateWebText(
     translationConfig,
     prompt,
   );
-  return { translated: output, provider };
+  return { translated: normalizeTranslatedOutput(output), provider };
+}
+
+export async function translateWebTextBatch(
+  ctx: CliContext,
+  request: WebTranslateBatchRequest,
+): Promise<WebTranslateBatchResult> {
+  const { items, targetLang = '简体中文' } = request;
+  if (!Array.isArray(items) || items.length === 0) {
+    throw new WebApiError('INVALID_TEXT', 'Text items are required', 400);
+  }
+  if (items.length > 20) {
+    throw new WebApiError(
+      'TOO_MANY_TEXT_ITEMS',
+      'At most 20 text items can be translated at once',
+      400,
+    );
+  }
+
+  const texts = items.map((item) => item?.text ?? '');
+  if (texts.some((text) => typeof text !== 'string' || !text.trim())) {
+    throw new WebApiError('INVALID_TEXT', 'Every text item is required', 400);
+  }
+
+  const config = ctx.loadConfig();
+  const translationConfig = getTranslationConfig(config);
+
+  if (translationConfig.provider === 'none') {
+    throw new WebApiError(
+      'TRANSLATION_NOT_CONFIGURED',
+      'Translation provider is not configured. Please configure it in Settings.',
+      400,
+    );
+  }
+
+  const prompt = [
+    `Translate each markdown fragment to ${targetLang}.`,
+    'Keep markdown formatting, inline code, code blocks, links, paths, placeholders, and numbering intact.',
+    'Return JSON only, with this exact shape: {"items":[{"translated":"..."}]}.',
+    'The items array must have the same order and length as the input.',
+    '',
+    JSON.stringify({ items: texts.map((text, index) => ({ index, text })) }),
+  ].join('\n');
+
+  const { output, provider } = await completeViaAiConfig(
+    translationConfig,
+    prompt,
+  );
+  const translated = parseBatchTranslations(output, texts.length);
+  return {
+    items: translated.map((item) => ({ translated: item, provider })),
+  };
 }
 
 export function updateWebTranslationConfig(

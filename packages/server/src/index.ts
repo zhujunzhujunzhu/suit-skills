@@ -696,6 +696,7 @@ class SkillStore {
     category?: string;
     source?: string;
     owner?: string;
+    refresh?: boolean;
   }): Promise<SkillListResponse> {
     const data = await this.read();
     const summaries = await this.evaluationStore.summarizeBySkill();
@@ -1331,8 +1332,9 @@ class SourceBackedSkillCatalog {
     category?: string;
     source?: string;
     owner?: string;
+    refresh?: boolean;
   }): Promise<SkillListResponse> {
-    const rows = await this.rows(params.source);
+    const rows = await this.rows(params.source, params.refresh === true);
     const summaries = await this.evaluationStore.summarizeBySkill();
     const filteredByQuery = params.q?.trim()
       ? this.filterRowsByQuery(rows, params.q)
@@ -1397,7 +1399,7 @@ class SourceBackedSkillCatalog {
     );
   }
 
-  private async rows(sourceFilter?: string): Promise<SourceSkillRow[]> {
+  private async rows(sourceFilter?: string, forceRefresh = false): Promise<SourceSkillRow[]> {
     const response = await this.sourceStore.list();
     const sources = response.sources.filter((source) => {
       if (!source.enabled) return false;
@@ -1407,7 +1409,7 @@ class SourceBackedSkillCatalog {
     const rows: SourceSkillRow[] = [];
     const seenNames = new Set<string>();
     for (const source of sources) {
-      for (const row of this.rowsForSource(source)) {
+      for (const row of this.rowsForSource(source, forceRefresh)) {
         const name = row.metadata.meta.name;
         if (seenNames.has(name)) continue;
         seenNames.add(name);
@@ -1417,20 +1419,23 @@ class SourceBackedSkillCatalog {
     return rows;
   }
 
-  private rowsForSource(source: SourceRecord): SourceSkillRow[] {
+  private rowsForSource(source: SourceRecord, forceRefresh = false): SourceSkillRow[] {
     const url = this.effectiveUrl(source);
     const cacheKey = `${source.name}\0${url}`;
     const cached = this.rowsCache.get(cacheKey);
-    if (cached && cached.expiresAt > Date.now()) {
+    if (!forceRefresh && cached && cached.expiresAt > Date.now()) {
       return cached.rows;
     }
 
-    const rows = this.refreshRowsForSource(source);
+    const rows = forceRefresh
+      ? this.refreshRowsForSource(source)
+      : this.cachedRowsForSource(source);
+    const nextRows = rows.length > 0 ? rows : this.refreshRowsForSource(source);
     this.rowsCache.set(cacheKey, {
       expiresAt: Date.now() + this.maxAgeMs,
-      rows,
+      rows: nextRows,
     });
-    return rows;
+    return nextRows;
   }
 
   private refreshRowsForSource(source: SourceRecord): SourceSkillRow[] {
@@ -3405,12 +3410,14 @@ function parseSkillQuery(url: URL): {
   category?: string;
   source?: string;
   owner?: string;
+  refresh?: boolean;
 } {
   return compactObject({
     q: optionalQueryString(url, 'q'),
     category: optionalQueryString(url, 'category'),
     source: optionalQueryString(url, 'source'),
     owner: optionalQueryString(url, 'owner'),
+    refresh: url.searchParams.get('refresh') === 'true' ? true : undefined,
   });
 }
 

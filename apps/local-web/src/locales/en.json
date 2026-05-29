@@ -133,6 +133,10 @@
     "share": "Share",
     "scopeGlobal": "global",
     "scopeProject": "project",
+    "projectDirLabel": "Project directory",
+    "projectDirPlaceholder": "Choose or enter a project root",
+    "projectDirChoose": "Choose",
+    "projectDirHint": "Project installs use this directory as the current project and write into its .agents / .cursor / .codex folders.",
     "strategySkip": "skip",
     "strategyOverwrite": "overwrite",
     "strategyRename": "rename",
@@ -289,7 +293,9 @@
     "agentRemoved": "Agent removed",
     "settingsSaved": "Settings saved",
     "translationSaved": "Translation settings saved",
-    "aiEditSaved": "AI edit settings saved"
+    "aiEditSaved": "AI edit settings saved",
+    "projectDirSelected": "Project directory selected",
+    "projectDirManual": "Directory picking is unavailable in this browser. Enter the project directory manually."
   },
   "share": {
     "skill": "Skill",
@@ -299,7 +305,9 @@
     "install": "Install"
   },
   "install": {
-    "npxPlaceholder": "npx suit-skills@latest install <skill>"
+    "npxPlaceholder": "npx suit-skills@latest install <skill>",
+    "projectDirRequired": "Choose or enter a project directory before installing to a project",
+    "projectDirPrompt": "Enter the project root path"
   },
   "builtinSources": {
     "anthropics-skills": {

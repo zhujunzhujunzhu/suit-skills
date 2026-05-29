@@ -29,6 +29,7 @@ import {
   removeSource,
   removeInstalledSkill,
   restoreBuiltinSources,
+  selectProjectDirectory,
   updateSettings,
   updateAiEditConfig,
   updateInstallTarget,
@@ -77,6 +78,10 @@ const DEFAULT_SETTINGS: AppSettings = {
   themeMode: 'default',
   themeColor: '#b7e05a',
 };
+const INSTALL_SCOPE_STORAGE_KEY = 'suit-skills.install.scope';
+const INSTALL_STRATEGY_STORAGE_KEY = 'suit-skills.install.strategy';
+const INSTALL_TARGETS_STORAGE_KEY = 'suit-skills.install.targets';
+const INSTALL_PROJECT_DIR_STORAGE_KEY = 'suit-skills.install.projectDir';
 
 const THEME_VARIABLE_NAMES = [
   '--surface',
@@ -115,6 +120,56 @@ function npxCommand(
   if (!skill?.name) return placeholder;
   const source = skill.sourceName ? ` --source ${skill.sourceName}` : '';
   return `npx suit-skills@latest install ${skill.name}${source}`;
+}
+
+function skillListSignature(items: SkillSummary[]): string {
+  return JSON.stringify(
+    items.map((item) => [
+      item.name,
+      item.version ?? '',
+      item.description ?? '',
+      item.author ?? '',
+      item.sourceName,
+      item.installed === true,
+      item.installedTargets?.join('\u001f') ?? '',
+      item.tags?.join('\u001f') ?? '',
+      item.metadataSource ?? '',
+    ]),
+  );
+}
+
+function readStoredInstallScope(): LocationScope {
+  if (typeof window === 'undefined') return 'project';
+  return localStorage.getItem(INSTALL_SCOPE_STORAGE_KEY) === 'global'
+    ? 'global'
+    : 'project';
+}
+
+function readStoredInstallStrategy(): InstallStrategy {
+  if (typeof window === 'undefined') return 'skip';
+  const value = localStorage.getItem(INSTALL_STRATEGY_STORAGE_KEY);
+  return value === 'overwrite' || value === 'rename' || value === 'skip'
+    ? value
+    : 'skip';
+}
+
+function readStoredInstallTargets(): string[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const parsed = JSON.parse(
+      localStorage.getItem(INSTALL_TARGETS_STORAGE_KEY) ?? '[]',
+    );
+    return Array.isArray(parsed)
+      ? parsed.filter((item): item is string => typeof item === 'string')
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function readStoredProjectDir(): string {
+  if (typeof window === 'undefined') return '';
+  return localStorage.getItem(INSTALL_PROJECT_DIR_STORAGE_KEY) ?? '';
 }
 
 async function copyText(text: string): Promise<void> {
@@ -269,11 +324,12 @@ export default function App() {
   const [debouncedInstalledQuery, setDebouncedInstalledQuery] = useState('');
   const [installedTarget, setInstalledTarget] = useState('');
   const [scope, setScope] = useState<ScopeFilter>('all');
-  const [installTargets, setInstallTargets] = useState<string[]>([]);
+  const [installTargets, setInstallTargets] = useState<string[]>(readStoredInstallTargets);
   const [installTargetRows, setInstallTargetRows] = useState<InstallTargetOption[]>([]);
   const [skillLibrary, setSkillLibrary] = useState<SkillLibraryTarget | null>(null);
-  const [installScope, setInstallScope] = useState<LocationScope>('global');
-  const [installStrategy, setInstallStrategy] = useState<InstallStrategy>('skip');
+  const [installScope, setInstallScope] = useState<LocationScope>(readStoredInstallScope);
+  const [installStrategy, setInstallStrategy] = useState<InstallStrategy>(readStoredInstallStrategy);
+  const [installProjectDir, setInstallProjectDir] = useState(readStoredProjectDir);
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
   const [toolbarRefreshing, setToolbarRefreshing] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -304,11 +360,19 @@ export default function App() {
   const skillRequestId = useRef(0);
   const detailRequestId = useRef(0);
   const installedRequestId = useRef(0);
+  const backgroundSkillRefreshId = useRef(0);
+  const backgroundSkillRefreshInFlight = useRef(false);
   const skillAbortController = useRef<AbortController | null>(null);
   const detailAbortController = useRef<AbortController | null>(null);
   const installedAbortController = useRef<AbortController | null>(null);
   const lastLoadedSkillsKey = useRef('');
   const lastLoadedInstalledKey = useRef('');
+  const currentSkillsKey = useRef('');
+  const currentSkillListSignature = useRef('');
+  const skillsSignature = useMemo(() => skillListSignature(skills), [skills]);
+
+  currentSkillsKey.current = skillsRequestKey(source, debouncedQuery, tag);
+  currentSkillListSignature.current = skillsSignature;
 
   function applySourcesData(data: { sources: Source[]; defaultSource: string }) {
     setSources(data.sources);
@@ -334,6 +398,27 @@ export default function App() {
         .map((row) => row.id);
     });
   }
+
+  useEffect(() => {
+    localStorage.setItem(INSTALL_SCOPE_STORAGE_KEY, installScope);
+  }, [installScope]);
+
+  useEffect(() => {
+    localStorage.setItem(INSTALL_STRATEGY_STORAGE_KEY, installStrategy);
+  }, [installStrategy]);
+
+  useEffect(() => {
+    localStorage.setItem(INSTALL_TARGETS_STORAGE_KEY, JSON.stringify(installTargets));
+  }, [installTargets]);
+
+  useEffect(() => {
+    const trimmed = installProjectDir.trim();
+    if (trimmed) {
+      localStorage.setItem(INSTALL_PROJECT_DIR_STORAGE_KEY, trimmed);
+    } else {
+      localStorage.removeItem(INSTALL_PROJECT_DIR_STORAGE_KEY);
+    }
+  }, [installProjectDir]);
 
   useEffect(() => {
     if (typeof document === 'undefined') return;
@@ -416,6 +501,51 @@ export default function App() {
       }
       if (skillRequestId.current === requestId) {
         setLoading(false);
+      }
+    }
+  }
+
+  async function refreshSkillsInBackground(
+    nextSource = source,
+    q = debouncedQuery,
+    nextTag = tag,
+  ) {
+    if (backgroundSkillRefreshInFlight.current) {
+      return;
+    }
+    backgroundSkillRefreshInFlight.current = true;
+    const refreshId = backgroundSkillRefreshId.current + 1;
+    backgroundSkillRefreshId.current = refreshId;
+    const requestKey = skillsRequestKey(nextSource, q, nextTag);
+    try {
+      const data = await fetchSkills({
+        source: nextSource,
+        q,
+        tag: nextTag,
+        refresh: true,
+      });
+      if (
+        backgroundSkillRefreshId.current !== refreshId ||
+        currentSkillsKey.current !== requestKey
+      ) {
+        return;
+      }
+      if (skillListSignature(data.items) === currentSkillListSignature.current) {
+        return;
+      }
+      setSkills(data.items);
+      setSourceWarnings(data.warnings ?? []);
+      lastLoadedSkillsKey.current = requestKey;
+      setSelected((current) =>
+        current && data.items.some((item) => item.name === current)
+          ? current
+          : data.items[0]?.name ?? '',
+      );
+    } catch {
+      /* 后台刷新失败时保留当前缓存结果，避免打断浏览。 */
+    } finally {
+      if (backgroundSkillRefreshId.current === refreshId) {
+        backgroundSkillRefreshInFlight.current = false;
       }
     }
   }
@@ -630,6 +760,7 @@ export default function App() {
             lastLoadedInstalledKey.current = installedRequestKey('all', '', '');
           }
           setBootstrapReady(true);
+          void refreshSkillsInBackground('all', '', '');
           return;
         }
       } catch {
@@ -741,9 +872,36 @@ export default function App() {
     if (lastLoadedSkillsKey.current === nextKey) {
       return;
     }
-    void loadSkills();
+    void loadSkills().then(() => {
+      void refreshSkillsInBackground(source, debouncedQuery, tag);
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bootstrapReady, source, debouncedQuery, tag]);
+
+  useEffect(() => {
+    if (!bootstrapReady || settings.sourceRefreshIntervalMinutes <= 0) {
+      return;
+    }
+    if (view !== 'library' && view !== 'skill-detail') {
+      return;
+    }
+    const intervalMs = Math.max(
+      60_000,
+      settings.sourceRefreshIntervalMinutes * 60_000,
+    );
+    const timer = window.setInterval(() => {
+      void refreshSkillsInBackground(source, debouncedQuery, tag);
+    }, intervalMs);
+    return () => window.clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    bootstrapReady,
+    settings.sourceRefreshIntervalMinutes,
+    view,
+    source,
+    debouncedQuery,
+    tag,
+  ]);
 
   useEffect(() => {
     if (view !== 'library' && view !== 'skill-detail') {
@@ -867,14 +1025,78 @@ export default function App() {
     notify(t('toast.shareCopied'));
   }
 
+  async function chooseInstallProjectDir() {
+    try {
+      const selectedDir = await selectProjectDirectory();
+      if (selectedDir) {
+        setInstallProjectDir(selectedDir);
+        notify(t('toast.projectDirSelected', { defaultValue: '项目目录已选择' }));
+        return;
+      }
+      if (!isDesktop) {
+        const manualDir = window.prompt(
+          t('install.projectDirPrompt', {
+            defaultValue: '请输入项目根目录路径',
+          }),
+          installProjectDir,
+        );
+        if (manualDir?.trim()) {
+          setInstallProjectDir(manualDir.trim());
+          notify(t('toast.projectDirSelected', { defaultValue: '项目目录已选择' }));
+          return;
+        }
+        notify(t('toast.projectDirManual', {
+          defaultValue: '当前浏览器不支持目录选择，请手动输入项目目录',
+        }));
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
   async function installSelected() {
     if (!activeSkill) return;
+    let projectDir = installProjectDir.trim();
+    if (installScope === 'project' && !projectDir) {
+      const selectedDir = await selectProjectDirectory();
+      if (selectedDir) {
+        projectDir = selectedDir;
+        setInstallProjectDir(selectedDir);
+      } else if (!isDesktop) {
+        const manualDir = window.prompt(
+          t('install.projectDirPrompt', {
+            defaultValue: '请输入项目根目录路径',
+          }),
+          installProjectDir,
+        );
+        if (manualDir?.trim()) {
+          projectDir = manualDir.trim();
+          setInstallProjectDir(projectDir);
+        }
+      } else {
+        setError(
+          t('install.projectDirRequired', {
+            defaultValue: '项目级安装需要先选择或填写项目目录',
+          }),
+        );
+        return;
+      }
+      if (!projectDir) {
+        setError(
+          t('install.projectDirRequired', {
+            defaultValue: '项目级安装需要先选择或填写项目目录',
+          }),
+        );
+        return;
+      }
+    }
     try {
       await installSkill({
         identifier: activeSkill.name,
         source: activeSkill.sourceName,
         targets: installTargets,
         global: installScope === 'global',
+        projectDir: installScope === 'project' ? projectDir : undefined,
         strategy: installStrategy,
       });
       notify(t('toast.installed'));
@@ -1035,6 +1257,7 @@ export default function App() {
       setSourceConflict(null);
       notify(t('toast.sourceUpdated'));
       await loadSkills(nextSource);
+      void refreshSkillsInBackground(nextSource);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -1065,6 +1288,7 @@ export default function App() {
       setSource(nextSource);
       notify(item.enabled ? t('toast.sourceDisabled') : t('toast.sourceEnabled'));
       await loadSkills(nextSource);
+      void refreshSkillsInBackground(nextSource);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -1086,6 +1310,7 @@ export default function App() {
           : t('toast.mirrorEnabled'),
       );
       await loadSkills(source);
+      void refreshSkillsInBackground(source);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -1117,6 +1342,7 @@ export default function App() {
       setDefaultSource(nextDefaultSource);
       notify(nextEnabled ? t('toast.mirrorsOn') : t('toast.mirrorsOff'));
       await loadSkills(source);
+      void refreshSkillsInBackground(source);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -1131,6 +1357,7 @@ export default function App() {
       setSource(nextSource);
       notify(t('toast.sourceRemoved'));
       await loadSkills(nextSource);
+      void refreshSkillsInBackground(nextSource);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -1298,6 +1525,7 @@ export default function App() {
           <Suspense fallback={<div className="state">加载技能库中…</div>}>
             <LazyLibraryView
               detail={detail}
+              installProjectDir={installProjectDir}
               installScope={installScope}
               installStrategy={installStrategy}
               installTargets={installTargets}
@@ -1305,10 +1533,12 @@ export default function App() {
               loading={loading}
               onCopyCommand={copyCommand}
               onInstall={installSelected}
+              onInstallProjectDirChange={setInstallProjectDir}
               onInstallScopeChange={setInstallScope}
               onInstallStrategyChange={setInstallStrategy}
               onInstallTargetsChange={setInstallTargets}
               onManageAgents={openSettings}
+              onSelectProjectDir={chooseInstallProjectDir}
               onOpenDetail={openSkillDetail}
               onQueryChange={setQuery}
               onSelect={setSelected}
