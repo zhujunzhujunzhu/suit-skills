@@ -59,7 +59,7 @@ jobs:
 
       - name: Build Windows desktop
         if: matrix.label == 'windows'
-        run: npm run build:all && npm run build:sidecar && npm run tauri:build -- --bundles msi
+        run: npm run build:all && npm run build:sidecar && npm --workspace @suit-skills/app-desktop run tauri -- build --bundles msi
 
       - name: Build macOS desktop
         if: startsWith(matrix.label, 'macos')

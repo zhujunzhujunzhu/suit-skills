@@ -1,7 +1,7 @@
 /**
  * 版本号同步脚本
  * 将 package.json 中的版本号同步到 workspace package.json、package-lock.json、
- * apps/desktop/tauri.conf.json 和 apps/desktop/Cargo.toml
+ * apps/desktop/tauri.conf.json、apps/desktop/Cargo.toml 和 apps/desktop/Cargo.lock
  *
  * 用法：node scripts/sync-version.mjs
  */
@@ -25,6 +25,7 @@ const pkgPath = resolve(root, 'package.json');
 const lockPath = resolve(root, 'package-lock.json');
 const tauriConfPath = resolve(root, 'apps', 'desktop', 'tauri.conf.json');
 const cargoPath = resolve(root, 'apps', 'desktop', 'Cargo.toml');
+const cargoLockPath = resolve(root, 'apps', 'desktop', 'Cargo.lock');
 
 const pkg = readJson(pkgPath);
 const version = pkg.version;
@@ -99,5 +100,18 @@ const prevCargo = cargoVersionMatch ? cargoVersionMatch[1] : '?';
 cargo = cargo.replace(/^(version\s*=\s*)"[^"]+"(\s*$)/m, `$1"${version}"$2`);
 writeFileSync(cargoPath, cargo, 'utf8');
 console.log(`  Cargo.toml:       ${prevCargo} → ${version}`);
+
+// 同步 Cargo.lock 中桌面应用自身的 package version
+let cargoLock = readFileSync(cargoLockPath, 'utf8');
+const cargoLockVersionMatch = cargoLock.match(
+  /(\[\[package\]\]\s*\nname\s*=\s*"suit-skills-desktop"\s*\nversion\s*=\s*")([^"]+)(")/,
+);
+const prevCargoLock = cargoLockVersionMatch ? cargoLockVersionMatch[2] : '?';
+cargoLock = cargoLock.replace(
+  /(\[\[package\]\]\s*\nname\s*=\s*"suit-skills-desktop"\s*\nversion\s*=\s*")([^"]+)(")/,
+  `$1${version}$3`,
+);
+writeFileSync(cargoLockPath, cargoLock, 'utf8');
+console.log(`  Cargo.lock:       ${prevCargoLock} → ${version}`);
 
 console.log('Done.');
