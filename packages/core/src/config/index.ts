@@ -83,6 +83,7 @@ export const BUILTIN_SOURCE_CATALOG: BuiltinSourceInfo[] = [
 ];
 
 const ALL_BUILTIN_SOURCE_INFOS = [...BUILTIN_SOURCE_CATALOG];
+const DEFAULT_BUILTIN_SOURCE_NAME = BUILTIN_SOURCE_CATALOG[0]?.name ?? '';
 
 function toConfiguredSource(
   info: BuiltinSourceInfo,
@@ -123,8 +124,8 @@ export function getConfigPath(options?: ConfigLocationOptions): string {
 
 export function getDefaultConfig(): Config {
   return {
-    sources: BUILTIN_SOURCE_CATALOG.map((info) => toConfiguredSource(info, false)),
-    defaultSource: '',
+    sources: BUILTIN_SOURCE_CATALOG.map((info) => toConfiguredSource(info, true)),
+    defaultSource: DEFAULT_BUILTIN_SOURCE_NAME,
     agents: {
       /** 中央存储：全局安装的实际目录 */
       agents: {
@@ -381,13 +382,23 @@ export function restoreBuiltinSources(config: Config): string[] {
     if (names.has(info.name) || hasKnownUrl) {
       continue;
     }
-    const source = toConfiguredSource(info, false);
+    const source = toConfiguredSource(info, true);
     config.sources.push(source);
     names.add(info.name);
     for (const url of builtinUrlKeys(info)) {
       urls.add(url);
     }
     added.push(info.name);
+  }
+
+  if (
+    typeof config.defaultSource === 'string' &&
+    config.defaultSource.trim() === '' &&
+    config.sources.some(
+      (source) => source.enabled && source.name === DEFAULT_BUILTIN_SOURCE_NAME,
+    )
+  ) {
+    config.defaultSource = DEFAULT_BUILTIN_SOURCE_NAME;
   }
 
   return added;
@@ -410,7 +421,7 @@ function normalizeConfigSources(cfg: Config): boolean {
   }
 
   let added = false;
-  if (typeof cfg.defaultSource !== 'string' || cfg.defaultSource.trim() === '') {
+  if (typeof cfg.defaultSource !== 'string') {
     cfg.defaultSource = def.defaultSource;
     added = true;
   }

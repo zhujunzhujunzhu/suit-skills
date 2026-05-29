@@ -245,7 +245,7 @@ describe('web api', () => {
           name: 'anthropics-skills',
           builtin: true,
           category: 'official',
-          enabled: false,
+          enabled: true,
         }),
       ]),
     );
@@ -309,6 +309,14 @@ describe('web api', () => {
   });
 
   it('does not disable the last enabled source', () => {
+    const config = getDefaultConfig();
+    config.sources = [{ ...TEST_SOURCE }];
+    config.defaultSource = TEST_SOURCE.name;
+    writeFileSync(
+      join(suitHome, 'config.json'),
+      `${JSON.stringify(config, null, 2)}\n`,
+    );
+
     expect(() => updateWebSource(ctx(), 'team', { enabled: false })).toThrow(
       'Cannot disable the last enabled source',
     );
@@ -316,11 +324,8 @@ describe('web api', () => {
 
   it('does not remove the last enabled source', () => {
     const config = getDefaultConfig();
-    config.sources.push({
-      name: 'team',
-      url: 'https://github.com/acme/team-skills.git',
-      enabled: true,
-    });
+    config.sources = [{ ...TEST_SOURCE }];
+    config.defaultSource = TEST_SOURCE.name;
     writeFileSync(
       join(suitHome, 'config.json'),
       `${JSON.stringify(config, null, 2)}\n`,

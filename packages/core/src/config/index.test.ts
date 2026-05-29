@@ -26,9 +26,9 @@ describe('theme defaults', () => {
 });
 
 describe('getDefaultConfig', () => {
-  it('does not include a preconfigured default source', () => {
+  it('uses the first built-in source as the default source', () => {
     const cfg = getDefaultConfig();
-    expect(cfg.defaultSource).toBe('');
+    expect(cfg.defaultSource).toBe('anthropics-skills');
     expect(cfg.sources.some((source) => source.name === 'default')).toBe(false);
   });
 
@@ -49,36 +49,36 @@ describe('getDefaultConfig', () => {
     expect(cfg.agents.openclaw?.projectDir).toBe('./.openclaw/skills');
   });
 
-  it('recommended sources are present but disabled by default', () => {
+  it('recommended sources are present and enabled by default', () => {
     const cfg = getDefaultConfig();
     expect(cfg.sources).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           name: 'anthropics-skills',
           url: 'https://github.com/anthropics/skills.git',
-          enabled: false,
+          enabled: true,
         }),
         expect.objectContaining({
           name: 'superpowers',
           url: 'https://github.com/obra/superpowers.git',
-          enabled: false,
+          enabled: true,
         }),
         expect.objectContaining({
           name: 'awesome-claude-skills',
           url: 'https://github.com/ComposioHQ/awesome-claude-skills.git',
-          enabled: false,
+          enabled: true,
         }),
       ]),
     );
     expect(
       cfg.sources.filter((source) => source.enabled).map((source) => source.name),
-    ).toEqual([]);
+    ).toEqual(BUILTIN_SOURCE_CATALOG.map((source) => source.name));
     for (const builtin of BUILTIN_SOURCE_CATALOG) {
       const source = cfg.sources.find((item) => item.name === builtin.name);
       expect(source).toMatchObject({
         name: builtin.name,
         url: builtin.url,
-        enabled: false,
+        enabled: true,
       });
       if (builtin.domesticMirrorUrl) {
         expect(source?.domesticMirror).toEqual({
@@ -257,7 +257,7 @@ describe('loadConfig', () => {
 });
 
 describe('restoreBuiltinSources', () => {
-  it('adds only missing built-ins as disabled without changing custom sources', () => {
+  it('adds only missing built-ins as enabled without changing custom sources', () => {
     const superpowers = BUILTIN_SOURCE_CATALOG.find(
       (source) => source.name === 'superpowers',
     )!;
@@ -302,7 +302,7 @@ describe('restoreBuiltinSources', () => {
         }),
         expect.objectContaining({
           name: 'vercel-agent-skills',
-          enabled: false,
+          enabled: true,
           domesticMirror: {
             url: 'https://gitee.com/zhujun12/agent-skills.git',
             enabled: true,
@@ -313,6 +313,19 @@ describe('restoreBuiltinSources', () => {
     expect(
       cfg.sources.filter((source) => source.name === 'superpowers'),
     ).toHaveLength(1);
+  });
+
+  it('sets the default source when restoring built-ins into an empty default', () => {
+    const cfg: Config = {
+      sources: [],
+      defaultSource: '',
+      agents: getDefaultConfig().agents,
+      installTargets: [],
+    };
+
+    restoreBuiltinSources(cfg);
+
+    expect(cfg.defaultSource).toBe('anthropics-skills');
   });
 });
 
@@ -348,16 +361,16 @@ describe('saveConfig', () => {
     const deepRoot = join(outer, 'nested', 'suit-skills');
     process.env.SUIT_SKILLS_HOME = deepRoot;
     saveConfig(getDefaultConfig());
-    expect(loadConfig().defaultSource).toBe('');
+    expect(loadConfig().defaultSource).toBe('anthropics-skills');
     rmSync(outer, { recursive: true, force: true });
     process.env.SUIT_SKILLS_HOME = tempRoot;
   });
 });
 
 describe('getConfigValue', () => {
-  it('defaultSource is empty until the user sets one', () => {
+  it('defaultSource points to the first built-in source by default', () => {
     const cfg = getDefaultConfig();
-    expect(getConfigValue(cfg, 'defaultSource')).toBe('');
+    expect(getConfigValue(cfg, 'defaultSource')).toBe('anthropics-skills');
   });
 
   it('agents.claude.globalDir 为 ~/.claude/skills', () => {

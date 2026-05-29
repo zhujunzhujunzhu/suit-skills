@@ -888,7 +888,7 @@ export function listWebSkills(
   options: { source?: string; q?: string; tag?: string; refresh?: boolean },
 ): WebSkillsResponse {
   const config = ctx.loadConfig();
-  const sourceFilter = options.source ?? 'all';
+  const sourceFilter = options.source ?? (config.defaultSource || 'all');
   const result = rowsForSource(
     ctx,
     config,

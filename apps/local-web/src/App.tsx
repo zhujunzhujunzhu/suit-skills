@@ -377,7 +377,15 @@ export default function App() {
   function applySourcesData(data: { sources: Source[]; defaultSource: string }) {
     setSources(data.sources);
     setDefaultSource(data.defaultSource);
-    setSource((current) => nextSelectableSource(data.sources, current));
+    setSource((current) => {
+      if (
+        current === 'all' &&
+        data.sources.some((item) => item.enabled && item.name === data.defaultSource)
+      ) {
+        return data.defaultSource;
+      }
+      return nextSelectableSource(data.sources, current);
+    });
   }
 
   function applyInstallTargetsData(data: {
@@ -1287,7 +1295,7 @@ export default function App() {
       setDefaultSource(result.defaultSource);
       setSource(nextSource);
       notify(item.enabled ? t('toast.sourceDisabled') : t('toast.sourceEnabled'));
-      await loadSkills(nextSource);
+      void loadSkills(nextSource);
       void refreshSkillsInBackground(nextSource);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
