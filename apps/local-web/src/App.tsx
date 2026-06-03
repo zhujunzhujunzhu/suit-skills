@@ -49,6 +49,11 @@ import {
 import { RAW_API, translateApiError } from './i18n/apiErrors';
 import { changeLanguageWithStorage, type AppLocale } from './i18n';
 import {
+  nextSelectableSource,
+  readStoredSource,
+  writeStoredSource,
+} from './lib/sourcePreference';
+import {
   fetchLatestRelease,
   fetchLatestWebRelease,
   compareSemver,
@@ -261,13 +266,6 @@ function installedSkillMatches(item: InstalledSkill, query: string): boolean {
   return fields.some((value) => value.toLowerCase().includes(needle));
 }
 
-function nextSelectableSource(sources: Source[], current: string): string {
-  if (current === 'all') return current;
-  return sources.some((item) => item.enabled && item.name === current)
-    ? current
-    : 'all';
-}
-
 function skillsRequestKey(source: string, query: string, tag: string): string {
   return [source, query.trim(), tag.trim()].join('\0');
 }
@@ -309,9 +307,10 @@ const LazySourcesView = lazy(() => import('./views/SourcesView'));
 export default function App() {
   const { t, i18n } = useTranslation();
   const isDesktop = typeof window !== 'undefined' && '__TAURI__' in window;
+  const initialStoredSource = useRef(readStoredSource());
   const [view, setView] = useState<View>(viewFromHash);
   const [sources, setSources] = useState<Source[]>([]);
-  const [source, setSource] = useState('all');
+  const [source, setSource] = useState(initialStoredSource.current ?? 'all');
   const [defaultSource, setDefaultSource] = useState('');
   const [query, setQuery] = useState('');
   const [tag, setTag] = useState('');
@@ -379,6 +378,7 @@ export default function App() {
     setDefaultSource(data.defaultSource);
     setSource((current) => {
       if (
+        initialStoredSource.current === null &&
         current === 'all' &&
         data.sources.some((item) => item.enabled && item.name === data.defaultSource)
       ) {
@@ -406,6 +406,10 @@ export default function App() {
         .map((row) => row.id);
     });
   }
+
+  useEffect(() => {
+    writeStoredSource(source);
+  }, [source]);
 
   useEffect(() => {
     localStorage.setItem(INSTALL_SCOPE_STORAGE_KEY, installScope);
