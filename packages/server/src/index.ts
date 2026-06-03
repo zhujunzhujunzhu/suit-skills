@@ -5,7 +5,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { basename, dirname, join, normalize, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createHmac, randomBytes, randomUUID, scrypt as nodeScrypt, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, randomBytes, randomUUID, scrypt as nodeScrypt, timingSafeEqual } from 'node:crypto';
 import {
   readSkillMarkdownMetadata,
   refreshCache,
@@ -62,6 +62,7 @@ import type {
   PlatformApiConfig,
   PlatformUserListResponse,
   PlatformUserRecord,
+  RegistrationInviteRecord,
   ServerPackageInfo,
   SkillFileDetail,
   SkillFileEntry,
@@ -103,6 +104,7 @@ export type {
   PlatformApiConfig,
   PlatformUserListResponse,
   PlatformUserRecord,
+  RegistrationInviteRecord,
   ServerPackageInfo,
   SkillFileDetail,
   SkillFileEntry,
@@ -188,6 +190,7 @@ const DEFAULT_DATABASE_URL = '';
 const AUTH_COOKIE_NAME = 'clawhub_session';
 const OAUTH_STATE_COOKIE_NAME = 'clawhub_oauth_state';
 const SESSION_TTL_MS = 1000 * 60 * 60 * 8;
+const REGISTRATION_INVITE_TTL_MS = 1000 * 60 * 60 * 24 * 7;
 
 class EvaluationStore {
   constructor(
@@ -2408,6 +2411,77 @@ async function listPlatformUsers(database: DocumentDatabase): Promise<PlatformUs
   return { items, total: items.length };
 }
 
+function requireLocalRegistration(auth: OAuthConfig): void {
+  if (!auth.enabled || auth.mode !== 'local') {
+    throw new ApiError(400, 'LOCAL_AUTH_REQUIRED', 'Invite registration requires local auth mode');
+  }
+}
+
+function inviteTokenHash(token: string): string {
+  return createHash('sha256').update(token).digest('base64url');
+}
+
+async function createRegistrationInvite(
+  database: DocumentDatabase,
+  auth: OAuthConfig,
+  currentUser: AuthUser,
+  input: unknown,
+): Promise<{ invite: RegistrationInviteRecord; token: string }> {
+  requireLocalRegistration(auth);
+  if (input !== undefined && !isPlainObject(input)) {
+    throw new ApiError(400, 'INVALID_BODY', 'Request body must be a JSON object');
+  }
+  const token = randomBytes(32).toString('base64url');
+  const invite = await database.createRegistrationInvite({
+    tokenHash: inviteTokenHash(token),
+    role: 'user',
+    createdBy: currentUser.id,
+    expiresAt: new Date(Date.now() + REGISTRATION_INVITE_TTL_MS).toISOString(),
+  });
+  return { invite, token };
+}
+
+async function registerWithInvite(
+  database: DocumentDatabase,
+  auth: OAuthConfig,
+  input: unknown,
+): Promise<AuthUserRecord> {
+  requireLocalRegistration(auth);
+  if (!isPlainObject(input)) {
+    throw new ApiError(400, 'INVALID_BODY', 'Request body must be a JSON object');
+  }
+  const token = requiredString(input.token, 'token');
+  const tokenHash = inviteTokenHash(token);
+  const invite = await database.findRegistrationInvite(tokenHash);
+  if (!invite || invite.usedAt || invite.expiresAt <= new Date().toISOString()) {
+    throw new ApiError(400, 'INVALID_INVITE', 'Invite link is invalid or expired');
+  }
+
+  const email = normalizeLoginEmail(requiredString(input.email, 'email'));
+  const existing = await database.findAuthUserByEmail(email);
+  if (existing) {
+    throw new ApiError(409, 'USER_EXISTS', 'User email already exists');
+  }
+  const password = requiredString(input.password, 'password');
+  if (password.length < 6) {
+    throw new ApiError(400, 'WEAK_PASSWORD', 'password must be at least 6 characters');
+  }
+  const user = await database.upsertAuthUser({
+    id: `local:${email}`,
+    email,
+    name: optionalString(input.name, 'name') ?? email,
+    role: invite.role,
+    passwordHash: await hashPassword(password),
+    disabled: false,
+  });
+  const used = await database.markRegistrationInviteUsed(tokenHash, user.id);
+  if (!used) {
+    await database.deleteAuthUser(user.id);
+    throw new ApiError(400, 'INVALID_INVITE', 'Invite link is invalid or expired');
+  }
+  return user;
+}
+
 async function createPlatformUser(
   database: DocumentDatabase,
   input: unknown,
@@ -2739,6 +2813,12 @@ async function handleRequest(
       return;
     }
 
+    if (req.method === 'POST' && pathname === '/api/auth/register') {
+      const registered = await registerWithInvite(database, config.auth, await readJsonBody(req));
+      sendJson(res, 201, { user: publicAuthUser(registered) });
+      return;
+    }
+
     if (req.method === 'GET' && pathname === '/api/auth/callback') {
       await handleOAuthCallback(req, res, config, database, url);
       return;
@@ -2805,6 +2885,22 @@ async function handleRequest(
       sendJson(res, 201, {
         user: publicPlatformUser(created),
         currentUser: currentUser.id === created.id ? publicAuthUser(created) : undefined,
+      });
+      return;
+    }
+
+    if (req.method === 'POST' && pathname === '/api/admin/invitations') {
+      const currentUser = await requireAdmin(req, config.auth, database);
+      const result = await createRegistrationInvite(
+        database,
+        config.auth,
+        currentUser,
+        await readJsonBody(req),
+      );
+      sendJson(res, 201, {
+        token: result.token,
+        role: result.invite.role,
+        expiresAt: result.invite.expiresAt,
       });
       return;
     }

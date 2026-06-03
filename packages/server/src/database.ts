@@ -18,6 +18,7 @@ import type {
   SourceRecord,
   SourceStoreData,
   AuthUser,
+  RegistrationInviteRecord,
 } from './types.js';
 
 type Queryable = Pool | PoolConnection;
@@ -31,6 +32,10 @@ export interface DocumentDatabase {
   findAuthUserById(id: string): Promise<AuthUserRecord | null>;
   upsertAuthUser(input: UpsertAuthUserInput): Promise<AuthUserRecord>;
   deleteAuthUser(id: string): Promise<boolean>;
+  createRegistrationInvite(input: CreateRegistrationInviteInput): Promise<RegistrationInviteRecord>;
+  findRegistrationInvite(tokenHash: string): Promise<RegistrationInviteRecord | null>;
+  markRegistrationInviteUsed(tokenHash: string, userId: string): Promise<boolean>;
+  deleteExpiredRegistrationInvites(nowIso: string): Promise<void>;
   createAuthSession(input: AuthSessionInput): Promise<void>;
   findAuthSession(sessionId: string): Promise<AuthSessionRecord | null>;
   deleteAuthSession(sessionId: string): Promise<void>;
@@ -49,6 +54,13 @@ export interface AuthUserRecord extends AuthUser {
 export interface UpsertAuthUserInput extends AuthUser {
   passwordHash?: string;
   disabled?: boolean;
+}
+
+export interface CreateRegistrationInviteInput {
+  tokenHash: string;
+  role: AuthUser['role'];
+  createdBy: string;
+  expiresAt: string;
 }
 
 export interface AuthSessionInput {
@@ -207,6 +219,17 @@ class MySqlPlatformDatabase implements DocumentDatabase {
         INDEX idx_platform_sessions_expires_at (expires_at),
         CONSTRAINT fk_platform_sessions_user_id
           FOREIGN KEY (user_id) REFERENCES platform_users(id) ON DELETE CASCADE
+      ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
+      `CREATE TABLE IF NOT EXISTS platform_registration_invites (
+        token_hash VARCHAR(191) PRIMARY KEY,
+        role ENUM('user', 'admin') NOT NULL,
+        created_by VARCHAR(191) NOT NULL,
+        created_at VARCHAR(64) NOT NULL,
+        expires_at VARCHAR(64) NOT NULL,
+        used_at VARCHAR(64),
+        used_by VARCHAR(191),
+        INDEX idx_platform_registration_invites_expires_at (expires_at),
+        INDEX idx_platform_registration_invites_used_at (used_at)
       ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
       `CREATE TABLE IF NOT EXISTS platform_sources (
         name VARCHAR(191) PRIMARY KEY,
@@ -440,6 +463,52 @@ class MySqlPlatformDatabase implements DocumentDatabase {
       [id],
     );
     return result.affectedRows > 0;
+  }
+
+  async createRegistrationInvite(
+    input: CreateRegistrationInviteInput,
+  ): Promise<RegistrationInviteRecord> {
+    await this.ready;
+    const now = new Date().toISOString();
+    await this.deleteExpiredRegistrationInvites(now);
+    await this.pool.execute(
+      `INSERT INTO platform_registration_invites
+        (token_hash, role, created_by, created_at, expires_at)
+        VALUES (?, ?, ?, ?, ?)`,
+      [input.tokenHash, input.role, input.createdBy, now, input.expiresAt],
+    );
+    const invite = await this.findRegistrationInvite(input.tokenHash);
+    if (!invite) throw new Error('Failed to load registration invite after insert');
+    return invite;
+  }
+
+  async findRegistrationInvite(tokenHash: string): Promise<RegistrationInviteRecord | null> {
+    await this.ready;
+    const rows = await rowsOf(
+      this.pool,
+      `SELECT * FROM platform_registration_invites WHERE token_hash = ? LIMIT 1`,
+      [tokenHash],
+    );
+    return rows[0] ? registrationInviteFromRow(rows[0]) : null;
+  }
+
+  async markRegistrationInviteUsed(tokenHash: string, userId: string): Promise<boolean> {
+    await this.ready;
+    const [result] = await this.pool.execute<ResultSetHeader>(
+      `UPDATE platform_registration_invites
+       SET used_at = ?, used_by = ?
+       WHERE token_hash = ? AND used_at IS NULL`,
+      [new Date().toISOString(), userId, tokenHash],
+    );
+    return result.affectedRows > 0;
+  }
+
+  async deleteExpiredRegistrationInvites(nowIso: string): Promise<void> {
+    await this.ready;
+    await this.pool.execute(
+      `DELETE FROM platform_registration_invites WHERE expires_at <= ? AND used_at IS NULL`,
+      [nowIso],
+    );
   }
 
   async createAuthSession(input: AuthSessionInput): Promise<void> {
@@ -1050,6 +1119,7 @@ class MemoryPlatformDatabase implements DocumentDatabase {
   private readonly documents = new Map<string, string>();
   private readonly usersById = new Map<string, AuthUserRecord>();
   private readonly userIdsByEmail = new Map<string, string>();
+  private readonly registrationInvites = new Map<string, RegistrationInviteRecord>();
   private readonly sessions = new Map<string, { id: string; userId: string; expiresAt: string; createdAt: string }>();
 
   async readDocument(collection: string): Promise<string | null> {
@@ -1115,6 +1185,44 @@ class MemoryPlatformDatabase implements DocumentDatabase {
     return true;
   }
 
+  async createRegistrationInvite(
+    input: CreateRegistrationInviteInput,
+  ): Promise<RegistrationInviteRecord> {
+    await this.deleteExpiredRegistrationInvites(new Date().toISOString());
+    const record: RegistrationInviteRecord = {
+      tokenHash: input.tokenHash,
+      role: input.role,
+      createdBy: input.createdBy,
+      createdAt: new Date().toISOString(),
+      expiresAt: input.expiresAt,
+    };
+    this.registrationInvites.set(record.tokenHash, record);
+    return record;
+  }
+
+  async findRegistrationInvite(tokenHash: string): Promise<RegistrationInviteRecord | null> {
+    return this.registrationInvites.get(tokenHash) ?? null;
+  }
+
+  async markRegistrationInviteUsed(tokenHash: string, userId: string): Promise<boolean> {
+    const existing = this.registrationInvites.get(tokenHash);
+    if (!existing || existing.usedAt) return false;
+    this.registrationInvites.set(tokenHash, {
+      ...existing,
+      usedAt: new Date().toISOString(),
+      usedBy: userId,
+    });
+    return true;
+  }
+
+  async deleteExpiredRegistrationInvites(nowIso: string): Promise<void> {
+    for (const [tokenHash, invite] of this.registrationInvites) {
+      if (!invite.usedAt && invite.expiresAt <= nowIso) {
+        this.registrationInvites.delete(tokenHash);
+      }
+    }
+  }
+
   async createAuthSession(input: AuthSessionInput): Promise<void> {
     await this.deleteExpiredAuthSessions(new Date().toISOString());
     this.sessions.set(input.id, {
@@ -1165,6 +1273,18 @@ function authUserFromRow(row: DbRow): AuthUserRecord {
     disabled: bool(row.disabled),
     createdAt: text(row.created_at),
     updatedAt: text(row.updated_at),
+  };
+}
+
+function registrationInviteFromRow(row: DbRow): RegistrationInviteRecord {
+  return {
+    tokenHash: text(row.token_hash),
+    role: text(row.role) === 'admin' ? 'admin' : 'user',
+    createdBy: text(row.created_by),
+    createdAt: text(row.created_at),
+    expiresAt: text(row.expires_at),
+    usedAt: optionalText(row.used_at),
+    usedBy: optionalText(row.used_by),
   };
 }
 

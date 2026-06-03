@@ -444,6 +444,25 @@ button.primary {
   color: #fff;
 }
 
+.button-like {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 9px 14px;
+  color: inherit;
+  font-weight: 850;
+  text-decoration: none;
+}
+
+.button-like.primary {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: #fff;
+}
+
 button.ghost {
   background: transparent;
   color: var(--primary);
@@ -995,6 +1014,47 @@ button:focus {
   align-items: start;
 }
 
+.user-header-actions,
+.invite-card {
+  display: flex;
+  align-items: center;
+}
+
+.user-header-actions {
+  gap: 10px;
+}
+
+.invite-card {
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px 14px;
+  background: var(--panel);
+  box-shadow: 0 12px 34px rgba(42, 64, 44, 0.08);
+}
+
+.invite-card > div {
+  display: grid;
+  min-width: 210px;
+  gap: 4px;
+}
+
+.invite-card strong,
+.invite-card small {
+  display: block;
+}
+
+.invite-card small {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.invite-card input {
+  min-width: 260px;
+  flex: 1;
+}
+
 .source-list-panel {
   display: grid;
   max-height: calc(100vh - 210px);
@@ -1113,6 +1173,23 @@ button:focus {
   margin: 6px 0 0;
   color: var(--muted);
   line-height: 1.5;
+}
+
+.register-result {
+  display: grid;
+  gap: 14px;
+}
+
+.subtle-link {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 750;
+  text-align: center;
+  text-decoration: none;
+}
+
+.subtle-link:hover {
+  color: var(--primary);
 }
 
 .source-row {
@@ -2473,6 +2550,18 @@ button:focus {
 
   .user-form-actions {
     grid-template-columns: 1fr;
+  }
+
+  .user-header-actions,
+  .invite-card {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .invite-card > div,
+  .invite-card input {
+    min-width: 0;
+    width: 100%;
   }
 
   .user-form-actions > button:first-child,

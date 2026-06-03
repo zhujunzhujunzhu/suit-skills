@@ -219,6 +219,16 @@ export interface PlatformUserListResponse {
   total: number;
 }
 
+export interface RegistrationInviteRecord {
+  tokenHash: string;
+  role: AuthUser['role'];
+  createdBy: string;
+  createdAt: string;
+  expiresAt: string;
+  usedAt?: string;
+  usedBy?: string;
+}
+
 export interface EvaluationStoreData {
   version: 1;
   evaluations: EvaluationRecord[];

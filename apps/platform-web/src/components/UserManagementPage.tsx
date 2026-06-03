@@ -1,6 +1,7 @@
 import { type FormEvent, useEffect, useMemo, useState } from 'react';
 import {
   createPlatformUser,
+  createRegistrationInvite,
   deletePlatformUser,
   listPlatformUsers,
   resetPlatformUserPassword,
@@ -40,6 +41,8 @@ export function UserManagementPage({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [inviteUrl, setInviteUrl] = useState('');
+  const [inviteExpiresAt, setInviteExpiresAt] = useState('');
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
 
@@ -67,6 +70,32 @@ export function UserManagementPage({
       setError(loadError instanceof Error ? loadError.message : '读取用户失败');
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function generateInvite() {
+    setSaving(true);
+    setError('');
+    setMessage('');
+    try {
+      const invite = await createRegistrationInvite('user');
+      setInviteUrl(invite.inviteUrl);
+      setInviteExpiresAt(invite.expiresAt);
+      setMessage('邀请链接已生成');
+    } catch (inviteError) {
+      setError(inviteError instanceof Error ? inviteError.message : '生成邀请链接失败');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function copyInvite() {
+    if (!inviteUrl) return;
+    try {
+      await navigator.clipboard.writeText(inviteUrl);
+      setMessage('邀请链接已复制');
+    } catch {
+      setMessage('请手动复制邀请链接');
     }
   }
 
@@ -196,7 +225,12 @@ export function UserManagementPage({
         eyebrow="Users"
         title="用户管理"
         description="维护平台账号，内置管理员和普通用户两类角色。"
-        actions={<button className="primary" type="button" onClick={startCreate}>新增用户</button>}
+        actions={(
+          <div className="user-header-actions">
+            <button type="button" disabled={saving} onClick={() => void generateInvite()}>生成邀请链接</button>
+            <button className="primary" type="button" onClick={startCreate}>新增用户</button>
+          </div>
+        )}
       />
 
       <section className="info-grid">
@@ -205,6 +239,17 @@ export function UserManagementPage({
         <Metric label="已禁用" value={stats.disabled} />
         <Metric label="本地账号" value={stats.local} />
       </section>
+
+      {inviteUrl ? (
+        <section className="invite-card" aria-label="邀请注册链接">
+          <div>
+            <strong>邀请注册链接</strong>
+            <small>普通用户注册，一次使用后失效{inviteExpiresAt ? `，有效期至 ${formatDateTime(inviteExpiresAt)}` : ''}。</small>
+          </div>
+          <input readOnly value={inviteUrl} onFocus={(event) => event.currentTarget.select()} />
+          <button type="button" onClick={() => void copyInvite()}>复制链接</button>
+        </section>
+      ) : null}
 
       <section className="user-layout">
         <div className="user-list-panel">

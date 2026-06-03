@@ -23,6 +23,7 @@ import {
   MySkillsPage,
   NotificationCenter,
   navItems,
+  RegisterPage,
   ROLE_STORAGE_KEY,
   readStoredRole,
   SourcesPage,
@@ -232,6 +233,9 @@ function App() {
   }
 
   if (!role) {
+    if (location.pathname === '/register') {
+      return <RegisterPage />;
+    }
     return <LoginPage />;
   }
 

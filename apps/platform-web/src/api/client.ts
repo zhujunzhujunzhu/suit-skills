@@ -18,6 +18,8 @@ export interface PlatformUser extends AuthUser { disabled: boolean; createdAt: s
 export interface PlatformUserListResponse { items: PlatformUser[]; total: number; }
 export interface CreatePlatformUserInput { email: string; name?: string; password: string; role: AuthUser['role']; disabled?: boolean; }
 export interface UpdatePlatformUserInput { name?: string; role?: AuthUser['role']; disabled?: boolean; }
+export interface RegistrationInviteResponse { token: string; role: AuthUser['role']; expiresAt: string; inviteUrl: string; }
+export interface RegisterWithInviteInput { token: string; email: string; name?: string; password: string; }
 
 export type NotificationType = 'skill_reviewed' | 'skill_status_changed' | 'skill_comment' | 'system';
 export interface NotificationRecord { id: string; userId: string; type: NotificationType; title: string; message: string; relatedSkillId?: string; relatedSkillName?: string; relatedReviewId?: string; isRead: boolean; actionUrl?: string; createdAt: string; updatedAt: string; }
@@ -35,6 +37,11 @@ function normalizeSkillSource(source: string): string {
 }
 
 function endpoint(path: string): string { return `${apiBaseUrl}${path}`; }
+function appEndpoint(path: string): string {
+  const base = typeof window === 'undefined' ? '' : window.location.origin;
+  const appBase = (import.meta.env.BASE_URL ?? '/').replace(/\/$/, '');
+  return `${base}${appBase}${path}`;
+}
 function publicEndpoint(path: string): string {
   if (/^https?:\/\//i.test(apiBaseUrl)) return endpoint(path);
   const base = typeof window === 'undefined' ? '' : window.location.origin;
@@ -110,8 +117,10 @@ export async function loginWithExternalToken(token: string): Promise<AuthUser> {
 export async function getAuthConfig(): Promise<AuthConfig> { try { const raw = await request<Record<string, unknown>>('/api/auth/config'); return { enabled: raw.enabled === true, mode: raw.mode === 'oauth' ? 'oauth' : raw.mode === 'local' ? 'local' : raw.mode === 'external-token' ? 'external-token' : raw.mode === 'none' ? 'none' : undefined, scopes: tags(raw.scopes), apiAvailable: true }; } catch { return { enabled: false, scopes: [], apiAvailable: false }; } }
 export async function getCurrentUser(): Promise<AuthUser | null> { try { const payload = await request<{ user?: unknown }>('/api/auth/me'); if (!isRecord(payload.user)) return null; const user = payload.user; const id = text(user.id); return id ? { id, email: text(user.email), name: text(user.name) || text(user.email) || id, avatarUrl: text(user.avatarUrl), role: user.role === 'admin' ? 'admin' : 'user' } : null; } catch { return null; } }
 export async function logoutOAuth(): Promise<void> { try { await request('/api/auth/logout', { method: 'POST', body: JSON.stringify({}) }); } catch {} }
+export async function registerWithInvite(input: RegisterWithInviteInput): Promise<AuthUser> { const payload = await request<{ user?: unknown }>('/api/auth/register', { method: 'POST', body: JSON.stringify(input) }); const user = isRecord(payload.user) ? payload.user : {}; return { id: text(user.id), email: text(user.email), name: text(user.name) || text(user.email), avatarUrl: text(user.avatarUrl), role: user.role === 'admin' ? 'admin' : 'user' }; }
 export async function listPlatformUsers(): Promise<PlatformUserListResponse> { const payload = await request<unknown>('/api/admin/users'); const raw = isRecord(payload) ? payload : {}; const items = Array.isArray(raw.items) ? raw.items.map(normalizePlatformUser) : []; return { items, total: Number(raw.total) || items.length }; }
 export async function createPlatformUser(input: CreatePlatformUserInput): Promise<{ user: PlatformUser; currentUser?: AuthUser }> { const payload = await request<Record<string, unknown>>('/api/admin/users', { method: 'POST', body: JSON.stringify(input) }); return { user: normalizePlatformUser(payload.user), currentUser: isRecord(payload.currentUser) ? normalizePlatformUser(payload.currentUser) : undefined }; }
+export async function createRegistrationInvite(role: AuthUser['role'] = 'user'): Promise<RegistrationInviteResponse> { const payload = await request<Record<string, unknown>>('/api/admin/invitations', { method: 'POST', body: JSON.stringify({ role }) }); const token = text(payload.token); const invitePath = `/register?invite=${encodeURIComponent(token)}`; return { token, role: payload.role === 'admin' ? 'admin' : 'user', expiresAt: text(payload.expiresAt), inviteUrl: appEndpoint(invitePath) }; }
 export async function updatePlatformUser(id: string, input: UpdatePlatformUserInput): Promise<{ user: PlatformUser; currentUser?: AuthUser }> { const payload = await request<Record<string, unknown>>(`/api/admin/users/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(input) }); return { user: normalizePlatformUser(payload.user), currentUser: isRecord(payload.currentUser) ? normalizePlatformUser(payload.currentUser) : undefined }; }
 export async function deletePlatformUser(id: string): Promise<void> { await request(`/api/admin/users/${encodeURIComponent(id)}`, { method: 'DELETE' }); }
 export async function resetPlatformUserPassword(id: string, password: string): Promise<PlatformUser> { const payload = await request<Record<string, unknown>>(`/api/admin/users/${encodeURIComponent(id)}/password`, { method: 'POST', body: JSON.stringify({ password }) }); return normalizePlatformUser(payload.user); }

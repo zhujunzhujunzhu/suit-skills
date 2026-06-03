@@ -4,6 +4,7 @@ export { MarketPage } from './MarketPage';
 export { MySkillsPage } from './MySkillsPage';
 export { NotificationCenter } from './NotificationCenter';
 export { NotificationBell } from './NotificationBell';
+export { RegisterPage } from './RegisterPage';
 export { SourcesPage } from './SourcesPage';
 export { ThemeToggle } from './ThemeToggle';
 export { UserManagementPage } from './UserManagementPage';

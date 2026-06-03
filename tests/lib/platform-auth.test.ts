@@ -301,6 +301,111 @@ describe('platform oauth auth flow', () => {
     }
   });
 
+  it('registers a local user with a one-time admin invitation', async () => {
+    const tmp = mkdtempSync(join(tmpdir(), 'platform-invite-auth-'));
+    temps.push(tmp);
+    const config = {
+      PLATFORM_API_DATA_FILE: join(tmp, 'evaluations.json'),
+      PLATFORM_API_SKILLS_FILE: join(tmp, 'skills.json'),
+      PLATFORM_API_GIT_CONFIG_FILE: join(tmp, 'git-config.json'),
+      PLATFORM_API_SOURCES_FILE: join(tmp, 'sources.json'),
+      PLATFORM_API_UPLOADS_FILE: join(tmp, 'uploads.json'),
+      PLATFORM_API_UPLOAD_DIR: join(tmp, 'uploads'),
+      PLATFORM_DATABASE_URL: `sqlite://${join(tmp, 'platform.sqlite')}`,
+      PLATFORM_ADMIN_EMAILS: 'admin@local.dev',
+      PLATFORM_AUTH_BOOTSTRAP_PASSWORD: 'secret',
+    };
+    const { loadConfig } = await import('../../packages/server/src/index.js');
+    const server = createPlatformApiServer(loadConfig(config));
+    await new Promise<void>((resolve, reject) => {
+      server.once('error', reject);
+      server.listen(0, '127.0.0.1', () => resolve());
+    });
+    const address = server.address();
+    const port = typeof address === 'object' && address ? address.port : 0;
+    const baseUrl = `http://127.0.0.1:${port}`;
+
+    try {
+      const adminLogin = await fetch(`${baseUrl}/api/auth/login`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          username: 'admin@local.dev',
+          password: 'secret',
+        }),
+      });
+      const adminCookie = adminLogin.headers
+        .get('set-cookie')
+        ?.split(',')
+        .find((cookie) => cookie.trim().startsWith('clawhub_session='));
+      expect(adminLogin.status).toBe(200);
+      expect(adminCookie).toBeTruthy();
+
+      const invite = await fetch(`${baseUrl}/api/admin/invitations`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          cookie: adminCookie ?? '',
+        },
+        body: JSON.stringify({}),
+      });
+      expect(invite.status).toBe(201);
+      const inviteBody = await invite.json() as { token?: string; role?: string; expiresAt?: string };
+      expect(inviteBody.token).toBeTruthy();
+      expect(inviteBody.role).toBe('user');
+      expect(inviteBody.expiresAt).toBeTruthy();
+
+      const register = await fetch(`${baseUrl}/api/auth/register`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          token: inviteBody.token,
+          email: 'invited@example.com',
+          name: 'Invited User',
+          password: 'new-secret',
+        }),
+      });
+      expect(register.status).toBe(201);
+      expect(await register.json()).toEqual({
+        user: {
+          id: 'local:invited@example.com',
+          email: 'invited@example.com',
+          name: 'Invited User',
+          role: 'user',
+        },
+      });
+
+      const reused = await fetch(`${baseUrl}/api/auth/register`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          token: inviteBody.token,
+          email: 'second@example.com',
+          password: 'new-secret',
+        }),
+      });
+      expect(reused.status).toBe(400);
+
+      const userLogin = await fetch(`${baseUrl}/api/auth/login`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          username: 'invited@example.com',
+          password: 'new-secret',
+        }),
+      });
+      expect(userLogin.status).toBe(200);
+      expect(await userLogin.json()).toMatchObject({
+        user: {
+          email: 'invited@example.com',
+          role: 'user',
+        },
+      });
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
   it('loads external token auth mode from env userinfo config', async () => {
     const { loadConfig } = await import('../../packages/server/src/index.js');
     const config = loadConfig({
