@@ -1,0 +1,6 @@
+./MANIFEST.txt
+./README.md
+./desktop-macos-apple-silicon-arm64/dmg/Suit Skills_1.0.5_aarch64.dmg
+./desktop-macos-intel-x64/dmg/Suit Skills_1.0.5_x64.dmg
+./desktop-windows-setup-msi/msi/Suit Skills_1.0.5_x64_en-US.msi
+./latest.json

@@ -1,0 +1,25 @@
+{
+  "version": "1.0.5",
+  "pub_date": "2026-06-03T09:54:58.098Z",
+  "notes": "Source ref: master, Commit: 7c269d5",
+  "platforms": {
+    "windows-x86_64": {
+      "filename": "Suit Skills_1.0.5_x64_en-US.msi",
+      "repo": "https://gitee.com/zhujun12/suit-skills-cli.git",
+      "branch": "desktop-artifacts",
+      "path": "desktop-windows-setup-msi/msi/Suit Skills_1.0.5_x64_en-US.msi"
+    },
+    "darwin-aarch64": {
+      "filename": "Suit Skills_1.0.5_aarch64.dmg",
+      "repo": "https://gitee.com/zhujun12/suit-skills-cli.git",
+      "branch": "desktop-artifacts",
+      "path": "desktop-macos-apple-silicon-arm64/dmg/Suit Skills_1.0.5_aarch64.dmg"
+    },
+    "darwin-x86_64": {
+      "filename": "Suit Skills_1.0.5_x64.dmg",
+      "repo": "https://gitee.com/zhujun12/suit-skills-cli.git",
+      "branch": "desktop-artifacts",
+      "path": "desktop-macos-intel-x64/dmg/Suit Skills_1.0.5_x64.dmg"
+    }
+  }
+}
